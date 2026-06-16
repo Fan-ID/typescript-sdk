@@ -1,3 +1,8 @@
+/**
+ * Official TypeScript SDK for the [Soundlink Public API](https://docs.getsoundlink.com).
+ *
+ * @packageDocumentation
+ */
 export { Soundlink, HttpClient, resolveClientOptions } from './client/soundlink.js';
 
 export {

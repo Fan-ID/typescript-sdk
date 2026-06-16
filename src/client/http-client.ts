@@ -42,6 +42,11 @@ export interface ResolvedSoundlinkClientOptions {
   fetch: typeof fetch;
 }
 
+/**
+ * Normalize constructor options and validate the API key format.
+ *
+ * @throws {@link SoundlinkConfigError} When the key is missing or does not start with `sk_`.
+ */
 export function resolveClientOptions(
   options: SoundlinkOptions,
 ): ResolvedSoundlinkClientOptions {
@@ -268,6 +273,11 @@ function attachRowCountMetadata<T>(
   return jsonlStream;
 }
 
+/**
+ * Read `rowCount` from a {@link JsonlStream} when the API sent `X-Row-Count`.
+ *
+ * @returns Row count, or `undefined` if not available.
+ */
 export function getStreamRowCount<T>(stream: AsyncIterable<T>): number | undefined {
   if (typeof stream === 'object' && 'rowCount' in stream) {
     const value = (stream as JsonlStream<T>).rowCount;
