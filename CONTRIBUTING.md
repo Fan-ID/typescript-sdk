@@ -77,9 +77,11 @@ Releases are automated via GitHub Actions + Changesets on merge to `main`:
 
 1. Merge PRs that include a changeset file in `.changeset/`
 2. CI opens a **"Version packages"** PR — updates `package.json` + `CHANGELOG.md`
-3. Merge that PR → CI publishes to npm and creates a **GitHub Release** with the changelog section as the release notes
+3. Merge that PR → CI publishes to npm (via **npm Trusted Publishing / OIDC**) and creates a **GitHub Release**
 
-Requires `NPM_TOKEN` in repository secrets. `GITHUB_TOKEN` is provided automatically for release creation.
+Publishing uses npm Trusted Publishing linked to `.github/workflows/release.yml` — no `NPM_TOKEN` secret required. If org policy blocks automatic version PRs, open the **Version packages** PR manually (see below).
+
+`GITHUB_TOKEN` is provided automatically for release creation.
 
 ## Manual publish (maintainers)
 
