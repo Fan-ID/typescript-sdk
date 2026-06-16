@@ -80,3 +80,24 @@ Releases are automated via GitHub Actions + Changesets on merge to `main`:
 3. Merge that PR → CI publishes to npm and creates a **GitHub Release** with the changelog section as the release notes
 
 Requires `NPM_TOKEN` in repository secrets. `GITHUB_TOKEN` is provided automatically for release creation.
+
+## Manual publish (maintainers)
+
+For the first release or when publishing outside CI:
+
+```bash
+npm whoami
+npm test && npm run build
+npm run test:live          # optional — live API smoke test
+npm publish --dry-run
+npm publish
+npm view soundlink version
+```
+
+If `1.0.0` was published as an empty placeholder, deprecate it after shipping the real SDK:
+
+```bash
+npm deprecate soundlink@1.0.0 "Empty placeholder release. Please upgrade to >=1.1.0."
+```
+
+Re-running `npm deprecate` with a new message replaces the previous deprecation text.
