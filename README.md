@@ -1,492 +1,210 @@
-# Soundlink SDK
+# soundlink
 
-TypeScript / JavaScript client for the **Soundlink API** (`/api/v1`). It matches the same HTTP contract the product app uses: Bearer auth, `x-organization-id`, and JSON bodies/query params as the backend expects.
+Official TypeScript SDK for the [Soundlink Public API](https://docs.getsoundlink.com).
 
----
-
-## Table of contents
-
-- [Requirements](#requirements)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage overview](#usage-overview)
-- [`SoundlinkClient`](#soundlinkclient)
-- [Flat functions (environment-based)](#flat-functions-environment-based)
-- [Code examples](#code-examples)
-- [API methods reference](#api-methods-reference)
-- [Types & payloads](#types--payloads)
-- [Return values & errors](#return-values--errors)
-- [Advanced](#advanced)
-- [Examples](#examples)
-
----
-
-## Requirements
-
-- **Node.js 18+** (global `fetch`)
-- Valid **Bearer token** and **organization id** for the API you call (same as the web app)
-
----
-
-## Installation
-
-From the monorepo package (or after publishing to npm):
+## Install
 
 ```bash
 npm install soundlink
 ```
 
-Build from source in this directory:
+> **Version note:** `1.0.0` on npm was an empty placeholder. **`1.1.0`** is the first official SDK release.
 
-```bash
-npm install
-npm run build
-```
+Requires **Node.js 18+** (native `fetch`). Works in Edge Runtime when `fetch` is available.
 
----
+## Quickstart
 
-## Configuration
+```typescript
+import { Soundlink } from 'soundlink';
 
-The client needs three pieces of information:
-
-| Input        | Environment variable        | HTTP usage                                                                         |
-| ------------ | --------------------------- | ---------------------------------------------------------------------------------- |
-| API token    | `SOUNDLINK_TOKEN`           | `Authorization: Bearer <token>`                                                    |
-| Organization | `SOUNDLINK_ORGANIZATION_ID` | `x-organization-id: <uuid>`                                                        |
-| API base URL | `SOUNDLINK_BASE_URL`        | Prefix for paths (no trailing slash), same role as `FAN_ID_API_BASE_URL` in the UI |
-
-Optional:
-
-| Variable          | Effect                                                         |
-| ----------------- | -------------------------------------------------------------- |
-| `SOUNDLINK_DEBUG` | Set to `true` / `1` / `yes` to log requests to `console.debug` |
-
-You can override any of these by passing a config object to [`createClient()`](#soundlinkclient) instead of relying on `process.env`.
-
----
-
-## Usage overview
-
-There are **two** supported styles:
-
-1. **Explicit client** — `createClient({ ... })` (recommended for apps with config injection or multiple orgs).
-2. **Flat functions** — `import { listPaidCampaigns } from "soundlink"` — they use a **lazy singleton** configured from `process.env` on first use.
-
-Both call the same endpoints and return the same `Result<T>` shape.
-
----
-
-## `SoundlinkClient`
-
-```ts
-import { createClient } from "soundlink";
-
-const client = createClient({
-  apiKey: process.env.SOUNDLINK_TOKEN,
-  organizationId: process.env.SOUNDLINK_ORGANIZATION_ID,
-  baseUrl: process.env.SOUNDLINK_BASE_URL,
-  timeout: 30_000, // optional, milliseconds
-  debug: true, // optional
+const soundlink = new Soundlink({
+  apiKey: process.env.SOUNDLINK_API_KEY!,
 });
 
-const { data, error } = await client.listPaidCampaigns({
-  page: 1,
-  pageSize: 10,
-});
-```
-
-Pass **no arguments** to read everything from env:
-
-```ts
-const client = createClient();
-```
-
-You can also pass a **custom `fetch`** (testing, proxies, edge runtimes):
-
-```ts
-const client = createClient(
-  {
-    /* ... */
-  },
-  customFetch,
-);
-```
-
----
-
-## Flat functions (environment-based)
-
-```ts
-import {
-  createPaidCampaign,
-  createCheckoutPaidCampaign,
-  createOrganicCampaign,
-  listPaidCampaigns,
-  listOrganicCampaigns,
-} from "soundlink";
-
-// First call builds an internal client from process.env
-const { data, error } = await listPaidCampaigns({ page: 1, pageSize: 10 });
-```
-
-**Note:** The singleton is created once. If you need **different tokens or orgs** in the same process, use **multiple** `createClient()` instances instead of the flat API.
-
----
-
-## Code examples
-
-All snippets assume `createClient` is configured (env or explicit config). Patterns are the same if you use **flat imports** — replace `client.method(...)` with `method(...)` from `"soundlink"`.
-
-### List paid campaigns
-
-```ts
-import { createClient } from "soundlink";
-
-const client = createClient();
-
-const { data, error } = await client.listPaidCampaigns({
-  page: 1,
-  pageSize: 20,
-  sortBy: "createdAt",
-  sortOrder: "desc",
-});
-
+// Verify your key
+const { data, error, meta } = await soundlink.ping();
 if (error) {
-  console.error(error.message);
+  console.error(error.message, meta?.requestId);
   process.exit(1);
 }
 
-for (const campaign of data.items) {
-  console.log(campaign.id, campaign.status, campaign.dailyBudget);
-}
-console.log(
-  `Total: ${data.total}, page ${data.page}/${data.totalPages ?? "?"}`,
-);
+console.log(data?.status); // "ok"
 ```
 
-### Create managed paid campaign
+You can also pass the API key directly:
 
-`POST /api/v1/campaigns/managed`. Replace IDs and URLs with real values. The API may return **403** if the caller is not allowed (e.g. non-CSM or org without invoice billing).
+```typescript
+const soundlink = new Soundlink('sk_your_prefix_your_secret');
+```
 
-```ts
-import { createClient } from "soundlink";
+## Authentication
 
-const client = createClient();
+Pass your Soundlink API key (`sk_<prefix>_<secret>`) via the client constructor.
+The SDK sends it in the `x-api-key` header on every request.
 
-const { data, error } = await client.createPaidCampaign({
-  spotifyLink: "https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh",
-  dailyBudget: 50,
-  campaignDuration: 14,
-  smartLinkName: "Summer single promo",
-  createdBy: "00000000-0000-0000-0000-000000000001", // user id string expected by API
-  selectedGenre: "pop",
-  strategyType: "maximum_growth",
-  platform: "meta",
-});
+Your organization is determined from the key. Do not send Firebase Bearer tokens on the Public API host.
+
+## Response pattern
+
+Every method returns:
+
+```typescript
+type ApiResponse<T> = {
+  data: T | null;
+  error: ApiError | null;
+  meta?: { requestId: string };
+};
+```
+
+Example:
+
+```typescript
+const { data, error } = await soundlink.campaigns.list({ page: 1, pageSize: 100 });
 
 if (error) {
-  console.error(error.message);
-  process.exit(1);
-}
-
-console.log("Created:", data.campaignId, data.smartLinkId);
-```
-
-### Create paid campaign after Stripe checkout
-
-`POST /api/v1/campaigns` — use when checkout already produced Stripe session / payment intent IDs.
-
-```ts
-import { createClient } from "soundlink";
-
-const client = createClient();
-
-const { data, error } = await client.createCheckoutPaidCampaign({
-  spotifyLink: "https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh",
-  dailyBudget: 50,
-  campaignDuration: 14,
-  smartLinkName: "Album launch",
-  createdBy: "00000000-0000-0000-0000-000000000001",
-  paymentInfo: {
-    sessionId: "cs_test_...",
-    paymentIntentId: "pi_...",
-    eventId: "evt_...",
-    invoiceId: "optional-invoice-id",
-  },
-  selectedGenre: "electronic",
-  strategyType: "market_discovery",
-});
-
-if (error) {
-  console.error(error.message);
-  process.exit(1);
-}
-
-console.log("Created:", data.campaignId, data.smartLinkId);
-```
-
-### List organic campaigns
-
-```ts
-import { createClient } from "soundlink";
-
-const client = createClient();
-
-const { data, error } = await client.listOrganicCampaigns({
-  page: 1,
-  pageSize: 25,
-  sortBy: "updatedAt",
-  sortOrder: "desc",
-  status: ["active"],
-  platform: ["tiktok"],
-  // search: "summer",
-  // startDate: "2025-01-01",
-  // endDate: "2025-12-31",
-  // socialAccountId: "uuid-of-connected-account",
-});
-
-if (error) {
-  console.error(error.message);
-  process.exit(1);
-}
-
-for (const c of data.campaigns) {
-  console.log(c.id, c.name, c.status, c.stats.publishedPosts);
-}
-console.log(data.pagination);
-```
-
-### Create organic campaign
-
-`startDate` must be a valid date string accepted by the API (not in the past). `userId` is taken from the token, not the body.
-
-```ts
-import { createClient } from "soundlink";
-
-const client = createClient();
-
-const { data, error } = await client.createOrganicCampaign({
-  socialAccountId: "00000000-0000-0000-0000-000000000002",
-  name: "June TikTok calendar",
-  spotifyLink: "https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh",
-  color: "#6366f1",
-  dailyPostsQuantity: 2,
-  startDate: "2025-06-01T12:00:00.000Z",
-  endDate: "2025-06-30T23:59:59.000Z",
-  timeZone: "Europe/Lisbon",
-  creativeTag: ["viral", "dance"],
-  captionType: ["hook_first"],
-  language: "en",
-  initialPostSettings: {
-    title: "New drop",
-    description: "Stream now",
-    shareToFeed: true,
-    trialGraduationStrategy: "MANUAL",
-  },
-});
-
-if (error) {
-  console.error(error.message);
-  process.exit(1);
-}
-
-console.log("Calendar id:", data.calendarId);
-```
-
-### Flat imports (environment variables only)
-
-Set `SOUNDLINK_TOKEN`, `SOUNDLINK_ORGANIZATION_ID`, and `SOUNDLINK_BASE_URL`, then:
-
-```ts
-import {
-  createOrganicCampaign,
-  createPaidCampaign,
-  listOrganicCampaigns,
-  listPaidCampaigns,
-} from "soundlink";
-
-const paid = await listPaidCampaigns({ page: 1, pageSize: 10 });
-if (paid.error) throw paid.error;
-
-const organic = await listOrganicCampaigns({ page: 1, pageSize: 10 });
-if (organic.error) throw organic.error;
-
-const created = await createPaidCampaign({
-  spotifyLink: "https://open.spotify.com/track/...",
-  dailyBudget: 40,
-  campaignDuration: 7,
-  smartLinkName: "Quick test",
-  createdBy: "user-uuid-here",
-});
-if (created.error) throw created.error;
-```
-
----
-
-## API methods reference
-
-All methods return `Promise<Result<...>>` (see [Return values & errors](#return-values--errors)).
-
-### Paid campaigns
-
-| Method                              | HTTP                             | Description                                                                                                                                                                                    |
-| ----------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `createPaidCampaign(input)`         | `POST /api/v1/campaigns/managed` | Creates a **managed** paid campaign (same payload shape as the app’s managed flow). **Production note:** the backend may require a CSM user and invoice billing; otherwise it returns **403**. |
-| `createCheckoutPaidCampaign(input)` | `POST /api/v1/campaigns`         | Creates a campaign **after Stripe checkout**; requires `paymentInfo` (`sessionId`, `paymentIntentId`, `eventId`, …).                                                                           |
-| `listPaidCampaigns(query?)`         | `GET /api/v1/campaigns`          | Paginated list for the current organization.                                                                                                                                                   |
-
-### Organic growth (calendars)
-
-| Method                         | HTTP                                    | Description                                                                           |
-| ------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------- |
-| `createOrganicCampaign(input)` | `POST /api/v1/organic-growth/campaigns` | Creates an organic “campaign” (calendar). User id comes from the token, not the body. |
-| `listOrganicCampaigns(query?)` | `GET /api/v1/organic-growth/campaigns`  | Filterable list (`status`, `platform`, dates, search, pagination, sort).              |
-
----
-
-## Types & payloads
-
-Exported types live in the package entry (e.g. `CreateManagedPaidCampaignInput`, `ListOrganicCampaignsQuery`). Highlights:
-
-### Managed paid create (`createPaidCampaign`)
-
-Required fields (enforced by the API):
-
-- `spotifyLink`, `dailyBudget`, `campaignDuration`, `smartLinkName`, `createdBy`
-
-Optional (among others):
-
-- `selectedGenre`
-- `strategyType` — **paid only**; allowed values:  
-  `maximum_growth` | `market_discovery` | `revenue_maximization` | `custom` | `custom_default` | `custom_localized`  
-  (see exported `STRATEGY_TYPES` / `StrategyType`)
-- `platform`: `"meta"` | `"tiktok"`
-- `customTierIds`, `customTiers`, `creativeStrategyTag`, `creativeStrategyTags`, `audioUri`, `captionTypes`, `creativeDirectionType`, `selectedCreatives`
-
-Success body: `{ campaignId, smartLinkId }`.
-
-### Checkout paid create (`createCheckoutPaidCampaign`)
-
-Requires `paymentInfo` plus the same core fields as the non-managed `POST /campaigns` flow. See type `CreateCheckoutPaidCampaignInput`.
-
-### List paid (`listPaidCampaigns`)
-
-Query object `ListPaidCampaignsQuery`:
-
-- `page`, `pageSize`, `sortBy`, `sortOrder`
-
-Response shape: `ListPaidCampaignsResponse` (`items`, `total`, `page`, `pageSize`, optional `totalPages`).
-
-### Organic create (`createOrganicCampaign`)
-
-Required by the API: `socialAccountId`, `name`, `spotifyLink`, `color`, `dailyPostsQuantity`, `startDate`.  
-Optional: `endDate`, `timeZone`, `timeDailyConfigs`, `creativeTag`, `captionType`, `audioUri`, `language`, `initialPostSettings`.
-
-There is **no** paid-style `strategyType` on organic create. TikTok-related `initialPostSettings.trialGraduationStrategy` is separate (`MANUAL` | `SS_PERFORMANCE` per API validation).
-
-Success: `{ calendarId }` (HTTP 201).
-
-### List organic (`listOrganicCampaigns`)
-
-`ListOrganicCampaignsQuery` supports e.g.:
-
-- `status` — array of `active` | `inactive` | `ended` | `archived` (sent as comma-separated query)
-- `platform` — `tiktok` | `instagram` (comma-separated)
-- `socialAccountId`, `startDate`, `endDate`, `search`, `page`, `pageSize`, `sortBy`, `sortOrder`
-
-Response: `ListOrganicCampaignsResponse` (`campaigns`, `pagination`).
-
----
-
-## Return values & errors
-
-Every public method returns a **discriminated result**:
-
-```ts
-type Result<T> =
-  | { data: T; error: null }
-  | { data: null; error: SoundlinkError };
-```
-
-**Do not rely on thrown exceptions** for API failures; check `error`.
-
-```ts
-import {
-  AuthenticationError,
-  PermissionError,
-  SoundlinkError,
-  ValidationError,
-  listPaidCampaigns,
-} from "soundlink";
-
-const { data, error } = await listPaidCampaigns();
-
-if (error) {
-  if (error instanceof AuthenticationError) {
-    /* 401 */
-  } else if (error instanceof PermissionError) {
-    /* 403 */
-  } else if (error instanceof ValidationError) {
-    /* 4xx validation-style */
-  } else if (error instanceof SoundlinkError) {
-    console.error(error.code, error.status, error.message);
-  }
+  console.error(error.code, error.message, error.requestId);
   return;
 }
 
-// data is defined here
 console.log(data.items);
 ```
 
-Exported error classes include: `AuthenticationError`, `PermissionError`, `ValidationError`, `NotFoundError`, `RateLimitError`, `ServerError`, `NetworkError`, and base `SoundlinkError`.
+HTTP errors from the API are **never thrown**. Exceptions are reserved for SDK configuration, parsing, and unexpected transport failures.
 
-Helpers: `ok()`, `err()` from `"soundlink"` if you compose your own logic.
+## Campaigns
 
----
+```typescript
+const { data, error } = await soundlink.campaigns.list({
+  page: 1,
+  pageSize: 100,
+  sortBy: 'createdAt',
+  sortOrder: 'desc',
+});
 
-## Advanced
+const { data: campaign } = await soundlink.campaigns.get('camp_abc123');
 
-### Low-level HTTP helpers
+// Async iterator across all pages
+for await (const item of soundlink.campaigns.listAll({ pageSize: 100 })) {
+  console.log(item.campaignId);
+}
+```
 
-If you share one `SoundlinkHttpClient` instance, you can call the same operations as functions:
+## Metrics
 
-- `createPaidCampaignWithHttp`, `createCheckoutPaidCampaignWithHttp`, `listPaidCampaignsWithHttp`
-- `createOrganicCampaignWithHttp`, `listOrganicCampaignsWithHttp`
+```typescript
+const { data: overview } = await soundlink.metrics.overview('camp_abc123', {
+  startDate: '2026-01-01',
+  endDate: '2026-03-31',
+});
 
-Useful for custom wiring; most apps should use `SoundlinkClient` or the flat exports.
+const { data: breakdown } = await soundlink.metrics.breakdown.list('camp_abc123', {
+  page: 1,
+  pageSize: 50,
+});
+```
 
-### Config inspection / validation
+### JSONL exports (streaming)
 
-- `resolveSoundlinkConfig(partial?)` → `ResolvedSoundlinkConfig`
-- `assertConfigReady(config)` — throws if token, org, or base URL is missing
+Export endpoints stream newline-delimited JSON. Use `for await` for pipelines:
 
-### `SoundlinkHttpClient`
+```typescript
+const { data: stream, error } = await soundlink.metrics.breakdown.export(
+  'camp_abc123',
+  {
+    startDate: '2026-01-01',
+    endDate: '2026-03-31',
+  },
+);
 
-Direct use is rare; it implements JSON requests, timeout, headers, and error mapping.
+if (error || !stream) return;
 
----
+for await (const row of stream) {
+  await warehouse.insert(row);
+}
+```
 
-## Examples
+Collect all rows into memory when the dataset is small:
 
-See the [`examples/`](./examples/) directory:
+```typescript
+const { data } = await soundlink.metrics.breakdown.export.collect('camp_abc123');
+console.log(data?.rowCount, data?.rows);
+```
 
-- [`examples/README.md`](./examples/README.md) — how to build and run
-- [`examples/.env.example`](./examples/.env.example) — required env vars
-- Sample scripts (e.g. list paid campaigns) using `node --env-file=examples/.env ...`
+Engagement exports work the same way:
 
----
+```typescript
+const { data: stream } = await soundlink.metrics.engagement.export('camp_abc123', {
+  engagementContext: 'catalog',
+});
+```
 
-## Scripts (package root)
+## Configuration
 
-| Command             | Description                       |
-| ------------------- | --------------------------------- |
-| `npm run build`     | Bundle ESM + CJS + types (`tsup`) |
-| `npm run typecheck` | `tsc --noEmit`                    |
-| `npm run dev`       | Watch mode                        |
-| `npm run clean`     | Remove `dist/`                    |
+```typescript
+const soundlink = new Soundlink({
+  apiKey: process.env.SOUNDLINK_API_KEY!,
+  baseUrl: 'https://api.getsoundlink.com', // default
+  timeout: 30_000, // ms, default
+  maxRetries: 2, // retries on 429/5xx, default
+  fetch: customFetch, // optional, for Edge/tests
+});
+```
 
----
+## Error codes
+
+| Code                      | Typical HTTP |
+| ------------------------- | ------------ |
+| `invalid_api_key`         | 401          |
+| `api_key_revoked`         | 401          |
+| `api_key_expired`         | 401          |
+| `mixed_credentials`       | 401          |
+| `insufficient_scope`      | 403          |
+| `not_found`               | 404          |
+| `campaign_not_found`      | 404          |
+| `invalid_query_parameter` | 400          |
+| `invalid_date_range`      | 400          |
+| `page_size_exceeded`      | 400          |
+| `rate_limit_exceeded`     | 429          |
+| `internal_error`          | 500          |
+
+Include `meta.requestId` (or `error.requestId`) when contacting Soundlink support.
+
+## API reference
+
+Full endpoint documentation: [docs.getsoundlink.com](https://docs.getsoundlink.com).
+
+OpenAPI spec shipped with this package: `openapi/soundlink-public-api-v1.yaml`.
+
+## Test before publish
+
+Smoke test against the live API (uses the local SDK source, not npm):
+
+```bash
+# Option A — .env file
+cp .env.example .env
+# edit .env → SOUNDLINK_API_KEY=sk_...
+
+npm run test:live
+
+# Option B — inline
+SOUNDLINK_API_KEY=sk_your_prefix_your_secret npm run test:live
+
+# Option C — CLI argument
+npm run test:live -- sk_your_prefix_your_secret
+```
+
+The script runs: `ping` → `campaigns.list` → `campaigns.get` → `metrics.overview` (best effort).
+
+## Roadmap
+
+- `metrics.engagement.list` — spec-ready; backend route pending
+- `campaigns.create` — when `campaigns:write` scope opens in v2
+- Webhook helpers — when Public API webhooks ship
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-Proprietary — Soundlink / Fan ID (use according to your organization’s policies).
+MIT

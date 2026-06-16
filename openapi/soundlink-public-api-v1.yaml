@@ -1,0 +1,1289 @@
+openapi: 3.0.3
+info:
+  title: Soundlink Public API
+  version: 0.0.1-draft
+  description: |
+    Read-only campaign and metrics API for Soundlink partner organizations.
+
+    **Base URL:** `https://api.getsoundlink.com`
+
+    **Authentication:** `x-api-key` header using a `sk_*` API key issued by Soundlink Engineering.
+    ```
+    x-api-key: sk_abc123_<token>
+    ```
+
+    All responses are wrapped in a standard envelope:
+    ```json
+    { "data": <payload>, "meta": { "requestId": "<uuid>" } }
+    ```
+
+    Errors follow the same envelope shape with an `error` field instead of `data`.
+
+servers:
+  - url: https://api.getsoundlink.com
+    description: Production
+
+security:
+  - apiKeyAuth: []
+
+tags:
+  - name: System
+    description: Connectivity and auth verification
+  - name: Campaigns
+    description: Campaign listing and detail
+  - name: Metrics
+    description: Campaign performance metrics
+
+paths:
+  /v1/ping:
+    get:
+      operationId: ping
+      summary: Verify connectivity and authentication
+      description: |
+        Returns `{ "status": "ok" }` if the request is authenticated and the
+        API is reachable. Useful for verifying a newly issued key before making
+        data requests.
+      tags: [System]
+      security:
+        - apiKeyAuth: []
+      responses:
+        '200':
+          description: Authenticated and reachable
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: object
+                    required: [status]
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+              example:
+                data:
+                  status: ok
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns:
+    get:
+      operationId: listCampaigns
+      summary: List campaigns
+      description: |
+        Returns all campaigns for the authenticated organization.
+        Intended for reporting and data warehouse sync.
+      tags: [Campaigns]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize100'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, status]
+            default: createdAt
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated list of campaigns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignListResponse'
+              example:
+                data:
+                  items:
+                    - campaignId: camp_abc123
+                      organizationId: org_xyz
+                      status: active
+                      socialPlatform: meta
+                      dailyBudget: 20.0
+                      totalBudget: 140.0
+                      campaignDuration: 7
+                      createdAt: '2026-04-01T10:00:00Z'
+                      updatedAt: '2026-04-08T12:00:00Z'
+                  pagination:
+                    page: 1
+                    pageSize: 10
+                    totalCount: 42
+                    totalPages: 5
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}:
+    get:
+      operationId: getCampaign
+      summary: Get campaign
+      description: Fetch full details for a single campaign.
+      tags: [Campaigns]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+      responses:
+        '200':
+          description: Campaign detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignDetailResponse'
+              example:
+                data:
+                  campaignId: camp_abc123
+                  organizationId: org_xyz
+                  status: active
+                  socialPlatform: meta
+                  dailyBudget: 20.0
+                  totalBudget: 140.0
+                  campaignDuration: 7
+                  strategyType: custom
+                  createdAt: '2026-04-01T10:00:00Z'
+                  updatedAt: '2026-04-08T12:00:00Z'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/overview:
+    get:
+      operationId: getCampaignMetricsOverview
+      summary: Campaign metrics overview
+      description: |
+        Campaign-level totals for a date range: spend, conversions, listeners,
+        streams, followers, and derived ratios. No per-day rows — use
+        `/metrics/breakdown` for those.
+
+        Suitable for dashboards and quick syncs.
+      tags: [Metrics]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+      responses:
+        '200':
+          description: Campaign totals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsOverviewResponse'
+              example:
+                data:
+                  listeners: 4821
+                  streams: 9340
+                  followers: 312
+                  impressions: 48210
+                  ad_clicks: 1120
+                  link_clicks: 890
+                  spend_media: 134.50
+                  spend_total: 168.13
+                  fees: 33.63
+                  currency: USD
+                  cpl: 0.028
+                  cpf: 0.43
+                  streams_per_listener: 1.94
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/breakdown:
+    get:
+      operationId: getCampaignMetricsBreakdown
+      summary: Campaign metrics breakdown
+      description: |
+        Per-day metrics broken down by country. One row per
+        `(report_date, campaign_id, country_code)`. Can be large, so results
+        are paginated.
+
+        **Row schema:** `campaign_country_daily` v1.0 — the same schema used
+        in JSONL bulk exports. Rows are idempotent on the primary key
+        `(provider, account_id, report_date, campaign_id, country_code)`;
+        re-ingesting is safe.
+
+        **Mutability window:** rows for a given `report_date` can be revised
+        for up to 7 days after the date closes due to delayed events from
+        Meta and Spotify. Re-fetch or re-ingest accordingly.
+
+        Maps to the **Countries** tab in the Soundlink Insights UI.
+        Use for daily warehouse loads.
+      tags: [Metrics]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize500'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [report_date, spend_total]
+            default: report_date
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated per-day country rows (`campaign_country_daily` schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsBreakdownResponse'
+              example:
+                data:
+                  schemaVersion: '1.0'
+                  items:
+                    - provider: soundlink
+                      account_id: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                      schema_version: '1.0'
+                      report_date: '2026-04-01'
+                      report_date_timezone: UTC
+                      exported_at: '2026-05-20T03:00:00Z'
+                      campaign_id: f1e28d31-c358-4284-9bef-00a2334625fd
+                      campaign_name: Sleep Playlist
+                      campaign_target_type: track
+                      campaign_target_isrc: DEXW62500259
+                      campaign_target_spotify_track_id: 6habFhsOp2NvndAvgiJ01P
+                      campaign_target_playlist_id: null
+                      country_code: US
+                      impressions: 4821
+                      ad_clicks: 112
+                      link_clicks: 89
+                      streams: 203
+                      listeners: 145
+                      followers: 12
+                      streams_per_listener: 1.4
+                      spend_media: 42.50
+                      spend_total: 53.13
+                      fees: 10.63
+                      currency: USD
+                      currency_account: USD
+                      cpl: 0.293
+                      cpf: 3.542
+                      cpc_linkclick: 0.478
+                      ctr_linkclick: 0.0185
+                      ctr_adclick: 0.0232
+                      cost_per_result: 3.542
+                      result_type: follow
+                  pagination:
+                    page: 1
+                    pageSize: 50
+                    totalCount: 340
+                    totalPages: 7
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/breakdown/export:
+    get:
+      operationId: exportCampaignMetricsBreakdown
+      summary: Campaign metrics breakdown export (JSONL)
+      description: |
+        Streams the full country-level metrics dataset for a campaign as
+        **newline-delimited JSON (JSONL)**. Every line is a complete, valid
+        JSON object conforming to the `campaign_country_daily` v1.0 schema
+        — identical to the rows returned by `GET /metrics/breakdown` but
+        without pagination or an envelope wrapper.
+
+        Designed for data pipeline consumers: load directly into BigQuery,
+        Snowflake, or any JSONL-aware ingest tool without cursor logic.
+
+        **Usage:**
+        ```
+        GET /v1/campaigns/{campaignId}/metrics/breakdown/export
+        Accept: application/x-ndjson
+        ```
+
+        **Date range:** defaults to the full campaign active period. Override
+        with `startDate` / `endDate`. **Responses are capped at 90 days** —
+        use `startDate` / `endDate` to slice through longer windows manually.
+
+        **Mutability:** rows for a given `report_date` can be revised for up
+        to 7 days after the date closes due to delayed events from Meta and
+        Spotify. Re-fetching and re-ingesting on the primary key is safe
+        (idempotent).
+      tags: [Metrics]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+      responses:
+        '200':
+          description: |
+            JSONL stream. Each line is a `campaign_country_daily` v1.0 row.
+            Lines are sorted by `(report_date asc, country_code)`.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: |
+                `attachment; filename="breakdown_{campaignId}_{startDate}_{endDate}.jsonl"`
+              example: 'attachment; filename="breakdown_f1e28d31_2026-04-01_2026-05-01.jsonl"'
+            X-Row-Count:
+              schema:
+                type: integer
+              description: Total number of rows in the response.
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/BreakdownRow'
+              example: |
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"6habFhsOp2NvndAvgiJ01P","campaign_target_playlist_id":null,"country_code":"US","impressions":4821,"ad_clicks":112,"link_clicks":89,"streams":203,"listeners":145,"followers":12,"streams_per_listener":1.4,"spend_media":42.50,"spend_total":53.13,"fees":10.63,"currency":"USD","currency_account":"USD","cpl":0.293,"cpf":3.542,"cpc_linkclick":0.478,"ctr_linkclick":0.0185,"ctr_adclick":0.0232,"cost_per_result":3.542,"result_type":"follow"}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"6habFhsOp2NvndAvgiJ01P","campaign_target_playlist_id":null,"country_code":"DE","impressions":2103,"ad_clicks":48,"link_clicks":31,"streams":87,"listeners":61,"followers":4,"streams_per_listener":1.43,"spend_media":18.20,"spend_total":22.75,"fees":4.55,"currency":"USD","currency_account":"USD","cpl":0.298,"cpf":4.55,"cpc_linkclick":0.587,"ctr_linkclick":0.0148,"ctr_adclick":0.0228,"cost_per_result":4.55,"result_type":"follow"}
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/engagement:
+    get:
+      operationId: getCampaignEngagement
+      summary: Campaign engagement breakdown
+      description: |
+        Per-day, per-track engagement metrics for a campaign. One row per
+        `(report_date, campaign_id, engagement_context, engaged_spotify_track_id)`.
+
+        **Key difference from `/metrics/breakdown`:** this endpoint covers the
+        full engagement window — including post-campaign streaming activity —
+        not just dates when the campaign was actively running. Use this for
+        catalog spillover analysis and long-tail retention.
+
+        **`engagement_context` values:**
+        - `catalog` — same-artist spillover (and direct promoted-track plays)
+          on track campaigns. `engaged_track_isrc` may equal
+          `campaign_target_isrc` (the promoted track itself) or differ
+          (spillover tracks).
+        - `playlist` — per-track performance inside the promoted playlist on
+          playlist campaigns. One row per track in the playlist per day.
+
+        **`listeners` is deduplicated within each row only.** Do not sum
+        `listeners` across days to get a campaign total — the same listener
+        can appear on multiple `report_date` rows.
+
+        Row schema: `campaign_engagement_daily` v1.0. Rows are idempotent on
+        the primary key; re-ingesting is safe.
+
+        **Mutability window:** rows for a given `report_date` can be revised
+        for up to 7 days after the date closes due to delayed Spotify
+        playback events.
+      tags: [Metrics]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - name: engagementContext
+          in: query
+          schema:
+            type: string
+            enum: [catalog, playlist]
+          description: |
+            Filter to a single engagement context. Omit to return both.
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize500'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [report_date, streams, listeners]
+            default: report_date
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated per-day per-track engagement rows (`campaign_engagement_daily` schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EngagementBreakdownResponse'
+              example:
+                data:
+                  schemaVersion: '1.0'
+                  items:
+                    - provider: soundlink
+                      account_id: a7ac3173-2f71-4e79-921f-d15d7112cc9a
+                      schema_version: '1.0'
+                      report_date: '2026-04-08'
+                      report_date_timezone: UTC
+                      exported_at: '2026-05-22T10:12:11Z'
+                      campaign_id: 8ccd7b88-2591-4b94-848f-f142f5c6bba1
+                      campaign_name: 9 To 5
+                      campaign_target_type: track
+                      campaign_target_isrc: DEXW62500272
+                      campaign_target_spotify_track_id: 2RkZ5WPkKyBf0u8vN3dNgb
+                      campaign_target_playlist_id: null
+                      status: ended
+                      engagement_context: catalog
+                      country_code: US
+                      engaged_track_isrc: DEXW62500001
+                      engaged_spotify_track_id: 4cOdK2wGLETKBW3PvgPWqT
+                      engaged_track_name: Till The Sunrise
+                      playlist_position: null
+                      new_listeners: 42
+                      returning_listeners: 18
+                      listeners: 60
+                      new_listener_streams: 58
+                      returning_listener_streams: 31
+                      streams: 89
+                      spl: 1.48
+                  pagination:
+                    page: 1
+                    pageSize: 50
+                    totalCount: 210
+                    totalPages: 5
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/engagement/export:
+    get:
+      operationId: exportCampaignEngagement
+      summary: Campaign engagement export (JSONL)
+      description: |
+        Streams the full engagement dataset for a campaign as
+        **newline-delimited JSON (JSONL)**. Every line is a complete, valid
+        JSON object conforming to the `campaign_engagement_daily` v1.0 schema
+        — identical to the rows returned by `GET /metrics/engagement` but
+        without pagination or an envelope wrapper.
+
+        Designed for data pipeline consumers: load directly into BigQuery,
+        Snowflake, or any JSONL-aware ingest tool without cursor logic.
+
+        **Usage:**
+        ```
+        GET /v1/campaigns/{campaignId}/metrics/engagement/export
+        Accept: application/x-ndjson
+        ```
+
+        **Response body (one JSON object per line, no trailing comma):**
+        ```
+        {"provider":"soundlink","report_date":"2026-04-01","streams":89,...}
+        {"provider":"soundlink","report_date":"2026-04-02","streams":104,...}
+        ```
+
+        **Date range:** defaults to the full campaign lifetime plus 30 days
+        post-end to capture tail engagement. Override with `startDate` /
+        `endDate`. **Responses are capped at 90 days** — if the requested
+        range exceeds 90 days, the most recent 90 days are returned. Use
+        `startDate` / `endDate` to page through longer windows in 90-day
+        slices.
+
+        **Mutability:** same 7-day revision window as the paginated endpoint.
+        Re-fetching and re-ingesting on the primary key is safe (idempotent).
+      tags: [Metrics]
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - name: engagementContext
+          in: query
+          schema:
+            type: string
+            enum: [catalog, playlist]
+          description: Filter to a single engagement context. Omit to return both.
+      responses:
+        '200':
+          description: |
+            JSONL stream. Each line is a `campaign_engagement_daily` v1.0 row.
+            Lines are sorted by `(report_date asc, engagement_context, country_code, engaged_spotify_track_id)`.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: |
+                `attachment; filename="engagement_{campaignId}_{startDate}_{endDate}.jsonl"`
+              example: 'attachment; filename="engagement_8ccd7b88_2026-04-01_2026-05-01.jsonl"'
+            X-Row-Count:
+              schema:
+                type: integer
+              description: Total number of rows in the response. Useful for progress tracking when streaming.
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/EngagementRow'
+              example: |
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112cc9a","schema_version":"1.0","report_date":"2026-04-08","report_date_timezone":"UTC","exported_at":"2026-05-22T10:12:11Z","campaign_id":"8ccd7b88-2591-4b94-848f-f142f5c6bba1","campaign_name":"9 To 5","campaign_target_type":"track","campaign_target_isrc":"DEXW62500272","campaign_target_spotify_track_id":"2RkZ5WPkKyBf0u8vN3dNgb","campaign_target_playlist_id":null,"status":"ended","engagement_context":"catalog","country_code":"US","engaged_track_isrc":"DEXW62500001","engaged_spotify_track_id":"4cOdK2wGLETKBW3PvgPWqT","engaged_track_name":"Till The Sunrise","playlist_position":null,"new_listeners":42,"returning_listeners":18,"listeners":60,"new_listener_streams":58,"returning_listener_streams":31,"streams":89,"spl":1.48}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112cc9a","schema_version":"1.0","report_date":"2026-04-08","report_date_timezone":"UTC","exported_at":"2026-05-22T10:12:11Z","campaign_id":"8ccd7b88-2591-4b94-848f-f142f5c6bba1","campaign_name":"9 To 5","campaign_target_type":"track","campaign_target_isrc":"DEXW62500272","campaign_target_spotify_track_id":"2RkZ5WPkKyBf0u8vN3dNgb","campaign_target_playlist_id":null,"status":"ended","engagement_context":"catalog","country_code":"DE","engaged_track_isrc":"DEXW62500001","engaged_spotify_track_id":"4cOdK2wGLETKBW3PvgPWqT","engaged_track_name":"Till The Sunrise","playlist_position":14,"new_listeners":19,"returning_listeners":7,"listeners":26,"new_listener_streams":24,"returning_listener_streams":11,"streams":35,"spl":1.35}
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: |
+        Pass your Soundlink `sk_*` API key in the `x-api-key` header.
+        Keys can carry explicit scopes (for example `campaigns:read`, `metrics:read`) enforced by the backend.
+
+  parameters:
+    campaignId:
+      name: campaignId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Campaign identifier (e.g. `camp_abc123`)
+
+    page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number (1-indexed)
+
+    pageSize100:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+      description: Items per page (max 100)
+
+    pageSize500:
+      name: pageSize
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 50
+      description: Rows per page (max 500; higher default than list endpoints)
+
+    sortOrder:
+      name: sortOrder
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+      description: Sort direction
+
+    startDate:
+      name: startDate
+      in: query
+      schema:
+        type: string
+        format: date
+      description: Inclusive start date (`YYYY-MM-DD`). Defaults to campaign start date.
+
+    endDate:
+      name: endDate
+      in: query
+      schema:
+        type: string
+        format: date
+      description: Inclusive end date (`YYYY-MM-DD`). Defaults to today.
+
+  schemas:
+    # --- Shared ---
+
+    Meta:
+      type: object
+      required: [requestId]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Server-generated request ID. Include when contacting support.
+
+    Pagination:
+      type: object
+      required: [page, pageSize, totalCount, totalPages]
+      properties:
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalCount:
+          type: integer
+        totalPages:
+          type: integer
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Stable snake_case error code.
+          enum:
+            - invalid_api_key
+            - api_key_revoked
+            - api_key_expired
+            - mixed_credentials
+            - insufficient_scope
+            - not_found
+            - campaign_not_found
+            - invalid_query_parameter
+            - invalid_date_range
+            - page_size_exceeded
+            - rate_limit_exceeded
+            - internal_error
+        message:
+          type: string
+          description: Human-readable error description. Do not parse programmatically.
+
+    ErrorResponse:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # --- Campaign ---
+
+    CampaignStatus:
+      type: string
+      enum: [creating, active, paused, completed, failed]
+
+    CampaignSummary:
+      type: object
+      required:
+        [
+          campaignId,
+          organizationId,
+          status,
+          socialPlatform,
+          dailyBudget,
+          totalBudget,
+          campaignDuration,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        campaignId:
+          type: string
+        organizationId:
+          type: string
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+        socialPlatform:
+          type: string
+          enum: [meta]
+        dailyBudget:
+          type: number
+          description: USD
+        totalBudget:
+          type: number
+          description: USD
+        campaignDuration:
+          type: integer
+          description: Duration in days
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CampaignDetail:
+      allOf:
+        - $ref: '#/components/schemas/CampaignSummary'
+        - type: object
+          properties:
+            strategyType:
+              type: string
+              description: |
+                Growth strategy (e.g. `custom`, `maximum_growth`, `market_discovery`).
+                Set at campaign creation.
+
+    CampaignListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items, pagination]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CampaignSummary'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignDetail'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # --- Metrics ---
+
+    MetricsOverview:
+      type: object
+      description: |
+        Campaign-level totals aggregated across all countries for the requested
+        date range. Field names align with the `campaign_country_daily` row
+        schema — values here are the sum of country rows.
+      required:
+        [
+          listeners,
+          streams,
+          followers,
+          spend_media,
+          spend_total,
+          fees,
+          currency,
+          cpl,
+          cpf,
+          streams_per_listener,
+        ]
+      properties:
+        listeners:
+          type: integer
+          description: Unique attributed Spotify listeners (sum of country rows).
+        streams:
+          type: integer
+          description: Attributed Spotify streams (sum of country rows).
+        followers:
+          type: integer
+          description: Attributed artist follower gains (sum of country rows).
+        impressions:
+          type: integer
+          nullable: true
+          description: Total Meta ad impressions. Null if not available.
+        ad_clicks:
+          type: integer
+          nullable: true
+          description: Total Meta ad clicks (all click types).
+        link_clicks:
+          type: integer
+          nullable: true
+          description: Outbound clicks to Spotify via the Soundlink landing page.
+        spend_media:
+          type: number
+          description: Amount billed to Meta for ad delivery. Excludes Soundlink fees. USD.
+        spend_total:
+          type: number
+          description: Total billed by Soundlink (spend_media + fees). USD.
+        fees:
+          type: number
+          description: Soundlink service fee (spend_total - spend_media). USD.
+        currency:
+          type: string
+          description: Currency for spend fields. Currently always `USD`.
+        cpl:
+          type: number
+          description: Cost per listener (spend_media / listeners).
+        cpf:
+          type: number
+          description: Cost per follower (spend_media / followers).
+        streams_per_listener:
+          type: number
+          description: streams / listeners. Zero if listeners is zero.
+
+    MetricsOverviewResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/MetricsOverview'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    BreakdownRow:
+      type: object
+      description: |
+        One row of the `campaign_country_daily` v1.0 schema.
+        Primary key: `(provider, account_id, report_date, campaign_id, country_code)`.
+        Rows are idempotent — re-ingesting on the primary key is safe.
+        Values for a given `report_date` may be revised for up to 7 days after
+        the date closes due to delayed events from Meta and Spotify.
+      required:
+        - provider
+        - account_id
+        - schema_version
+        - report_date
+        - report_date_timezone
+        - exported_at
+        - campaign_id
+        - campaign_name
+        - campaign_target_type
+        - country_code
+        - streams
+        - listeners
+        - followers
+        - streams_per_listener
+        - spend_media
+        - spend_total
+        - fees
+        - currency
+        - currency_account
+        - cpl
+        - cpf
+        - cost_per_result
+      properties:
+        provider:
+          type: string
+          enum: [soundlink]
+          description: Always `soundlink`. Identifies the data provider for multi-source warehouses.
+        account_id:
+          type: string
+          description: Soundlink organization ID (UUID).
+        schema_version:
+          type: string
+          description: Schema version. Pin your ingest pipeline to this value.
+          example: '1.0'
+        report_date:
+          type: string
+          format: date
+          description: UTC calendar date the metrics belong to (`YYYY-MM-DD`).
+        report_date_timezone:
+          type: string
+          enum: [UTC]
+          description: Always `UTC`.
+        exported_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp when this row was generated. Use for deduplication if the same `report_date` is re-delivered.
+        campaign_id:
+          type: string
+          description: Soundlink campaign UUID. Stable for the lifetime of the campaign.
+        campaign_name:
+          type: string
+          description: Human-readable campaign name.
+        campaign_target_type:
+          type: string
+          nullable: true
+          enum: [track, playlist]
+          description: Whether this campaign promotes a track or playlist. `null` if undetermined.
+        campaign_target_isrc:
+          type: string
+          nullable: true
+          description: ISRC of the promoted track. Populated when `campaign_target_type = track`; otherwise `null`.
+        campaign_target_spotify_track_id:
+          type: string
+          nullable: true
+          description: Spotify track ID of the promoted track. Populated when `campaign_target_type = track`; otherwise `null`.
+        campaign_target_playlist_id:
+          type: string
+          nullable: true
+          description: Spotify playlist ID. Populated when `campaign_target_type = playlist`; otherwise `null`.
+        country_code:
+          type: string
+          description: ISO 3166-1 alpha-2. Derived from the listener's IP at time of engagement. Uppercase.
+        impressions:
+          type: integer
+          nullable: true
+          description: Total Meta ad impressions served in this country on this day.
+        ad_clicks:
+          type: integer
+          nullable: true
+          description: Total clicks on the Meta ad (all click types). Use `ctr_adclick` for ad-level CTR.
+        link_clicks:
+          type: integer
+          nullable: true
+          description: Clicks on "Continue with Spotify" on the Soundlink landing page. Use `cpc_linkclick` / `ctr_linkclick` for outbound CPC/CTR.
+        streams:
+          type: integer
+          description: Spotify streams attributed to this campaign in this country on this day (7-day click-through window). Observed events, not modelled estimates.
+        listeners:
+          type: integer
+          description: Unique Spotify listeners attributed to this campaign in this country on this day (7-day click-through window). Summing country rows gives the correct campaign-level total.
+        followers:
+          type: integer
+          description: Spotify artist follower gains attributed to this campaign in this country on this day (7-day click-through window).
+        streams_per_listener:
+          type: number
+          description: streams / listeners for this row. Zero if listeners is zero.
+        spend_media:
+          type: number
+          description: Amount billed to Meta for ad delivery in this country on this day. Excludes Soundlink service fees. In `currency`.
+        spend_total:
+          type: number
+          description: Total billed by Soundlink (spend_media + fees). Computed as `spend_media / (1 - fee_pct)`.
+        fees:
+          type: number
+          description: Soundlink service fee (spend_total - spend_media).
+        currency:
+          type: string
+          description: Currency for spend fields. Currently always `USD`.
+        currency_account:
+          type: string
+          description: Account billing currency. Currently always `USD`. Will differ from `currency` once EUR delivery is available.
+        cpl:
+          type: number
+          description: Cost per listener (spend_media / listeners). Zero if listeners is zero.
+        cpf:
+          type: number
+          description: Cost per follower (spend_media / followers). Zero if followers is zero.
+        cpc_linkclick:
+          type: number
+          nullable: true
+          description: Cost per outbound click (spend_media / link_clicks). Null if link_clicks is null or zero.
+        ctr_linkclick:
+          type: number
+          nullable: true
+          description: Outbound CTR (link_clicks / impressions). Null if impressions is null or zero.
+        ctr_adclick:
+          type: number
+          nullable: true
+          description: Meta ad CTR (ad_clicks / impressions). Null if impressions is null or zero.
+        cost_per_result:
+          type: number
+          description: Cost per primary campaign result. Currently equivalent to `cpf` (cost per follower). See `result_type`.
+        result_type:
+          type: string
+          nullable: true
+          enum: [lp_click, stream, follow]
+          description: The conversion event used for `cost_per_result`. Currently always `follow`.
+
+    MetricsBreakdownResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [schemaVersion, items, pagination]
+          properties:
+            schemaVersion:
+              type: string
+              description: Version of the `campaign_country_daily` row schema. Pin your ingest pipeline to this.
+              example: '1.0'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/BreakdownRow'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # --- Engagement ---
+
+    EngagementRow:
+      type: object
+      description: |
+        One row of the `campaign_engagement_daily` v1.0 schema.
+        Primary key: `(provider, account_id, report_date, campaign_id, engagement_context, country_code, engaged_spotify_track_id)`.
+        Rows are idempotent — re-ingesting on the primary key is safe.
+        Values for a given `report_date` may be revised for up to 7 days after
+        the date closes due to delayed Spotify playback events.
+      required:
+        - provider
+        - account_id
+        - schema_version
+        - report_date
+        - report_date_timezone
+        - exported_at
+        - campaign_id
+        - campaign_name
+        - campaign_target_type
+        - status
+        - engagement_context
+        - country_code
+        - engaged_spotify_track_id
+        - engaged_track_name
+        - new_listeners
+        - returning_listeners
+        - listeners
+        - new_listener_streams
+        - returning_listener_streams
+        - streams
+        - spl
+      properties:
+        provider:
+          type: string
+          enum: [soundlink]
+          description: Always `soundlink`. Identifies the data provider for multi-source warehouses.
+        account_id:
+          type: string
+          description: Soundlink organization ID (UUID).
+        schema_version:
+          type: string
+          description: Schema version string. Pin your ingest pipeline to this value.
+          example: '1.0'
+        report_date:
+          type: string
+          format: date
+          description: UTC calendar date the metrics belong to (`YYYY-MM-DD`). Rows can change for up to 7 days after close.
+        report_date_timezone:
+          type: string
+          enum: [UTC]
+          description: Always `UTC`.
+        exported_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp when this row was generated. Use for deduplication if the same `report_date` is re-delivered.
+        campaign_id:
+          type: string
+          description: Soundlink campaign UUID. Stable for the lifetime of the campaign.
+        campaign_name:
+          type: string
+          description: Human-readable campaign name.
+        campaign_target_type:
+          type: string
+          nullable: true
+          enum: [track, playlist]
+          description: Whether this campaign promotes a track or a playlist. `null` if undetermined.
+        campaign_target_isrc:
+          type: string
+          nullable: true
+          description: ISRC of the promoted track. Populated when `campaign_target_type = track`; otherwise `null`.
+        campaign_target_spotify_track_id:
+          type: string
+          nullable: true
+          description: Spotify track ID of the promoted track. Populated when `campaign_target_type = track`; otherwise `null`.
+        campaign_target_playlist_id:
+          type: string
+          nullable: true
+          description: Spotify playlist ID. Populated when `campaign_target_type = playlist`; otherwise `null`.
+        status:
+          type: string
+          enum: [active, ended, scheduled]
+          description: |
+            Campaign lifecycle status on `report_date`.
+            `active` = campaign was running; `ended` = campaign had ended or was refunded;
+            `scheduled` = `report_date` is before campaign start.
+            Post-campaign rows will have `status = ended`.
+        engagement_context:
+          type: string
+          enum: [catalog, playlist]
+          description: |
+            Which dashboard section the row maps to.
+            `catalog` = same-artist spillover (and direct promoted-track plays) on track campaigns.
+            `playlist` = per-track performance inside the promoted playlist on playlist campaigns.
+        country_code:
+          type: string
+          description: ISO 3166-1 alpha-2. Derived from the listener's IP at time of engagement. Uppercase.
+          example: US
+        engaged_track_isrc:
+          type: string
+          nullable: true
+          description: |
+            ISRC of the track that received listens. May differ from `campaign_target_isrc`
+            for catalog spillover rows. `null` if ISRC could not be resolved.
+        engaged_spotify_track_id:
+          type: string
+          description: |
+            Stable track identifier used in the primary key. Currently this is the
+            Spotify track ID for the engaged track.
+          example: 4cOdK2wGLETKBW3PvgPWqT
+        engaged_track_name:
+          type: string
+          description: Display name of the engaged track.
+        playlist_position:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: |
+            1-based slot index of the engaged track in the promoted playlist on `report_date`.
+            Populated for `engagement_context = playlist` when playlist snapshot data is available.
+            `null` for catalog rows and until position data is delivered (reserved for future delivery in v1.0).
+        new_listeners:
+          type: integer
+          minimum: 0
+          description: Unique listeners whose first play of this track on this smart link occurred on `report_date`.
+        returning_listeners:
+          type: integer
+          minimum: 0
+          description: Unique listeners who played this track on `report_date` but whose first play was on an earlier date.
+        listeners:
+          type: integer
+          minimum: 0
+          description: |
+            Total unique listeners on `report_date`: `new_listeners + returning_listeners`.
+            **Do not sum across days** — the same listener can appear on multiple `report_date` rows.
+        new_listener_streams:
+          type: integer
+          minimum: 0
+          description: Stream count from new listeners on `report_date`.
+        returning_listener_streams:
+          type: integer
+          minimum: 0
+          description: Stream count from returning listeners on `report_date`.
+        streams:
+          type: integer
+          minimum: 0
+          description: |
+            Total streams on `report_date`: `new_listener_streams + returning_listener_streams`.
+            Safe to sum within a day; summing across days counts repeat listens.
+        spl:
+          type: number
+          description: Streams per listener (`streams / listeners`). Zero if `listeners` is zero.
+
+    EngagementBreakdownResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [schemaVersion, items, pagination]
+          properties:
+            schemaVersion:
+              type: string
+              description: Version of the `campaign_engagement_daily` row schema. Pin your ingest pipeline to this.
+              example: '1.0'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/EngagementRow'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+  responses:
+    BadRequest:
+      description: Invalid query parameter or date range
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_query_parameter:
+              value:
+                error:
+                  code: invalid_query_parameter
+                  message: 'pageSize must be an integer between 1 and 500.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_date_range:
+              value:
+                error:
+                  code: invalid_date_range
+                  message: 'endDate must not be before startDate.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    Unauthorized:
+      description: Missing, malformed, revoked, or expired API key
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Present only on `rate_limit_exceeded`
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_api_key:
+              value:
+                error:
+                  code: invalid_api_key
+                  message: 'Authorization header is missing or malformed.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            api_key_revoked:
+              value:
+                error:
+                  code: api_key_revoked
+                  message: 'This API key has been revoked. Contact Soundlink Engineering to mint a new key.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    Forbidden:
+      description: Valid key but missing required scope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: insufficient_scope
+              message: 'This key does not have the metrics:read scope.'
+            meta:
+              requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    NotFound:
+      description: Campaign not found, belongs to another org, or feature flag is off
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: campaign_not_found
+              message: 'Campaign not found.'
+            meta:
+              requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    RateLimited:
+      description: Per-key rate limit exceeded (60/min, 600/hr)
+      headers:
+        Retry-After:
+          required: true
+          schema:
+            type: integer
+          description: Seconds until the rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: rate_limit_exceeded
+              message: 'Rate limit exceeded. Retry after the number of seconds indicated in the Retry-After header.'
+            meta:
+              requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: internal_error
+              message: 'An unexpected error occurred. Contact support with the requestId.'
+            meta:
+              requestId: 550e8400-e29b-41d4-a716-446655440000

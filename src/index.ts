@@ -1,69 +1,53 @@
+export { Soundlink, HttpClient, resolveClientOptions } from './client/soundlink.js';
+
 export {
-  createCheckoutPaidCampaign,
-  createClient,
-  createOrganicCampaign,
-  createPaidCampaign,
-  listOrganicCampaigns,
-  listPaidCampaigns,
-  SoundlinkClient,
-} from "./client";
-export {
-  assertConfigReady,
-  resolveSoundlinkConfig,
-  type ResolvedSoundlinkConfig,
-} from "./config";
-export {
-  AuthenticationError,
-  NetworkError,
-  NotFoundError,
-  PermissionError,
-  RateLimitError,
-  ServerError,
-  SoundlinkError,
-  ValidationError,
-} from "./errors";
-export { readEnv, readEnvBoolean } from "./env";
-export { SoundlinkHttpClient } from "./http-client";
-export {
-  createOrganicCampaign as createOrganicCampaignWithHttp,
-  listOrganicCampaigns as listOrganicCampaignsWithHttp,
-} from "./organic-campaigns";
-export {
-  createCheckoutPaidCampaign as createCheckoutPaidCampaignWithHttp,
-  createPaidCampaign as createPaidCampaignWithHttp,
-  listPaidCampaigns as listPaidCampaignsWithHttp,
-} from "./paid-campaigns";
-export { err, ok } from "./result";
+  SoundlinkSdkError,
+  SoundlinkParseError,
+  SoundlinkConfigError,
+} from './errors/sdk-error.js';
+
 export type {
-  CalendarDailyConfigInput,
-  CreateCheckoutPaidCampaignInput,
-  CreateCheckoutPaidCampaignPaymentInfo,
-  CreateCheckoutPaidCampaignResponse,
-  CreateManagedPaidCampaignInput,
-  CreateManagedPaidCampaignResponse,
-  CreateOrganicCampaignInput,
-  CreateOrganicCampaignResponse,
-  CustomTierRequestInput,
-  Err,
-  ListOrganicCampaignsQuery,
-  ListOrganicCampaignsResponse,
-  ListPaidCampaignsQuery,
-  ListPaidCampaignsResponse,
-  ManagedPaidSelectedCreative,
-  Ok,
-  OrganicCalendarStatus,
-  OrganicCampaignStats,
-  OrganicCampaignSummary,
-  OrganicCampaignTimeWindowRow,
-  OrganicChannelType,
-  OrganicInitialPostSettings,
-  OrganicTimeWindow,
-  PaidCampaignListItem,
-  PaidCampaignSortField,
-  PaidSocialPlatform,
-  Result,
-  SoundlinkConfig,
-  StrategyType,
-  TrialGraduationStrategy,
-} from "./types";
-export { STRATEGY_TYPES } from "./types";
+  ApiError,
+  ApiMeta,
+  ApiResponse,
+  BreakdownExportParams,
+  BreakdownListData,
+  BreakdownListParams,
+  BreakdownRow,
+  CampaignDetail,
+  CampaignListData,
+  CampaignListParams,
+  CampaignSortBy,
+  CampaignStatus,
+  CampaignSummary,
+  DateRangeParams,
+  EngagementContext,
+  EngagementExportParams,
+  EngagementListData,
+  EngagementListParams,
+  EngagementRow,
+  EngagementSortBy,
+  ExportCollection,
+  JsonlStream,
+  MetricsOverview,
+  Pagination,
+  PingData,
+  PublicApiErrorCode,
+  SocialPlatform,
+  SortOrder,
+  SoundlinkClientOptions,
+  SoundlinkOptions,
+} from './types/api.js';
+
+export type { ExportResource } from './resources/index.js';
+
+export {
+  DEFAULT_BASE_URL,
+  DEFAULT_MAX_RETRIES,
+  DEFAULT_TIMEOUT_MS,
+  API_KEY_PREFIX,
+  CAMPAIGNS_MAX_PAGE_SIZE,
+  METRICS_MAX_PAGE_SIZE,
+} from './constants/defaults.js';
+
+export { getStreamRowCount } from './client/http-client.js';
