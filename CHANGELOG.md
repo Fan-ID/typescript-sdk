@@ -1,5 +1,11 @@
 # soundlink
 
+## 1.1.1
+
+### Patch Changes
+
+- [`57ed16a`](https://github.com/Fan-ID/lib-sdk/commit/57ed16a090e91297845608935cbec8c074d6e15c) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add TSDoc comments on public methods and types for IDE hover hints and IntelliSense.
+
 ## 1.1.0
 
 ### Minor Changes
