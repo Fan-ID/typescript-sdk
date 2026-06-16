@@ -171,7 +171,7 @@ Include `meta.requestId` (or `error.requestId`) when contacting Soundlink suppor
 
 ## API reference
 
-Full endpoint documentation: [docs.getsoundlink.com](https://docs.getsoundlink.com).
+Full endpoint documentation: [getsoundlink.com/docs](https://getsoundlink.com/docs).
 
 OpenAPI spec shipped with this package: `openapi/soundlink-public-api-v1.yaml`.
 
@@ -200,6 +200,12 @@ The script runs: `ping` → `campaigns.list` → `campaigns.get` → `metrics.ov
 - `metrics.engagement.list` — spec-ready; backend route pending
 - `campaigns.create` — when `campaigns:write` scope opens in v2
 - Webhook helpers — when Public API webhooks ship
+
+## Releases
+
+GitHub Releases are created automatically when a **Version packages** PR is merged. Release notes come from `CHANGELOG.md`, with PR/issue links when referenced in changesets.
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md#release-process) for the full flow.
 
 ## Contributing
 

@@ -37,7 +37,21 @@ src/
 npx changeset
 ```
 
-Choose patch/minor/major and describe the change.
+Choose the bump type and describe the change:
+
+| Change type     | Changeset bump | Changelog section |
+| --------------- | -------------- | ----------------- |
+| New feature     | **minor**      | Minor Changes     |
+| Bug fix         | **patch**      | Patch Changes     |
+| Breaking change | **major**      | Major Changes     |
+
+Reference PRs/issues in the changeset summary — they become links in `CHANGELOG.md` and in the GitHub Release body (via `@changesets/changelog-github`).
+
+Example changeset summary:
+
+```markdown
+Add `campaigns.listAll` pagination helper. ([#42](https://github.com/Fan-ID/lib-sdk/pull/42))
+```
 
 ## Syncing types from OpenAPI
 
@@ -61,7 +75,8 @@ When the Public API spec changes in the backend:
 
 Releases are automated via GitHub Actions + Changesets on merge to `main`:
 
-1. Changesets opens a "Version packages" PR
-2. Merging that PR triggers npm publish + GitHub Release
+1. Merge PRs that include a changeset file in `.changeset/`
+2. CI opens a **"Version packages"** PR — updates `package.json` + `CHANGELOG.md`
+3. Merge that PR → CI publishes to npm and creates a **GitHub Release** with the changelog section as the release notes
 
-Requires `NPM_TOKEN` secret in the repository.
+Requires `NPM_TOKEN` in repository secrets. `GITHUB_TOKEN` is provided automatically for release creation.
