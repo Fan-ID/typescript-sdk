@@ -50,7 +50,7 @@ Reference PRs/issues in the changeset summary — they become links in `CHANGELO
 Example changeset summary:
 
 ```markdown
-Add `campaigns.listAll` pagination helper. ([#42](https://github.com/Fan-ID/lib-sdk/pull/42))
+Add `campaigns.listAll` pagination helper. ([#42](https://github.com/Fan-ID/lib/pull/42))
 ```
 
 ## Syncing types from OpenAPI

@@ -58,7 +58,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Fan-ID/lib-sdk"
+    "url": "https://github.com/Fan-ID/lib"
   },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.1",

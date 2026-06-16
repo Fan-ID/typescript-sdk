@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
-  "changelog": ["@changesets/changelog-github", { "repo": "Fan-ID/lib-sdk" }],
+  "changelog": ["@changesets/changelog-github", { "repo": "Fan-ID/lib" }],
   "commit": false,
   "fixed": [],
   "linked": [],
