@@ -289,7 +289,6 @@ export class HttpClient {
       signal: AbortSignal.timeout(timeout),
     });
 
-    // Safe for writes: retries reuse the same method, body, and Idempotency-Key.
     while (
       attempt < maxRetries &&
       (response.status === 429 || response.status >= 500)

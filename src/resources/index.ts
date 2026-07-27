@@ -134,7 +134,7 @@ export class StrategiesResource {
   }
 }
 
-/** Tier get/update nested under {@link CampaignsResource.tiers}. */
+/** Campaign tiers (`/v1/campaigns/{id}/tiers`). Wallet only (`generation: 3`). */
 export class CampaignTiersResource {
   constructor(private readonly http: HttpClient) {}
 

@@ -77,7 +77,7 @@ export const handlers = [
     });
   }),
 
-  http.post(`${BASE_URL}/v1/campaigns`, async ({ request }) => {
+  http.post(`${BASE_URL}/v1/campaigns`, ({ request }) => {
     const idempotencyKey = request.headers.get('Idempotency-Key');
     if (!idempotencyKey) {
       return errorEnvelope(
@@ -92,15 +92,6 @@ export const handlers = [
         'idempotency_key_conflict',
         'This Idempotency-Key was already used with a different request body.',
         409,
-      );
-    }
-
-    const body = (await request.json()) as { strategyType?: string };
-    if (body.strategyType === 'insufficient') {
-      return errorEnvelope(
-        'insufficient_credit',
-        'Insufficient wallet balance for this campaign.',
-        402,
       );
     }
 

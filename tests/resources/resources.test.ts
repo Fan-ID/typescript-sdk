@@ -1,6 +1,8 @@
+import { http } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Soundlink } from '../../src/index.js';
-import { BASE_URL, TEST_API_KEY } from '../mocks/handlers.js';
+import { BASE_URL, TEST_API_KEY, errorEnvelope } from '../mocks/handlers.js';
+import { server } from '../mocks/server.js';
 
 describe('Strategies resource', () => {
   let soundlink: Soundlink;
@@ -90,14 +92,23 @@ describe('Campaigns resource', () => {
   });
 
   it('returns insufficient_credit on create', async () => {
+    server.use(
+      http.post(`${BASE_URL}/v1/campaigns`, () =>
+        errorEnvelope(
+          'insufficient_credit',
+          'Insufficient wallet balance for this campaign.',
+          402,
+        ),
+      ),
+    );
+
     const { data, error } = await soundlink.campaigns.create(
       {
         spotifyUrl: 'https://open.spotify.com/track/6habFhsOp2NvndAvgiJ01P',
         dailyBudget: 20,
         durationDays: 7,
         genre: 'Pop',
-        // Cast: MSW uses this sentinel strategyType to force 402.
-        strategyType: 'insufficient' as 'maximum_growth',
+        strategyType: 'maximum_growth',
       },
       { idempotencyKey: 'create-no-credit' },
     );

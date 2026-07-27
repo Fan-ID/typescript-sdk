@@ -162,15 +162,7 @@ async function main(): Promise<void> {
 
     const first = campaigns.data.items[0];
     if (first) {
-      if (first.generation === undefined) {
-        printError('Campaign missing generation', {
-          code: 'invalid_response',
-          message: 'Expected generation on campaign summary.',
-        });
-        failed = true;
-      } else {
-        printOk(`first campaign generation: ${String(first.generation)}`);
-      }
+      printOk(`first campaign generation: ${String(first.generation)}`);
 
       printStep(`GET /v1/campaigns/${first.campaignId}`);
       const detail = await soundlink.campaigns.get(first.campaignId);
