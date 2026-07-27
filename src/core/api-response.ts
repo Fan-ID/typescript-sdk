@@ -35,12 +35,15 @@ export function toApiError(
   status: number,
   retryAfter?: number,
 ): ApiError {
+  const { details } = envelope.error;
+
   return {
     code: envelope.error.code as PublicApiErrorCode,
     message: envelope.error.message,
     status,
     requestId: envelope.meta.requestId,
     ...(retryAfter !== undefined ? { retryAfter } : {}),
+    ...(details !== undefined ? { details } : {}),
   };
 }
 

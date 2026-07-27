@@ -7,17 +7,26 @@ import type {
   BreakdownListData,
   BreakdownListParams,
   BreakdownRow,
+  CampaignCreateData,
   CampaignDetail,
   CampaignListData,
   CampaignListParams,
+  CampaignStopData,
+  CampaignTiersData,
+  CreateCampaignRequest,
   DateRangeParams,
+  DecreaseCampaignBudgetData,
+  DecreaseCampaignBudgetRequest,
   EngagementExportParams,
-  EngagementListData,
-  EngagementListParams,
   EngagementRow,
   ExportCollection,
+  IdempotencyOptions,
+  IncreaseCampaignBudgetData,
+  IncreaseCampaignBudgetRequest,
   MetricsOverview,
   PingData,
+  StrategiesCatalogData,
+  UpdateCampaignTiersRequest,
 } from '../types/api.js';
 
 /**
@@ -106,14 +115,72 @@ export class PingResource {
   }
 }
 
-/** Campaign listing and detail (`/v1/campaigns/*`). Requires `campaigns:read`. */
-export class CampaignsResource {
+/** Strategy catalog (`GET /v1/strategies`). Requires `campaigns:read`. */
+export class StrategiesResource {
   constructor(private readonly http: HttpClient) {}
+
+  /**
+   * List growth strategies available for wallet campaign create.
+   *
+   * Maps to `GET /v1/strategies`.
+   *
+   * @example
+   * ```ts
+   * const { data } = await soundlink.strategies.list();
+   * ```
+   */
+  list(): Promise<ApiResponse<StrategiesCatalogData>> {
+    return this.http.get<StrategiesCatalogData>({ path: '/strategies' });
+  }
+}
+
+/** Campaign tiers (`/v1/campaigns/{id}/tiers`). Wallet only (`generation: 3`). */
+export class CampaignTiersResource {
+  constructor(private readonly http: HttpClient) {}
+
+  /**
+   * Get current tier allocation for a wallet campaign.
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/tiers`. Wallet campaigns only (`generation: 3`).
+   */
+  get(campaignId: string): Promise<ApiResponse<CampaignTiersData>> {
+    return this.http.get<CampaignTiersData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/tiers`,
+    });
+  }
+
+  /**
+   * Update tier enablement and budget shares.
+   *
+   * Maps to `PATCH /v1/campaigns/{campaignId}/tiers`. Requires `campaigns:write`.
+   * Allocation percents across items must sum to 100.
+   * Use each tier's `tierId` from {@link CampaignTiersResource.get} as `targetingTierId`.
+   * Does not require an `Idempotency-Key` (unlike create / stop / budget).
+   */
+  update(
+    campaignId: string,
+    body: UpdateCampaignTiersRequest,
+  ): Promise<ApiResponse<CampaignTiersData>> {
+    return this.http.patch<CampaignTiersData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/tiers`,
+      body,
+    });
+  }
+}
+
+/** Campaign listing, detail, and wallet write surface (`/v1/campaigns/*`). */
+export class CampaignsResource {
+  /** Tier allocation for wallet campaigns (`generation: 3`). */
+  readonly tiers: CampaignTiersResource;
+
+  constructor(private readonly http: HttpClient) {
+    this.tiers = new CampaignTiersResource(http);
+  }
 
   /**
    * List campaigns for the authenticated organization.
    *
-   * Maps to `GET /v1/campaigns`. Max `pageSize` is **100**.
+   * Maps to `GET /v1/campaigns`. Max `pageSize` is **100**. Requires `campaigns:read`.
    *
    * @param params - Pagination and sort options.
    *
@@ -137,13 +204,95 @@ export class CampaignsResource {
   /**
    * Fetch full details for a single campaign.
    *
-   * Maps to `GET /v1/campaigns/{campaignId}`.
+   * Maps to `GET /v1/campaigns/{campaignId}`. Requires `campaigns:read`.
    *
    * @param campaignId - Campaign identifier returned by {@link CampaignsResource.list}.
    */
   get(campaignId: string): Promise<ApiResponse<CampaignDetail>> {
     return this.http.get<CampaignDetail>({
       path: `/campaigns/${encodeURIComponent(campaignId)}`,
+    });
+  }
+
+  /**
+   * Create a wallet-funded campaign.
+   *
+   * Maps to `POST /v1/campaigns`. Requires `campaigns:write` and `Idempotency-Key`.
+   *
+   * @example
+   * ```ts
+   * const { data, error } = await soundlink.campaigns.create(
+   *   {
+   *     spotifyUrl: 'https://open.spotify.com/track/...',
+   *     dailyBudget: 20,
+   *     durationDays: 7,
+   *     genre: 'Pop',
+   *     strategyType: 'maximum_growth',
+   *   },
+   *   { idempotencyKey: 'create-mytrack-01' },
+   * );
+   * ```
+   */
+  create(
+    body: CreateCampaignRequest,
+    options: IdempotencyOptions,
+  ): Promise<ApiResponse<CampaignCreateData>> {
+    return this.http.post<CampaignCreateData>({
+      path: '/campaigns',
+      body,
+      idempotencyKey: options.idempotencyKey,
+    });
+  }
+
+  /**
+   * Stop a wallet campaign and refund unspent budget.
+   *
+   * Maps to `POST /v1/campaigns/{campaignId}/stop`. Requires `campaigns:write`
+   * and `Idempotency-Key`. Wallet campaigns only (`generation: 3`).
+   */
+  stop(
+    campaignId: string,
+    options: IdempotencyOptions,
+  ): Promise<ApiResponse<CampaignStopData>> {
+    return this.http.post<CampaignStopData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/stop`,
+      idempotencyKey: options.idempotencyKey,
+    });
+  }
+
+  /**
+   * Increase wallet campaign budget.
+   *
+   * Maps to `POST /v1/campaigns/{campaignId}/budget/increase`.
+   * Requires `campaigns:write` and `Idempotency-Key`. Wallet only (`generation: 3`).
+   */
+  increaseBudget(
+    campaignId: string,
+    body: IncreaseCampaignBudgetRequest,
+    options: IdempotencyOptions,
+  ): Promise<ApiResponse<IncreaseCampaignBudgetData>> {
+    return this.http.post<IncreaseCampaignBudgetData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/budget/increase`,
+      body,
+      idempotencyKey: options.idempotencyKey,
+    });
+  }
+
+  /**
+   * Decrease wallet campaign daily budget.
+   *
+   * Maps to `POST /v1/campaigns/{campaignId}/budget/decrease`.
+   * Requires `campaigns:write` and `Idempotency-Key`. Wallet only (`generation: 3`).
+   */
+  decreaseBudget(
+    campaignId: string,
+    body: DecreaseCampaignBudgetRequest,
+    options: IdempotencyOptions,
+  ): Promise<ApiResponse<DecreaseCampaignBudgetData>> {
+    return this.http.post<DecreaseCampaignBudgetData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/budget/decrease`,
+      body,
+      idempotencyKey: options.idempotencyKey,
     });
   }
 
@@ -198,7 +347,7 @@ export class MetricsResource {
   /** Per-day country breakdown and JSONL export. */
   readonly breakdown: BreakdownMetricsResource;
 
-  /** Per-track engagement breakdown and JSONL export. */
+  /** Per-track engagement JSONL export. */
   readonly engagement: EngagementMetricsResource;
 
   constructor(private readonly http: HttpClient) {
@@ -292,7 +441,7 @@ export class BreakdownMetricsResource {
 /**
  * Per-track engagement metrics (`campaign_engagement_daily` schema).
  *
- * Access via `soundlink.metrics.engagement`.
+ * Access via `soundlink.metrics.engagement`. Only JSONL export is shipped.
  */
 export class EngagementMetricsResource {
   /**
@@ -313,32 +462,5 @@ export class EngagementMetricsResource {
         engagementContext: params.engagementContext,
       }),
     );
-  }
-
-  /**
-   * Paginated per-day, per-track engagement rows.
-   *
-   * Maps to `GET /v1/campaigns/{campaignId}/metrics/engagement`.
-   * Max `pageSize` is **500** (default 50).
-   *
-   * @param campaignId - Campaign identifier.
-   * @param params - Date range, pagination, sort, and optional `engagementContext` filter.
-   */
-  list(
-    campaignId: string,
-    params: EngagementListParams = {},
-  ): Promise<ApiResponse<EngagementListData>> {
-    return this.http.get<EngagementListData>({
-      path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/engagement`,
-      query: {
-        startDate: params.startDate,
-        endDate: params.endDate,
-        page: params.page,
-        pageSize: params.pageSize,
-        sortBy: params.sortBy,
-        sortOrder: params.sortOrder,
-        engagementContext: params.engagementContext,
-      },
-    });
   }
 }

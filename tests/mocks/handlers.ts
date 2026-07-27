@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, type HttpHandler, type JsonBodyType } from 'msw';
 
 export const BASE_URL = 'https://api.getsoundlink.com';
 
@@ -6,7 +6,7 @@ export const TEST_API_KEY = 'sk_test_prefix_secret';
 
 export const REQUEST_ID = '550e8400-e29b-41d4-a716-446655440000';
 
-export function successEnvelope(data: unknown) {
+export function successEnvelope(data: unknown): HttpResponse<JsonBodyType> {
   return HttpResponse.json({
     data,
     meta: { requestId: REQUEST_ID },
@@ -18,7 +18,7 @@ export function errorEnvelope(
   message: string,
   status = 400,
   headers?: Record<string, string>,
-) {
+): HttpResponse<JsonBodyType> {
   return HttpResponse.json(
     {
       error: { code, message },
@@ -28,13 +28,24 @@ export function errorEnvelope(
   );
 }
 
-export const handlers = [
+export const handlers: HttpHandler[] = [
   http.get(`${BASE_URL}/v1/ping`, ({ request }) => {
     const apiKey = request.headers.get('x-api-key');
     if (!apiKey) {
       return errorEnvelope('invalid_api_key', 'Missing API key.', 401);
     }
     return successEnvelope({ status: 'ok' });
+  }),
+
+  http.get(`${BASE_URL}/v1/strategies`, () => {
+    return successEnvelope({
+      strategies: [
+        { strategyType: 'maximum_growth', tierTargetingAllowed: false },
+        { strategyType: 'market_discovery', tierTargetingAllowed: false },
+        { strategyType: 'revenue_maximization', tierTargetingAllowed: false },
+        { strategyType: 'custom', tierTargetingAllowed: true },
+      ],
+    });
   }),
 
   http.get(`${BASE_URL}/v1/campaigns`, ({ request }) => {
@@ -52,6 +63,7 @@ export const handlers = [
           dailyBudget: 20,
           totalBudget: 140,
           campaignDuration: 7,
+          generation: 3,
           createdAt: '2026-04-01T10:00:00.000Z',
           updatedAt: '2026-04-08T12:00:00.000Z',
         },
@@ -62,6 +74,30 @@ export const handlers = [
         totalCount: 1,
         totalPages: 1,
       },
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/campaigns`, ({ request }) => {
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (!idempotencyKey) {
+      return errorEnvelope(
+        'invalid_request',
+        'Idempotency-Key header is required and must not be empty.',
+        400,
+      );
+    }
+
+    if (idempotencyKey === 'conflict-key') {
+      return errorEnvelope(
+        'idempotency_key_conflict',
+        'This Idempotency-Key was already used with a different request body.',
+        409,
+      );
+    }
+
+    return successEnvelope({
+      campaignId: 'camp_new123',
+      status: 'creating',
     });
   }),
 
@@ -78,9 +114,107 @@ export const handlers = [
       dailyBudget: 20,
       totalBudget: 140,
       campaignDuration: 7,
+      generation: 3,
       strategyType: 'custom',
       createdAt: '2026-04-01T10:00:00.000Z',
       updatedAt: '2026-04-08T12:00:00.000Z',
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/campaigns/:campaignId/stop`, ({ request, params }) => {
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (!idempotencyKey) {
+      return errorEnvelope(
+        'invalid_request',
+        'Idempotency-Key header is required and must not be empty.',
+        400,
+      );
+    }
+
+    return successEnvelope({
+      campaignId: String(params.campaignId),
+      status: 'stopped',
+    });
+  }),
+
+  http.post(
+    `${BASE_URL}/v1/campaigns/:campaignId/budget/increase`,
+    async ({ request, params }) => {
+      const idempotencyKey = request.headers.get('Idempotency-Key');
+      if (!idempotencyKey) {
+        return errorEnvelope(
+          'invalid_request',
+          'Idempotency-Key header is required and must not be empty.',
+          400,
+        );
+      }
+
+      const body = (await request.json()) as { amount: number; mode?: string };
+
+      return successEnvelope({
+        campaignId: String(params.campaignId),
+        mode: body.mode ?? 'current_and_renewals',
+        amount: body.amount,
+        walletBalance: 500,
+        walletNextCycleDailyBudget: null,
+      });
+    },
+  ),
+
+  http.post(
+    `${BASE_URL}/v1/campaigns/:campaignId/budget/decrease`,
+    async ({ request, params }) => {
+      const idempotencyKey = request.headers.get('Idempotency-Key');
+      if (!idempotencyKey) {
+        return errorEnvelope(
+          'invalid_request',
+          'Idempotency-Key header is required and must not be empty.',
+          400,
+        );
+      }
+
+      const body = (await request.json()) as {
+        targetDailyBudget: number;
+        mode?: string;
+      };
+
+      return successEnvelope({
+        campaignId: String(params.campaignId),
+        mode: body.mode ?? 'current_and_renewals',
+        targetDailyBudget: body.targetDailyBudget,
+        accepted: true,
+        walletNextCycleDailyBudget: body.targetDailyBudget,
+      });
+    },
+  ),
+
+  http.get(`${BASE_URL}/v1/campaigns/:campaignId/tiers`, () => {
+    return successEnvelope({
+      lastUpdate: null,
+      tiers: [
+        {
+          tierId: 1,
+          tierName: 'Core',
+          isEnabled: true,
+          allocationPercent: 100,
+        },
+      ],
+    });
+  }),
+
+  http.patch(`${BASE_URL}/v1/campaigns/:campaignId/tiers`, async ({ request }) => {
+    const body = (await request.json()) as {
+      items: Array<{ targetingTierId: number; newAllocationPercent: number }>;
+    };
+
+    return successEnvelope({
+      lastUpdate: '2026-07-27T12:00:00.000Z',
+      tiers: body.items.map((item) => ({
+        tierId: item.targetingTierId,
+        tierName: `Tier ${String(item.targetingTierId)}`,
+        isEnabled: true,
+        allocationPercent: item.newAllocationPercent,
+      })),
     });
   }),
 
@@ -161,23 +295,6 @@ export const handlers = [
       headers: {
         'Content-Type': 'application/x-ndjson',
         'X-Row-Count': '2',
-      },
-    });
-  }),
-
-  http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/engagement`, ({ params }) => {
-    if (params.campaignId === 'missing') {
-      return errorEnvelope('not_found', 'Not found.', 404);
-    }
-
-    return successEnvelope({
-      schemaVersion: '1.0',
-      items: [],
-      pagination: {
-        page: 1,
-        pageSize: 50,
-        totalCount: 0,
-        totalPages: 0,
       },
     });
   }),

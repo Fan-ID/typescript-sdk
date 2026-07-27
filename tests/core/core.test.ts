@@ -37,6 +37,24 @@ describe('core helpers', () => {
 
     expect(error.code).toBe('invalid_api_key');
     expect(error.retryAfter).toBe(5);
+    expect(error.details).toBeUndefined();
+  });
+
+  it('forwards error.details when present', () => {
+    const error = toApiError(
+      {
+        error: {
+          code: 'insufficient_credit',
+          message: 'Insufficient wallet balance for this campaign.',
+          details: { available: 120, required: 350 },
+        },
+        meta: { requestId: 'abc' },
+      },
+      402,
+    );
+
+    expect(error.code).toBe('insufficient_credit');
+    expect(error.details).toEqual({ available: 120, required: 350 });
   });
 
   it('builds success and error ApiResponse objects', () => {

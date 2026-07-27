@@ -10,14 +10,51 @@ export type PublicApiErrorCode =
   | 'invalid_query_parameter'
   | 'invalid_date_range'
   | 'page_size_exceeded'
+  | 'invalid_request'
+  | 'invalid_genre'
+  | 'invalid_duration_or_budget'
+  | 'invalid_daily_budget'
+  | 'invalid_duration_days'
+  | 'invalid_spotify_url'
+  | 'invalid_tier_budget_allocation'
+  | 'invalid_tier_status'
+  | 'tier_update_cooldown'
+  | 'wallet_not_enabled'
+  | 'insufficient_credit'
+  | 'idempotency_key_conflict'
   | 'rate_limit_exceeded'
+  | 'invalid_video_url'
+  | 'video_import_limit_exceeded'
+  | 'video_import_session_not_found'
   | 'internal_error';
 
-/** Campaign lifecycle status. */
-export type CampaignStatus = 'creating' | 'active' | 'paused' | 'completed' | 'failed';
+/**
+ * Campaign lifecycle status.
+ *
+ * Includes OpenAPI values plus `inactive` (observed on wallet campaigns in
+ * production; may be aligned in a later OpenAPI revision).
+ */
+export type CampaignStatus =
+  | 'creating'
+  | 'active'
+  | 'paused'
+  | 'stopped'
+  | 'completed'
+  | 'failed'
+  | 'ended'
+  | 'inactive';
 
 /** Ad platform used by the campaign. */
 export type SocialPlatform = 'meta';
+
+/**
+ * Campaign resource generation.
+ *
+ * - `1` — Stripe / one-time / subscription / legacy
+ * - `2` — managed
+ * - `3` — wallet (writable via Public API)
+ */
+export type CampaignGeneration = 1 | 2 | 3;
 
 /**
  * Engagement context for per-track metrics.
@@ -33,11 +70,47 @@ export type CampaignSortBy = 'createdAt' | 'status';
 /** Allowed `sortBy` values for breakdown list requests. */
 export type BreakdownSortBy = 'report_date' | 'spend_total';
 
-/** Allowed `sortBy` values for engagement list requests. */
-export type EngagementSortBy = 'report_date' | 'streams' | 'listeners';
-
 /** Sort direction for list endpoints. */
 export type SortOrder = 'asc' | 'desc';
+
+/** Growth strategy for campaign create / catalog. */
+export type StrategyType =
+  | 'maximum_growth'
+  | 'market_discovery'
+  | 'revenue_maximization'
+  | 'custom';
+
+/** Non-custom strategies (platform default tiering; no `tierTargeting`). */
+export type BuiltInStrategyType = Exclude<StrategyType, 'custom'>;
+
+/** Strictly validated genre list from the Public API. */
+export type Genre =
+  | 'Alternative/Indie'
+  | 'Ambient/Sleep'
+  | 'Chill/Background'
+  | 'Classical'
+  | 'Country'
+  | 'Electronic/Dance'
+  | 'Hip-Hop/R&B'
+  | 'Latin/Reggaeton'
+  | 'Pop'
+  | 'Rock'
+  | 'Christmas';
+
+/** Budget increase mode for wallet campaigns. */
+export type BudgetIncreaseMode =
+  | 'current_cycle'
+  | 'next_renewal'
+  | 'current_and_renewals';
+
+/** Budget decrease mode for wallet campaigns. */
+export type BudgetDecreaseMode = 'current_cycle' | 'current_and_renewals';
+
+/** Options for write methods that require an `Idempotency-Key` header. */
+export interface IdempotencyOptions {
+  /** Client-generated key; reused retries must send the same body. */
+  idempotencyKey: string;
+}
 
 /** Server-generated request metadata. Include `requestId` when contacting Soundlink support. */
 export interface ApiMeta {
@@ -57,6 +130,11 @@ export interface ApiError {
   requestId?: string;
   /** Seconds to wait before retrying, from the `Retry-After` header on `429`. */
   retryAfter?: number;
+  /**
+   * Error-code-specific context from the API (e.g. `available` / `required` on
+   * `insufficient_credit`). Absent when the API sends no `details`.
+   */
+  details?: Record<string, unknown> | null;
 }
 
 /**
@@ -97,6 +175,8 @@ export interface CampaignSummary {
   totalBudget: number;
   /** Campaign duration in days. */
   campaignDuration: number;
+  /** Resource generation — writable Public API methods require `3`. */
+  generation: CampaignGeneration;
   /** ISO 8601 creation timestamp. */
   createdAt: string;
   /** ISO 8601 last update timestamp. */
@@ -105,8 +185,8 @@ export interface CampaignSummary {
 
 /** Full campaign detail from {@link CampaignsResource.get}. */
 export interface CampaignDetail extends CampaignSummary {
-  /** Growth strategy (e.g. `custom`, `maximum_growth`). */
-  strategyType?: string;
+  /** Growth strategy set at creation (e.g. `custom`, `maximum_growth`). */
+  strategyType?: StrategyType;
 }
 
 /** Paginated campaign list payload. */
@@ -118,6 +198,144 @@ export interface CampaignListData {
 /** Successful `GET /v1/ping` payload. */
 export interface PingData {
   status: 'ok';
+}
+
+/** One entry from `GET /v1/strategies`. */
+export interface StrategyCatalogItem {
+  strategyType: StrategyType;
+  /** When `false`, omit `tierTargeting` on create. */
+  tierTargetingAllowed: boolean;
+}
+
+/** Payload from `GET /v1/strategies`. */
+export interface StrategiesCatalogData {
+  strategies: StrategyCatalogItem[];
+}
+
+/** Shared fields for wallet campaign create. */
+export interface CreateCampaignRequestBase {
+  /** Spotify track or playlist URL. */
+  spotifyUrl: string;
+  /** USD per day (minimum 10). */
+  dailyBudget: number;
+  /** Duration in days: 7–30, or 60, or 90. */
+  durationDays: number;
+  genre: Genre;
+  /** Optional; server generates a default when omitted. */
+  campaignName?: string;
+  creativeDirection?: CreativeDirection;
+  trackOptions?: {
+    artistIdFollow?: string;
+  };
+  /** Lineage only — does not copy settings from the source campaign. */
+  clonedFromCampaignId?: string;
+}
+
+export interface DoItForMeCreativeDirection {
+  type: 'do_it_for_me';
+}
+
+export interface FullControlCreativeDirection {
+  type: 'full_control';
+  selectedCreatives: Array<{ videoId: string }>;
+}
+
+export type CreativeDirection =
+  | DoItForMeCreativeDirection
+  | FullControlCreativeDirection;
+
+export interface CustomTier {
+  name: string;
+  percentBudget: number;
+  countries?: string[];
+  language?: string;
+}
+
+export interface TierTargeting {
+  customTierIds?: number[];
+  customTiers?: CustomTier[];
+}
+
+/** Create with a built-in strategy (no `tierTargeting`). */
+export interface CreateCampaignRequestBuiltIn extends CreateCampaignRequestBase {
+  strategyType: BuiltInStrategyType;
+  tierTargeting?: never;
+}
+
+/** Create with `custom` strategy (requires `tierTargeting`). */
+export interface CreateCampaignRequestCustom extends CreateCampaignRequestBase {
+  strategyType: 'custom';
+  tierTargeting: TierTargeting;
+}
+
+/** Body for `POST /v1/campaigns`. */
+export type CreateCampaignRequest =
+  | CreateCampaignRequestBuiltIn
+  | CreateCampaignRequestCustom;
+
+/** Success payload from campaign create. */
+export interface CampaignCreateData {
+  campaignId: string;
+  status: CampaignStatus;
+}
+
+/** Success payload from campaign stop. */
+export interface CampaignStopData {
+  campaignId: string;
+  status: CampaignStatus;
+}
+
+export interface IncreaseCampaignBudgetRequest {
+  amount: number;
+  mode?: BudgetIncreaseMode;
+  targetDailyBudget?: number;
+}
+
+export interface IncreaseCampaignBudgetData {
+  campaignId: string;
+  mode: BudgetIncreaseMode;
+  amount: number;
+  walletBalance: number;
+  walletNextCycleDailyBudget?: number | null;
+}
+
+export interface DecreaseCampaignBudgetRequest {
+  targetDailyBudget: number;
+  mode?: BudgetDecreaseMode;
+}
+
+export interface DecreaseCampaignBudgetData {
+  campaignId: string;
+  mode: BudgetDecreaseMode;
+  targetDailyBudget: number;
+  accepted: true;
+  walletNextCycleDailyBudget?: number | null;
+}
+
+export interface CampaignTier {
+  tierId: number;
+  tierName: string;
+  isEnabled: boolean;
+  allocationPercent: number;
+}
+
+export interface CampaignTiersData {
+  lastUpdate: string | null;
+  tiers: CampaignTier[];
+}
+
+export interface TierStatusUpdateItem {
+  /**
+   * Targeting tier id — same value as `tierId` returned by
+   * `campaigns.tiers.get` (`CampaignTier.tierId`).
+   */
+  targetingTierId: number;
+  isEnabled: boolean;
+  newAllocationPercent: number;
+}
+
+export interface UpdateCampaignTiersRequest {
+  items: TierStatusUpdateItem[];
 }
 
 /** Campaign-level metric totals from {@link MetricsResource.overview}. */
@@ -216,13 +434,6 @@ export interface BreakdownListData {
   pagination: Pagination;
 }
 
-/** Paginated engagement list payload. */
-export interface EngagementListData {
-  schemaVersion: string;
-  items: EngagementRow[];
-  pagination: Pagination;
-}
-
 /** In-memory result from {@link ExportResource.collect}. */
 export interface ExportCollection<T> {
   rows: T[];
@@ -284,18 +495,6 @@ export interface BreakdownListParams extends DateRangeParams {
   sortOrder?: SortOrder;
 }
 
-/** Query params for {@link EngagementMetricsResource.list}. */
-export interface EngagementListParams extends DateRangeParams {
-  page?: number;
-  /** Default: `50`. Max: **500**. */
-  pageSize?: number;
-  /** Default: `report_date`. */
-  sortBy?: EngagementSortBy;
-  sortOrder?: SortOrder;
-  /** Filter to `catalog` or `playlist`. Omit for both. */
-  engagementContext?: EngagementContext;
-}
-
 /** Query params for engagement JSONL export. */
 export interface EngagementExportParams extends DateRangeParams {
   engagementContext?: EngagementContext;
@@ -315,6 +514,7 @@ export interface ApiEnvelopeError {
   error: {
     code: string;
     message: string;
+    details?: Record<string, unknown> | null;
   };
   meta: ApiMeta;
 }
