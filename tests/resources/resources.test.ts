@@ -12,13 +12,19 @@ describe('Strategies resource', () => {
   });
 
   it('lists strategies', async () => {
-    const { data, error } = await soundlink.strategies.list();
+    const response = await soundlink.strategies.list();
 
-    expect(error).toBeNull();
-    expect(data?.strategies).toHaveLength(4);
-    expect(
-      data?.strategies.find((s) => s.strategyType === 'custom')?.tierTargetingAllowed,
-    ).toBe(true);
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        strategies: [
+          { strategyType: 'maximum_growth', tierTargetingAllowed: false },
+          { strategyType: 'market_discovery', tierTargetingAllowed: false },
+          { strategyType: 'revenue_maximization', tierTargetingAllowed: false },
+          { strategyType: 'custom', tierTargetingAllowed: true },
+        ],
+      },
+    });
   });
 });
 
@@ -30,35 +36,42 @@ describe('Campaigns resource', () => {
   });
 
   it('lists campaigns with pagination', async () => {
-    const { data, error } = await soundlink.campaigns.list({ page: 1, pageSize: 10 });
+    const response = await soundlink.campaigns.list({ page: 1, pageSize: 10 });
 
-    expect(error).toBeNull();
-    expect(data?.items).toHaveLength(1);
-    expect(data?.items[0]?.generation).toBe(3);
-    expect(data?.pagination.totalCount).toBe(1);
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [{ generation: 3 }],
+        pagination: { totalCount: 1 },
+      },
+    });
   });
 
   it('gets a campaign by id', async () => {
-    const { data, error } = await soundlink.campaigns.get('camp_abc123');
+    const response = await soundlink.campaigns.get('camp_abc123');
 
-    expect(error).toBeNull();
-    expect(data?.campaignId).toBe('camp_abc123');
-    expect(data?.strategyType).toBe('custom');
-    expect(data?.generation).toBe(3);
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        campaignId: 'camp_abc123',
+        strategyType: 'custom',
+        generation: 3,
+      },
+    });
   });
 
   it('iterates all campaigns via listAll', async () => {
-    const items = [];
+    const items: Array<{ campaignId: string }> = [];
     for await (const campaign of soundlink.campaigns.listAll({ pageSize: 10 })) {
       items.push(campaign);
     }
 
     expect(items).toHaveLength(1);
-    expect(items[0]?.campaignId).toBe('camp_abc123');
+    expect(items[0]).toMatchObject({ campaignId: 'camp_abc123' });
   });
 
   it('creates a campaign with Idempotency-Key', async () => {
-    const { data, error } = await soundlink.campaigns.create(
+    const response = await soundlink.campaigns.create(
       {
         spotifyUrl: 'https://open.spotify.com/track/6habFhsOp2NvndAvgiJ01P',
         dailyBudget: 20,
@@ -69,13 +82,14 @@ describe('Campaigns resource', () => {
       { idempotencyKey: 'create-test-01' },
     );
 
-    expect(error).toBeNull();
-    expect(data?.campaignId).toBe('camp_new123');
-    expect(data?.status).toBe('creating');
+    expect(response).toMatchObject({
+      error: null,
+      data: { campaignId: 'camp_new123', status: 'creating' },
+    });
   });
 
   it('returns idempotency_key_conflict on create', async () => {
-    const { data, error } = await soundlink.campaigns.create(
+    const response = await soundlink.campaigns.create(
       {
         spotifyUrl: 'https://open.spotify.com/track/6habFhsOp2NvndAvgiJ01P',
         dailyBudget: 20,
@@ -86,9 +100,10 @@ describe('Campaigns resource', () => {
       { idempotencyKey: 'conflict-key' },
     );
 
-    expect(data).toBeNull();
-    expect(error?.code).toBe('idempotency_key_conflict');
-    expect(error?.status).toBe(409);
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'idempotency_key_conflict', status: 409 },
+    });
   });
 
   it('returns insufficient_credit on create', async () => {
@@ -108,7 +123,7 @@ describe('Campaigns resource', () => {
       ),
     );
 
-    const { data, error } = await soundlink.campaigns.create(
+    const response = await soundlink.campaigns.create(
       {
         spotifyUrl: 'https://open.spotify.com/track/6habFhsOp2NvndAvgiJ01P',
         dailyBudget: 20,
@@ -119,49 +134,59 @@ describe('Campaigns resource', () => {
       { idempotencyKey: 'create-no-credit' },
     );
 
-    expect(data).toBeNull();
-    expect(error?.code).toBe('insufficient_credit');
-    expect(error?.status).toBe(402);
-    expect(error?.details).toEqual({ available: 10, required: 140 });
+    expect(response).toMatchObject({
+      data: null,
+      error: {
+        code: 'insufficient_credit',
+        status: 402,
+        details: { available: 10, required: 140 },
+      },
+    });
   });
 
   it('stops a campaign', async () => {
-    const { data, error } = await soundlink.campaigns.stop('camp_abc123', {
+    const response = await soundlink.campaigns.stop('camp_abc123', {
       idempotencyKey: 'stop-01',
     });
 
-    expect(error).toBeNull();
-    expect(data?.status).toBe('stopped');
+    expect(response).toMatchObject({
+      error: null,
+      data: { status: 'stopped' },
+    });
   });
 
   it('increases budget', async () => {
-    const { data, error } = await soundlink.campaigns.increaseBudget(
+    const response = await soundlink.campaigns.increaseBudget(
       'camp_abc123',
       { amount: 50, mode: 'current_and_renewals' },
       { idempotencyKey: 'inc-01' },
     );
 
-    expect(error).toBeNull();
-    expect(data?.amount).toBe(50);
-    expect(data?.walletBalance).toBe(500);
+    expect(response).toMatchObject({
+      error: null,
+      data: { amount: 50, walletBalance: 500 },
+    });
   });
 
   it('decreases budget', async () => {
-    const { data, error } = await soundlink.campaigns.decreaseBudget(
+    const response = await soundlink.campaigns.decreaseBudget(
       'camp_abc123',
       { targetDailyBudget: 15 },
       { idempotencyKey: 'dec-01' },
     );
 
-    expect(error).toBeNull();
-    expect(data?.accepted).toBe(true);
-    expect(data?.targetDailyBudget).toBe(15);
+    expect(response).toMatchObject({
+      error: null,
+      data: { accepted: true, targetDailyBudget: 15 },
+    });
   });
 
   it('gets and updates tiers', async () => {
     const getResult = await soundlink.campaigns.tiers.get('camp_abc123');
-    expect(getResult.error).toBeNull();
-    expect(getResult.data?.tiers).toHaveLength(1);
+    expect(getResult).toMatchObject({
+      error: null,
+      data: { tiers: [{ tierId: 1 }] },
+    });
 
     const updateResult = await soundlink.campaigns.tiers.update('camp_abc123', {
       items: [
@@ -173,9 +198,13 @@ describe('Campaigns resource', () => {
       ],
     });
 
-    expect(updateResult.error).toBeNull();
-    expect(updateResult.data?.lastUpdate).toBeTruthy();
-    expect(updateResult.data?.tiers[0]?.allocationPercent).toBe(100);
+    expect(updateResult).toMatchObject({
+      error: null,
+      data: {
+        lastUpdate: '2026-07-27T12:00:00.000Z',
+        tiers: [{ allocationPercent: 100 }],
+      },
+    });
   });
 });
 
@@ -187,31 +216,35 @@ describe('Metrics resource', () => {
   });
 
   it('fetches metrics overview', async () => {
-    const { data, error } = await soundlink.metrics.overview('camp_abc123', {
+    const response = await soundlink.metrics.overview('camp_abc123', {
       startDate: '2026-01-01',
       endDate: '2026-01-31',
     });
 
-    expect(error).toBeNull();
-    expect(data?.listeners).toBe(100);
+    expect(response).toMatchObject({
+      error: null,
+      data: { listeners: 100 },
+    });
   });
 
   it('lists breakdown metrics', async () => {
-    const { data, error } = await soundlink.metrics.breakdown.list('camp_abc123');
+    const response = await soundlink.metrics.breakdown.list('camp_abc123');
 
-    expect(error).toBeNull();
-    expect(data?.items[0]?.country_code).toBe('US');
+    expect(response).toMatchObject({
+      error: null,
+      data: { items: [{ country_code: 'US' }] },
+    });
   });
 
   it('streams breakdown export rows', async () => {
-    const { data, error } = await soundlink.metrics.breakdown.export('camp_abc123');
+    const response = await soundlink.metrics.breakdown.export('camp_abc123');
 
-    expect(error).toBeNull();
-    expect(data).toBeDefined();
+    expect(response.error).toBeNull();
+    expect(response.data).toBeDefined();
 
-    const rows = [];
-    if (data) {
-      for await (const row of data) {
+    const rows: unknown[] = [];
+    if (response.data) {
+      for await (const row of response.data) {
         rows.push(row);
       }
     }
@@ -220,22 +253,21 @@ describe('Metrics resource', () => {
   });
 
   it('collects breakdown export rows', async () => {
-    const { data, error } =
-      await soundlink.metrics.breakdown.export.collect('camp_abc123');
+    const response = await soundlink.metrics.breakdown.export.collect('camp_abc123');
 
-    expect(error).toBeNull();
-    expect(data?.rowCount).toBe(2);
-    expect(data?.rows).toHaveLength(2);
+    expect(response.error).toBeNull();
+    expect(response.data?.rowCount).toBe(2);
+    expect(response.data?.rows).toHaveLength(2);
   });
 
   it('streams engagement export rows', async () => {
-    const { data, error } = await soundlink.metrics.engagement.export('camp_abc123');
+    const response = await soundlink.metrics.engagement.export('camp_abc123');
 
-    expect(error).toBeNull();
+    expect(response.error).toBeNull();
 
-    const rows = [];
-    if (data) {
-      for await (const row of data) {
+    const rows: unknown[] = [];
+    if (response.data) {
+      for await (const row of response.data) {
         rows.push(row);
       }
     }

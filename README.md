@@ -121,8 +121,11 @@ await soundlink.campaigns.increaseBudget(
 
 // GET returns `tierId`; PATCH expects the same value as `targetingTierId`
 const { data: tiers } = await soundlink.campaigns.tiers.get(created.campaignId);
+if (!tiers) {
+  return;
+}
 await soundlink.campaigns.tiers.update(created.campaignId, {
-  items: (tiers?.tiers ?? []).map((tier) => ({
+  items: tiers.tiers.map((tier) => ({
     targetingTierId: tier.tierId,
     isEnabled: tier.isEnabled,
     newAllocationPercent: tier.allocationPercent,
