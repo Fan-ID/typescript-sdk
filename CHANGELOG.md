@@ -1,5 +1,11 @@
 # soundlink
 
+## 1.2.0
+
+### Minor Changes
+
+- [#3](https://github.com/Fan-ID/lib/pull/3) [`279a718`](https://github.com/Fan-ID/lib/commit/279a718eb13c19d57e6f0db2e3a9fbb29af0b0a8) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add Public API write surface: strategies catalog, campaign create / stop / budget / tiers with `Idempotency-Key`, `generation` on campaign types, expanded error codes. Remove unshipped `metrics.engagement.list`. Sync OpenAPI to the current v1 contract. ([SOU-6003](https://linear.app/getsoundlink/issue/SOU-6003))
+
 ## 1.1.1
 
 ### Patch Changes
