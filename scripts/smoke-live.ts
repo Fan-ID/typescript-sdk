@@ -5,6 +5,9 @@
  *   SOUNDLINK_API_KEY=sk_prefix_secret npm run test:live
  *   npm run test:live -- sk_prefix_secret
  *
+ * Optional write smoke (spends wallet — opt in explicitly):
+ *   SOUNDLINK_LIVE_WRITE=1 SOUNDLINK_API_KEY=sk_... npm run test:live
+ *
  * Or create a .env file (gitignored):
  *   SOUNDLINK_API_KEY=sk_prefix_secret
  */
@@ -105,10 +108,14 @@ function printError(
 async function main(): Promise<void> {
   const apiKey = resolveApiKey();
   const baseUrl = process.env.SOUNDLINK_BASE_URL ?? DEFAULT_BASE_URL;
+  const liveWrite = process.env.SOUNDLINK_LIVE_WRITE === '1';
 
   console.log('Soundlink SDK — live smoke test');
   console.log(`Base URL: ${baseUrl}`);
   console.log(`API key:  ${apiKey.slice(0, 12)}…`);
+  console.log(
+    `Write:    ${liveWrite ? 'enabled (SOUNDLINK_LIVE_WRITE=1)' : 'skipped'}`,
+  );
 
   const soundlink = new Soundlink({ apiKey, baseUrl });
   let failed = false;
@@ -123,6 +130,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   printOk(`status: ${ping.data.status}`, ping.meta);
+
+  printStep('GET /v1/strategies');
+  const strategies = await soundlink.strategies.list();
+  if (strategies.error || !strategies.data) {
+    printError(
+      'List strategies failed (key may lack campaigns:read)',
+      strategies.error ?? { code: 'unknown', message: 'No data.' },
+    );
+    failed = true;
+  } else {
+    printOk(
+      `${String(strategies.data.strategies.length)} strateg(ies)`,
+      strategies.meta,
+    );
+  }
 
   printStep('GET /v1/campaigns?page=1&pageSize=5');
   const campaigns = await soundlink.campaigns.list({ page: 1, pageSize: 5 });
@@ -140,6 +162,16 @@ async function main(): Promise<void> {
 
     const first = campaigns.data.items[0];
     if (first) {
+      if (first.generation === undefined) {
+        printError('Campaign missing generation', {
+          code: 'invalid_response',
+          message: 'Expected generation on campaign summary.',
+        });
+        failed = true;
+      } else {
+        printOk(`first campaign generation: ${String(first.generation)}`);
+      }
+
       printStep(`GET /v1/campaigns/${first.campaignId}`);
       const detail = await soundlink.campaigns.get(first.campaignId);
       if (detail.error || !detail.data) {
@@ -150,7 +182,7 @@ async function main(): Promise<void> {
         failed = true;
       } else {
         printOk(
-          `campaign ${detail.data.campaignId} · status ${detail.data.status}`,
+          `campaign ${detail.data.campaignId} · status ${detail.data.status} · generation ${String(detail.data.generation)}`,
           detail.meta,
         );
       }
@@ -170,6 +202,60 @@ async function main(): Promise<void> {
       }
     } else {
       console.log('  · No campaigns returned — skipping detail/metrics checks.');
+    }
+  }
+
+  if (liveWrite) {
+    const spotifyUrl = process.env.SOUNDLINK_LIVE_SPOTIFY_URL;
+    if (!spotifyUrl) {
+      printError('Write smoke skipped', {
+        code: 'invalid_request',
+        message:
+          'Set SOUNDLINK_LIVE_SPOTIFY_URL to a track/playlist URL when SOUNDLINK_LIVE_WRITE=1.',
+      });
+      failed = true;
+    } else {
+      const idempotencyKey = `sdk-live-create-${Date.now()}`;
+      printStep(`POST /v1/campaigns (Idempotency-Key: ${idempotencyKey})`);
+      const created = await soundlink.campaigns.create(
+        {
+          spotifyUrl,
+          dailyBudget: 10,
+          durationDays: 7,
+          genre: 'Pop',
+          strategyType: 'maximum_growth',
+          campaignName: `SDK live smoke ${new Date().toISOString()}`,
+        },
+        { idempotencyKey },
+      );
+
+      if (created.error || !created.data) {
+        printError(
+          'Create campaign failed',
+          created.error ?? { code: 'unknown', message: 'No data.' },
+        );
+        failed = true;
+      } else {
+        printOk(
+          `created ${created.data.campaignId} · status ${created.data.status}`,
+          created.meta,
+        );
+
+        const stopKey = `sdk-live-stop-${created.data.campaignId}`;
+        printStep(`POST /v1/campaigns/${created.data.campaignId}/stop`);
+        const stopped = await soundlink.campaigns.stop(created.data.campaignId, {
+          idempotencyKey: stopKey,
+        });
+        if (stopped.error || !stopped.data) {
+          printError(
+            'Stop campaign failed',
+            stopped.error ?? { code: 'unknown', message: 'No data.' },
+          );
+          failed = true;
+        } else {
+          printOk(`stopped · status ${stopped.data.status}`, stopped.meta);
+        }
+      }
     }
   }
 

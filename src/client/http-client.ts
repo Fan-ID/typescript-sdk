@@ -34,6 +34,15 @@ export interface HttpJsonlOptions extends HttpGetOptions {
   accept?: string;
 }
 
+export interface HttpMutationOptions {
+  path: string;
+  body?: unknown;
+  query?: Record<string, string | number | boolean | undefined | null>;
+  headers?: Record<string, string>;
+  /** Sent as the `Idempotency-Key` header when set. */
+  idempotencyKey?: string;
+}
+
 export interface ResolvedSoundlinkClientOptions {
   apiKey: string;
   baseUrl: string;
@@ -95,6 +104,38 @@ export class HttpClient {
     });
   }
 
+  async post<T>({
+    path,
+    body,
+    query,
+    headers,
+    idempotencyKey,
+  }: HttpMutationOptions): Promise<ApiResponse<T>> {
+    return this.mutateJson<T>('POST', {
+      path,
+      body,
+      query,
+      headers,
+      idempotencyKey,
+    });
+  }
+
+  async patch<T>({
+    path,
+    body,
+    query,
+    headers,
+    idempotencyKey,
+  }: HttpMutationOptions): Promise<ApiResponse<T>> {
+    return this.mutateJson<T>('PATCH', {
+      path,
+      body,
+      query,
+      headers,
+      idempotencyKey,
+    });
+  }
+
   async getJsonl<T>({
     path,
     query,
@@ -142,10 +183,33 @@ export class HttpClient {
     };
   }
 
-  private buildHeaders(): Record<string, string> {
+  private mutateJson<T>(
+    method: 'POST' | 'PATCH',
+    { path, body, query, headers, idempotencyKey }: HttpMutationOptions,
+  ): Promise<ApiResponse<T>> {
+    const url = joinUrl(
+      this.options.baseUrl,
+      `${API_VERSION_PREFIX}${path}${buildQueryString(query ?? {})}`,
+    );
+
+    const requestHeaders = this.buildHeaders({
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+      ...(idempotencyKey !== undefined ? { 'Idempotency-Key': idempotencyKey } : {}),
+      ...headers,
+    });
+
+    return this.requestJson<T>(url, {
+      method,
+      headers: requestHeaders,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+  }
+
+  private buildHeaders(extra: Record<string, string> = {}): Record<string, string> {
     return {
       'x-api-key': this.options.apiKey,
       Accept: 'application/json',
+      ...extra,
     };
   }
 
@@ -225,6 +289,7 @@ export class HttpClient {
       signal: AbortSignal.timeout(timeout),
     });
 
+    // Safe for writes: retries reuse the same method, body, and Idempotency-Key.
     while (
       attempt < maxRetries &&
       (response.status === 429 || response.status >= 500)

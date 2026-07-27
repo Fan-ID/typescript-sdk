@@ -51,4 +51,39 @@ describe('HttpClient errors and retries', () => {
     expect(data).toEqual({ status: 'ok' });
     expect(attempts).toBe(2);
   });
+
+  it('retries POST writes on 5xx with the same Idempotency-Key', async () => {
+    let attempts = 0;
+    const keys: Array<string | null> = [];
+
+    server.use(
+      http.post(`${BASE_URL}/v1/campaigns/:campaignId/stop`, ({ request }) => {
+        attempts += 1;
+        keys.push(request.headers.get('Idempotency-Key'));
+        if (attempts === 1) {
+          return errorEnvelope('internal_error', 'Temporary failure.', 503);
+        }
+
+        return HttpResponse.json({
+          data: { campaignId: 'camp_abc123', status: 'stopped' },
+          meta: { requestId: 'retry-write' },
+        });
+      }),
+    );
+
+    const soundlink = new Soundlink({
+      apiKey: TEST_API_KEY,
+      baseUrl: BASE_URL,
+      maxRetries: 2,
+    });
+
+    const { data, error } = await soundlink.campaigns.stop('camp_abc123', {
+      idempotencyKey: 'stop-retry-01',
+    });
+
+    expect(error).toBeNull();
+    expect(data?.status).toBe('stopped');
+    expect(attempts).toBe(2);
+    expect(keys).toEqual(['stop-retry-01', 'stop-retry-01']);
+  });
 });

@@ -59,7 +59,7 @@ When the Public API spec changes in the backend:
 
 1. Copy `backend/specs/public-api/soundlink-public-api-v1.yaml` to `openapi/`
 2. Update hand-written types in `src/types/api.ts` if needed
-3. Optionally run `npm run generate:types` for reference types
+3. Optionally run `npm run generate:types` for reference types (output is gitignored under `src/types/generated/`)
 4. Add MSW handlers and tests for new endpoints
 
 ## Pull request checklist

@@ -3,11 +3,11 @@ info:
   title: Soundlink Public API
   version: 0.0.1-draft
   description: |
-    Read-only campaign and metrics API for Soundlink partner organizations.
+    Campaign listing, metrics, and write operations for Soundlink partner organizations.
 
     **Base URL:** `https://api.getsoundlink.com`
 
-    **Authentication:** `x-api-key` header using a `sk_*` API key issued by Soundlink Engineering.
+    **Authentication:** `x-api-key` header using a `sk_*` API key created in the Soundlink app (Settings → Developer → API keys).
     ```
     x-api-key: sk_abc123_<token>
     ```
@@ -30,9 +30,11 @@ tags:
   - name: System
     description: Connectivity and auth verification
   - name: Campaigns
-    description: Campaign listing and detail
+    description: Campaign listing, detail, creation, and wallet management (budget, stop, tiers)
   - name: Metrics
     description: Campaign performance metrics
+  - name: Videos
+    description: Partner video library import for Full Control campaigns
 
 paths:
   /v1/ping:
@@ -73,6 +75,45 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/strategies:
+    get:
+      operationId: listStrategies
+      summary: List campaign strategy types
+      description: |
+        Returns the static catalog of `strategyType` values accepted by
+        `POST /v1/campaigns`. Built-in strategies apply platform default
+        tiering internally; only `custom` allows `tierTargeting` on create.
+
+        Requires the `campaigns:read` scope.
+      tags: [Campaigns]
+      security:
+        - apiKeyAuth: []
+      x-required-scope: campaigns:read
+      responses:
+        '200':
+          description: Strategy catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategiesCatalogResponse'
+              example:
+                data:
+                  strategies:
+                    - strategyType: maximum_growth
+                      tierTargetingAllowed: false
+                    - strategyType: market_discovery
+                      tierTargetingAllowed: false
+                    - strategyType: revenue_maximization
+                      tierTargetingAllowed: false
+                    - strategyType: custom
+                      tierTargetingAllowed: true
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/campaigns:
     get:
       operationId: listCampaigns
@@ -90,7 +131,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [createdAt, status]
+            enum: [createdAt]
             default: createdAt
         - $ref: '#/components/parameters/sortOrder'
       responses:
@@ -103,7 +144,7 @@ paths:
               example:
                 data:
                   items:
-                    - campaignId: camp_abc123
+                    - campaignId: f1e28d31-c358-4284-9bef-00a2334625fd
                       organizationId: org_xyz
                       status: active
                       socialPlatform: meta
@@ -121,6 +162,106 @@ paths:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+    post:
+      operationId: createCampaign
+      summary: Create a wallet-funded campaign
+      description: |
+        Creates a campaign funded from the organization's wallet balance.
+        Requires the `campaigns:write` scope, and the organization must be
+        enabled for wallet billing.
+
+        This route has a financial side effect (the campaign's budget is
+        deducted from the wallet balance), so the `Idempotency-Key` header
+        is **required** on every request. See the header description below
+        for retry semantics.
+      tags: [Campaigns]
+      security:
+        - apiKeyAuth: []
+      x-required-scope: campaigns:write
+      parameters:
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+            examples:
+              trackCampaign:
+                summary: Campaign promoting a single track
+                value:
+                  spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl'
+                  dailyBudget: 25
+                  durationDays: 14
+                  genre: Pop
+                  campaignName: 'My Summer Single'
+                  strategyType: maximum_growth
+                  creativeDirection:
+                    type: do_it_for_me
+                  trackOptions:
+                    artistIdFollow: 'artist-uuid'
+                  clonedFromCampaignId: '3f2504e0-4f89-41d3-9a0c-0305e82c3301'
+              playlistCampaign:
+                summary: Campaign promoting a playlist
+                value:
+                  spotifyUrl: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'
+                  dailyBudget: 25
+                  durationDays: 14
+                  genre: Pop
+                  campaignName: 'Summer Vibes Playlist'
+                  strategyType: maximum_growth
+                  creativeDirection:
+                    type: do_it_for_me
+              fullControlCampaign:
+                summary: Campaign with partner-supplied creative (full control)
+                value:
+                  spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl'
+                  dailyBudget: 40
+                  durationDays: 21
+                  genre: Hip-Hop/R&B
+                  campaignName: 'My Summer Single'
+                  strategyType: custom
+                  creativeDirection:
+                    type: full_control
+                    selectedCreatives:
+                      - videoId: '8f14e45f-ceea-467e-9de5-e7d0b4d4e6bb'
+                      - videoId: '3c9b1a2d-1a2f-4a1e-9c3b-0a1b2c3d4e5f'
+                  tierTargeting:
+                    customTierIds: [123, 456]
+                    customTiers:
+                      - name: 'US/UK'
+                        countries: ['US', 'GB']
+                        language: en
+                        percentBudget: 60
+                      - name: LatAm
+                        countries: ['MX', 'AR']
+                        language: es
+                        percentBudget: 40
+                  trackOptions:
+                    artistIdFollow: 'artist-uuid'
+      responses:
+        '201':
+          description: Campaign created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCampaignResponse'
+              example:
+                data:
+                  campaignId: campaign-uuid
+                  status: creating
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/CreateCampaignBadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/InsufficientCredit' }
+        '403': { $ref: '#/components/responses/CreateCampaignForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
+        '422': { $ref: '#/components/responses/CreateCampaignUnprocessable' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -143,7 +284,7 @@ paths:
                 $ref: '#/components/schemas/CampaignDetailResponse'
               example:
                 data:
-                  campaignId: camp_abc123
+                  campaignId: f1e28d31-c358-4284-9bef-00a2334625fd
                   organizationId: org_xyz
                   status: active
                   socialPlatform: meta
@@ -158,6 +299,292 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/stop:
+    post:
+      operationId: stopCampaign
+      summary: Stop a wallet campaign and refund unspent budget
+      description: |
+        Stops delivery for a wallet-funded campaign and refunds unspent budget
+        to the organization wallet. Requires the `campaigns:write` scope.
+
+        **Wallet campaigns only** (`generation: 3`).
+
+        Stopping is idempotent at the campaign level: a second stop on an
+        already-stopped campaign succeeds without double-refunding. The
+        `Idempotency-Key` header is also **required** so retries of the same
+        request replay the original response without repeating side effects.
+      tags: [Campaigns]
+      x-required-scope: campaigns:write
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/idempotencyKey'
+      responses:
+        '200':
+          description: Campaign stopped (or already stopped)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StopCampaignResponse'
+              example:
+                data:
+                  campaignId: campaign-uuid
+                  status: stopped
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/budget/increase:
+    post:
+      operationId: increaseCampaignBudget
+      summary: Increase wallet campaign budget
+      description: |
+        Raises budget for a wallet-funded campaign. Requires the
+        `campaigns:write` scope and an `Idempotency-Key` header.
+
+        **Wallet campaigns only** (`generation: 3`).
+
+        **Modes** (default `current_and_renewals`):
+        - `current_cycle` — applies to the current billing cycle only
+        - `next_renewal` — adjusts the next-cycle daily budget (may use
+          `amount: 0` with `targetDailyBudget` to set an absolute next-cycle target)
+        - `current_and_renewals` — applies to the current cycle and future renewals
+
+        Debits the organization wallet when the current cycle is increased.
+      tags: [Campaigns]
+      x-required-scope: campaigns:write
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncreaseCampaignBudgetRequest'
+            examples:
+              currentAndRenewals:
+                summary: Top up current cycle and renewals
+                value:
+                  amount: 70
+                  mode: current_and_renewals
+              nextRenewalTarget:
+                summary: Set next-cycle daily budget without current-cycle debit
+                value:
+                  amount: 0
+                  mode: next_renewal
+                  targetDailyBudget: 40
+      responses:
+        '200':
+          description: Budget increase accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncreaseCampaignBudgetResponse'
+              example:
+                data:
+                  campaignId: campaign-uuid
+                  mode: current_and_renewals
+                  amount: 70
+                  walletBalance: 430
+                  walletNextCycleDailyBudget: 30
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402': { $ref: '#/components/responses/InsufficientCredit' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/budget/decrease:
+    post:
+      operationId: decreaseCampaignBudget
+      summary: Decrease wallet campaign daily budget
+      description: |
+        Lowers the daily budget for a wallet-funded campaign to
+        `targetDailyBudget`. Requires the `campaigns:write` scope and an
+        `Idempotency-Key` header.
+
+        **Wallet campaigns only** (`generation: 3`).
+
+        **Modes** (default `current_and_renewals`):
+        - `current_cycle` — lowers current-cycle spend only
+        - `current_and_renewals` — also sets the next-cycle daily budget
+
+        `next_renewal` is not supported for decreases. Refund of unused budget
+        is applied asynchronously after acceptance (`accepted: true`).
+
+        Domain rules (also returned as `invalid_request` when violated):
+        - `targetDailyBudget` must be at least `$10`/day and lower than the
+          current daily budget
+        - more than 3 days must remain in the current cycle
+      tags: [Campaigns]
+      x-required-scope: campaigns:write
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecreaseCampaignBudgetRequest'
+            example:
+              targetDailyBudget: 60
+              mode: current_and_renewals
+      responses:
+        '200':
+          description: Budget decrease accepted (refund may complete asynchronously)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DecreaseCampaignBudgetResponse'
+              example:
+                data:
+                  campaignId: campaign-uuid
+                  mode: current_and_renewals
+                  targetDailyBudget: 60
+                  accepted: true
+                  walletNextCycleDailyBudget: 60
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/tiers:
+    get:
+      operationId: getCampaignTiers
+      summary: Get campaign tier allocation
+      description: |
+        Returns the current geographic tier allocation for a wallet campaign:
+        which tiers are enabled, their budget share, and when tiers were last
+        updated (`lastUpdate`). Use this before `PATCH` to build a valid request.
+
+        **Wallet campaigns only** (`generation: 3`).
+      tags: [Campaigns]
+      x-required-scope: campaigns:read
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+      responses:
+        '200':
+          description: Campaign tier allocation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTiersResponse'
+              example:
+                data:
+                  lastUpdate: '2026-01-01T00:00:00Z'
+                  tiers:
+                    - tierId: 1
+                      tierName: US
+                      isEnabled: true
+                      allocationPercent: 60
+                    - tierId: 2
+                      tierName: UK
+                      isEnabled: false
+                      allocationPercent: 40
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+    patch:
+      operationId: updateCampaignTiers
+      summary: Update campaign tier allocation
+      description: |
+        Enable or disable geographic tiers and optionally reallocate budget
+        shares for a wallet campaign.
+
+        **Wallet campaigns only** (`generation: 3`).
+
+        **Request rules:**
+        - Include **all** tiers on the campaign in `items`
+        - `newAllocationPercent` values must sum to **100**
+        - At least one tier must have `isEnabled: true`
+
+        **Cooldown:** after a successful update, further tier changes are
+        blocked for **72 hours** (`409 tier_update_cooldown`).
+      tags: [Campaigns]
+      x-required-scope: campaigns:write
+      security:
+        - apiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignTiersRequest'
+            example:
+              items:
+                - targetingTierId: 1
+                  isEnabled: true
+                  newAllocationPercent: 70
+                - targetingTierId: 2
+                  isEnabled: true
+                  newAllocationPercent: 30
+      responses:
+        '200':
+          description: Updated tier allocation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTiersResponse'
+        '400':
+          description: Invalid request or tier status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_request:
+                  value:
+                    error:
+                      code: invalid_request
+                      message: 'Tier updates are only supported for wallet campaigns.'
+                    meta:
+                      requestId: 550e8400-e29b-41d4-a716-446655440000
+                invalid_tier_status:
+                  value:
+                    error:
+                      code: invalid_tier_status
+                      message: 'At least one tier must be enabled'
+                    meta:
+                      requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/TierUpdateCooldown' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -266,7 +693,7 @@ paths:
                       campaign_name: Sleep Playlist
                       campaign_target_type: track
                       campaign_target_isrc: DEXW62500259
-                      campaign_target_spotify_track_id: 6habFhsOp2NvndAvgiJ01P
+                      campaign_target_spotify_track_id: 11dFghVXANMlKmJXsNCbNl
                       campaign_target_playlist_id: null
                       country_code: US
                       impressions: 4821
@@ -322,9 +749,10 @@ paths:
         Accept: application/x-ndjson
         ```
 
-        **Date range:** defaults to the full campaign active period. Override
-        with `startDate` / `endDate`. **Responses are capped at 90 days** —
-        use `startDate` / `endDate` to slice through longer windows manually.
+        **Date range:** if you omit both dates, defaults to the last **90 days**
+        ending today. Override with `startDate` / `endDate`. **Responses are
+        capped at 90 days** — a wider range returns `400 invalid_query_parameter`.
+        Page longer histories in 90-day slices.
 
         **Mutability:** rows for a given `report_date` can be revised for up
         to 7 days after the date closes due to delayed events from Meta and
@@ -358,113 +786,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/BreakdownRow'
               example: |
-                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"6habFhsOp2NvndAvgiJ01P","campaign_target_playlist_id":null,"country_code":"US","impressions":4821,"ad_clicks":112,"link_clicks":89,"streams":203,"listeners":145,"followers":12,"streams_per_listener":1.4,"spend_media":42.50,"spend_total":53.13,"fees":10.63,"currency":"USD","currency_account":"USD","cpl":0.293,"cpf":3.542,"cpc_linkclick":0.478,"ctr_linkclick":0.0185,"ctr_adclick":0.0232,"cost_per_result":3.542,"result_type":"follow"}
-                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"6habFhsOp2NvndAvgiJ01P","campaign_target_playlist_id":null,"country_code":"DE","impressions":2103,"ad_clicks":48,"link_clicks":31,"streams":87,"listeners":61,"followers":4,"streams_per_listener":1.43,"spend_media":18.20,"spend_total":22.75,"fees":4.55,"currency":"USD","currency_account":"USD","cpl":0.298,"cpf":4.55,"cpc_linkclick":0.587,"ctr_linkclick":0.0148,"ctr_adclick":0.0228,"cost_per_result":4.55,"result_type":"follow"}
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
-  /v1/campaigns/{campaignId}/metrics/engagement:
-    get:
-      operationId: getCampaignEngagement
-      summary: Campaign engagement breakdown
-      description: |
-        Per-day, per-track engagement metrics for a campaign. One row per
-        `(report_date, campaign_id, engagement_context, engaged_spotify_track_id)`.
-
-        **Key difference from `/metrics/breakdown`:** this endpoint covers the
-        full engagement window — including post-campaign streaming activity —
-        not just dates when the campaign was actively running. Use this for
-        catalog spillover analysis and long-tail retention.
-
-        **`engagement_context` values:**
-        - `catalog` — same-artist spillover (and direct promoted-track plays)
-          on track campaigns. `engaged_track_isrc` may equal
-          `campaign_target_isrc` (the promoted track itself) or differ
-          (spillover tracks).
-        - `playlist` — per-track performance inside the promoted playlist on
-          playlist campaigns. One row per track in the playlist per day.
-
-        **`listeners` is deduplicated within each row only.** Do not sum
-        `listeners` across days to get a campaign total — the same listener
-        can appear on multiple `report_date` rows.
-
-        Row schema: `campaign_engagement_daily` v1.0. Rows are idempotent on
-        the primary key; re-ingesting is safe.
-
-        **Mutability window:** rows for a given `report_date` can be revised
-        for up to 7 days after the date closes due to delayed Spotify
-        playback events.
-      tags: [Metrics]
-      security:
-        - apiKeyAuth: []
-      parameters:
-        - $ref: '#/components/parameters/campaignId'
-        - $ref: '#/components/parameters/startDate'
-        - $ref: '#/components/parameters/endDate'
-        - name: engagementContext
-          in: query
-          schema:
-            type: string
-            enum: [catalog, playlist]
-          description: |
-            Filter to a single engagement context. Omit to return both.
-        - $ref: '#/components/parameters/page'
-        - $ref: '#/components/parameters/pageSize500'
-        - name: sortBy
-          in: query
-          schema:
-            type: string
-            enum: [report_date, streams, listeners]
-            default: report_date
-        - $ref: '#/components/parameters/sortOrder'
-      responses:
-        '200':
-          description: Paginated per-day per-track engagement rows (`campaign_engagement_daily` schema)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EngagementBreakdownResponse'
-              example:
-                data:
-                  schemaVersion: '1.0'
-                  items:
-                    - provider: soundlink
-                      account_id: a7ac3173-2f71-4e79-921f-d15d7112cc9a
-                      schema_version: '1.0'
-                      report_date: '2026-04-08'
-                      report_date_timezone: UTC
-                      exported_at: '2026-05-22T10:12:11Z'
-                      campaign_id: 8ccd7b88-2591-4b94-848f-f142f5c6bba1
-                      campaign_name: 9 To 5
-                      campaign_target_type: track
-                      campaign_target_isrc: DEXW62500272
-                      campaign_target_spotify_track_id: 2RkZ5WPkKyBf0u8vN3dNgb
-                      campaign_target_playlist_id: null
-                      status: ended
-                      engagement_context: catalog
-                      country_code: US
-                      engaged_track_isrc: DEXW62500001
-                      engaged_spotify_track_id: 4cOdK2wGLETKBW3PvgPWqT
-                      engaged_track_name: Till The Sunrise
-                      playlist_position: null
-                      new_listeners: 42
-                      returning_listeners: 18
-                      listeners: 60
-                      new_listener_streams: 58
-                      returning_listener_streams: 31
-                      streams: 89
-                      spl: 1.48
-                  pagination:
-                    page: 1
-                    pageSize: 50
-                    totalCount: 210
-                    totalPages: 5
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","campaign_target_playlist_id":null,"country_code":"US","impressions":4821,"ad_clicks":112,"link_clicks":89,"streams":203,"listeners":145,"followers":12,"streams_per_listener":1.4,"spend_media":42.50,"spend_total":53.13,"fees":10.63,"currency":"USD","currency_account":"USD","cpl":0.293,"cpf":3.542,"cpc_linkclick":0.478,"ctr_linkclick":0.0185,"ctr_adclick":0.0232,"cost_per_result":3.542,"result_type":"follow"}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","campaign_target_playlist_id":null,"country_code":"DE","impressions":2103,"ad_clicks":48,"link_clicks":31,"streams":87,"listeners":61,"followers":4,"streams_per_listener":1.43,"spend_media":18.20,"spend_total":22.75,"fees":4.55,"currency":"USD","currency_account":"USD","cpl":0.298,"cpf":4.55,"cpc_linkclick":0.587,"ctr_linkclick":0.0148,"ctr_adclick":0.0228,"cost_per_result":4.55,"result_type":"follow"}
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -479,9 +802,7 @@ paths:
       description: |
         Streams the full engagement dataset for a campaign as
         **newline-delimited JSON (JSONL)**. Every line is a complete, valid
-        JSON object conforming to the `campaign_engagement_daily` v1.0 schema
-        — identical to the rows returned by `GET /metrics/engagement` but
-        without pagination or an envelope wrapper.
+        JSON object conforming to the `campaign_engagement_daily` v1.0 schema.
 
         Designed for data pipeline consumers: load directly into BigQuery,
         Snowflake, or any JSONL-aware ingest tool without cursor logic.
@@ -498,15 +819,14 @@ paths:
         {"provider":"soundlink","report_date":"2026-04-02","streams":104,...}
         ```
 
-        **Date range:** defaults to the full campaign lifetime plus 30 days
-        post-end to capture tail engagement. Override with `startDate` /
-        `endDate`. **Responses are capped at 90 days** — if the requested
-        range exceeds 90 days, the most recent 90 days are returned. Use
-        `startDate` / `endDate` to page through longer windows in 90-day
-        slices.
+        **Date range:** if you omit both dates, defaults to the last **90 days**
+        ending today. Override with `startDate` / `endDate`. **Responses are
+        capped at 90 days** — a wider range returns `400 invalid_query_parameter`.
+        Page longer histories in 90-day slices.
 
-        **Mutability:** same 7-day revision window as the paginated endpoint.
-        Re-fetching and re-ingesting on the primary key is safe (idempotent).
+        **Mutability:** rows for a given `report_date` can be revised for up to
+        7 days after the date closes. Re-fetching and re-ingesting on the
+        primary key is safe (idempotent).
       tags: [Metrics]
       security:
         - apiKeyAuth: []
@@ -550,6 +870,84 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/videos/import:
+    post:
+      operationId: importVideo
+      summary: Import a video from a public HTTPS MP4 URL
+      description: |
+        Downloads a single public HTTPS MP4, stages it for ingestion, and starts
+        the background video pipeline. Returns `202` while processing, or `200`
+        with `videoId` immediately when the organization already has the same video
+        (content duplicate).
+
+        Requires the `videos:write` scope. Subject to a stricter per-key rate limit
+        than generic public API routes (default 5 imports per hour per API key).
+
+        Poll `GET /v1/videos/import/{sessionId}` until `status` is `ready` or `failed`.
+        Use the returned `videoId` in Full Control campaign `creativeDirection.selectedCreatives`.
+      tags: [Videos]
+      security:
+        - apiKeyAuth: []
+      x-required-scope: videos:write
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VideoImportRequest'
+            example:
+              url: 'https://cdn.example.com/promo.mp4'
+      responses:
+        '200':
+          description: Duplicate video already in the organization's library
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoImportStartResponse'
+        '202':
+          description: Import accepted; ingestion in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoImportStartResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/videos/import/{sessionId}:
+    get:
+      operationId: getVideoImportStatus
+      summary: Get video import session status
+      description: |
+        Returns processing status and the resulting `videoId` when ingestion completes.
+        Requires the `videos:write` scope.
+      tags: [Videos]
+      security:
+        - apiKeyAuth: []
+      x-required-scope: videos:write
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Upload session ID returned by `POST /v1/videos/import`
+      responses:
+        '200':
+          description: Import session status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoImportStatusResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
 components:
   securitySchemes:
     apiKeyAuth:
@@ -558,7 +956,7 @@ components:
       name: x-api-key
       description: |
         Pass your Soundlink `sk_*` API key in the `x-api-key` header.
-        Keys can carry explicit scopes (for example `campaigns:read`, `metrics:read`) enforced by the backend.
+        Keys can carry explicit scopes (for example `campaigns:read`, `metrics:read`, `videos:write`) enforced by the backend.
 
   parameters:
     campaignId:
@@ -567,7 +965,23 @@ components:
       required: true
       schema:
         type: string
-      description: Campaign identifier (e.g. `camp_abc123`)
+      description: Campaign identifier (UUID)
+
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+      description: |
+        A unique string identifying this request, used to safely retry write
+        operations (create, stop, budget increase/decrease) without repeating
+        side effects. Required on every request that references this parameter.
+        Reusing this key with an unchanged request body replays the original
+        response; reusing it with a different body returns
+        `409 idempotency_key_conflict`. Keys are honored for 24 hours.
 
     page:
       name: page
@@ -666,11 +1080,34 @@ components:
             - invalid_query_parameter
             - invalid_date_range
             - page_size_exceeded
+            - invalid_request
+            - invalid_genre
+            - invalid_duration_or_budget
+            - invalid_daily_budget
+            - invalid_duration_days
+            - invalid_spotify_url
+            - invalid_tier_budget_allocation
+            - invalid_tier_status
+            - tier_update_cooldown
+            - wallet_not_enabled
+            - insufficient_credit
+            - idempotency_key_conflict
             - rate_limit_exceeded
+            - invalid_video_url
+            - video_import_limit_exceeded
+            - video_import_session_not_found
             - internal_error
         message:
           type: string
           description: Human-readable error description. Do not parse programmatically.
+        details:
+          type: object
+          nullable: true
+          description: |
+            Additive, error-code-specific context (e.g. `available`/`required`
+            on `insufficient_credit`). Absent or `null` for error codes that
+            carry no extra data.
+          additionalProperties: true
 
     ErrorResponse:
       type: object
@@ -685,7 +1122,7 @@ components:
 
     CampaignStatus:
       type: string
-      enum: [creating, active, paused, completed, failed]
+      enum: [creating, active, paused, stopped, completed, failed, ended]
 
     CampaignSummary:
       type: object
@@ -698,6 +1135,7 @@ components:
           dailyBudget,
           totalBudget,
           campaignDuration,
+          generation,
           createdAt,
           updatedAt,
         ]
@@ -720,6 +1158,14 @@ components:
         campaignDuration:
           type: integer
           description: Duration in days
+        generation:
+          type: integer
+          enum: [1, 2, 3]
+          description: |
+            Campaign resource generation. `1` = Stripe / one-time / subscription /
+            legacy; `2` = Soundlink managed; `3` = wallet. Public API write
+            operations (budget changes, stop, tier updates) are supported for
+            generation `3` only.
         createdAt:
           type: string
           format: date-time
@@ -761,6 +1207,450 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/CampaignDetail'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignTier:
+      type: object
+      required: [tierId, tierName, isEnabled, allocationPercent]
+      properties:
+        tierId:
+          type: integer
+          description: Targeting tier identifier.
+        tierName:
+          type: string
+          description: Human-readable tier name.
+        isEnabled:
+          type: boolean
+          description: Whether this tier is currently active.
+        allocationPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Share of campaign budget allocated to this tier.
+
+    CampaignTiersData:
+      type: object
+      required: [lastUpdate, tiers]
+      properties:
+        lastUpdate:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            ISO-8601 timestamp of the last manual tier status update, or null
+            if tiers have never been updated.
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignTier'
+
+    CampaignTiersResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignTiersData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    TierStatusUpdateItem:
+      type: object
+      required: [targetingTierId, isEnabled, newAllocationPercent]
+      properties:
+        targetingTierId:
+          type: integer
+          minimum: 1
+          description: Targeting tier identifier.
+        isEnabled:
+          type: boolean
+          description: Whether to enable or disable this tier.
+        newAllocationPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: New budget share for this tier (all items must sum to 100).
+
+    UpdateCampaignTiersRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TierStatusUpdateItem'
+
+    Genre:
+      type: string
+      description: Strictly validated against the platform's genre list.
+      enum:
+        - Alternative/Indie
+        - Ambient/Sleep
+        - Chill/Background
+        - Classical
+        - Country
+        - Electronic/Dance
+        - Hip-Hop/R&B
+        - Latin/Reggaeton
+        - Pop
+        - Rock
+        - Christmas
+
+    StrategyType:
+      type: string
+      enum:
+        - maximum_growth
+        - market_discovery
+        - revenue_maximization
+        - custom
+
+    CreativeDirection:
+      description: |
+        How the campaign's ad creative is produced. Omit entirely to use the
+        platform's default (`do_it_for_me`).
+      oneOf:
+        - $ref: '#/components/schemas/DoItForMeCreativeDirection'
+        - $ref: '#/components/schemas/FullControlCreativeDirection'
+      discriminator:
+        propertyName: type
+        mapping:
+          do_it_for_me: '#/components/schemas/DoItForMeCreativeDirection'
+          full_control: '#/components/schemas/FullControlCreativeDirection'
+
+    DoItForMeCreativeDirection:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [do_it_for_me]
+          description: Soundlink selects and produces the ad creative.
+
+    FullControlCreativeDirection:
+      type: object
+      required: [type, selectedCreatives]
+      properties:
+        type:
+          type: string
+          enum: [full_control]
+        selectedCreatives:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SelectedCreative'
+          description: One or more previously imported video creatives to use for the ad. Required for full control.
+
+    SelectedCreative:
+      type: object
+      required: [videoId]
+      properties:
+        videoId:
+          type: string
+          format: uuid
+          description: |
+            ID of a video previously imported into your video library. Import
+            videos via the video import endpoint before referencing them here.
+
+    CustomTier:
+      type: object
+      required: [name, percentBudget]
+      properties:
+        name:
+          type: string
+        countries:
+          type: array
+          items:
+            type: string
+          description: ISO 3166-1 alpha-2 country codes.
+        language:
+          type: string
+          description: ISO 639-1 language code.
+        percentBudget:
+          type: number
+          description: Share of the campaign budget allocated to this tier. All tiers in a request must sum to 100.
+
+    TierTargeting:
+      type: object
+      description: |
+        Custom tier targeting. Required when `strategyType` is `custom`: provide a
+        non-empty `customTierIds` and/or `customTiers` array. Omit entirely for
+        non-custom strategies (platform default tiering applies).
+      properties:
+        customTierIds:
+          type: array
+          items:
+            type: integer
+        customTiers:
+          type: array
+          description: |
+            Inline custom tiers to create with the campaign. At most 5 active
+            tiers (percentBudget > 0) are allowed; inactive (0%) entries do not
+            count toward that limit. Each active tier must receive at least
+            $1.50 of dailyBudget (gross). percentBudget values must sum to 100.
+          items:
+            $ref: '#/components/schemas/CustomTier'
+
+    CreateCampaignRequestShared:
+      type: object
+      required: [spotifyUrl, dailyBudget, durationDays, genre]
+      properties:
+        spotifyUrl:
+          type: string
+          format: uri
+          description: |
+            Spotify track or playlist URL to promote. Must be a valid track or
+            playlist link to a resource that currently exists on Spotify.
+        dailyBudget:
+          type: number
+          minimum: 10
+          description: |
+            USD, per day. Must be at least 10 (same floor as the Soundlink UI).
+        durationDays:
+          description: |
+            Campaign duration in days. Must be an integer from 7 to 30 (UI custom
+            range), or 60, or 90 (UI dropdown extras).
+          oneOf:
+            - type: integer
+              minimum: 7
+              maximum: 30
+            - type: integer
+              enum: [60, 90]
+        genre:
+          $ref: '#/components/schemas/Genre'
+        campaignName:
+          type: string
+          description: Optional. Server generates a default (track title + short random suffix) when omitted.
+        creativeDirection:
+          $ref: '#/components/schemas/CreativeDirection'
+        trackOptions:
+          type: object
+          description: Options that only apply when `spotifyUrl` is a track link. Ignored when `spotifyUrl` is a playlist link.
+          properties:
+            artistIdFollow:
+              type: string
+              description: Pass-through artist identifier.
+        clonedFromCampaignId:
+          type: string
+          format: uuid
+          description: >-
+            Optional UUID of a campaign in your organization this create is
+            cloned from. Records lineage only — it does not copy settings from
+            the source; all other create fields must still be provided. Unknown
+            or other-organization IDs return `400 invalid_request`.
+
+    CreateCampaignRequestWithoutTiers:
+      allOf:
+        - $ref: '#/components/schemas/CreateCampaignRequestShared'
+        - type: object
+          required: [strategyType]
+          properties:
+            strategyType:
+              type: string
+              enum:
+                - maximum_growth
+                - market_discovery
+                - revenue_maximization
+              description: |
+                Non-custom growth strategy. Do not send `tierTargeting` with these
+                values; the platform applies default tiering.
+          not:
+            required: [tierTargeting]
+
+    CreateCampaignRequestCustom:
+      allOf:
+        - $ref: '#/components/schemas/CreateCampaignRequestShared'
+        - type: object
+          required: [strategyType, tierTargeting]
+          properties:
+            strategyType:
+              type: string
+              enum: [custom]
+              description: |
+                Custom growth strategy. Requires `tierTargeting` with a non-empty
+                `customTierIds` and/or `customTiers` array.
+            tierTargeting:
+              $ref: '#/components/schemas/TierTargeting'
+
+    CreateCampaignRequest:
+      description: |
+        Create a wallet-funded campaign. When `strategyType` is `custom`,
+        `tierTargeting` is required. For `maximum_growth`, `market_discovery`,
+        or `revenue_maximization`, do not send `tierTargeting` (platform default
+        tiering applies).
+      oneOf:
+        - $ref: '#/components/schemas/CreateCampaignRequestWithoutTiers'
+        - $ref: '#/components/schemas/CreateCampaignRequestCustom'
+
+    CampaignCreateData:
+      type: object
+      required: [campaignId, status]
+      properties:
+        campaignId:
+          type: string
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+
+    CreateCampaignResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignCreateData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignStopData:
+      type: object
+      required: [campaignId, status]
+      properties:
+        campaignId:
+          type: string
+        status:
+          $ref: '#/components/schemas/CampaignStatus'
+          description: Campaign status after stop (typically `stopped`).
+
+    StopCampaignResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignStopData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    StrategyCatalogItem:
+      type: object
+      required: [strategyType, tierTargetingAllowed]
+      properties:
+        strategyType:
+          $ref: '#/components/schemas/StrategyType'
+        tierTargetingAllowed:
+          type: boolean
+          description: |
+            When `false`, omit `tierTargeting` on create (platform default
+            tiering applies). Only `custom` allows `tierTargeting`.
+
+    StrategiesCatalogData:
+      type: object
+      required: [strategies]
+      properties:
+        strategies:
+          type: array
+          items:
+            $ref: '#/components/schemas/StrategyCatalogItem'
+
+    StrategiesCatalogResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/StrategiesCatalogData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    BudgetIncreaseMode:
+      type: string
+      enum: [current_cycle, next_renewal, current_and_renewals]
+      description: |
+        Defaults to `current_and_renewals` when omitted on increase requests.
+
+    BudgetDecreaseMode:
+      type: string
+      enum: [current_cycle, current_and_renewals]
+      description: |
+        Defaults to `current_and_renewals` when omitted on decrease requests.
+        `next_renewal` is not supported for decreases.
+
+    IncreaseCampaignBudgetRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          description: |
+            Wallet debit / top-up amount in USD. Must be positive, except
+            `mode: next_renewal` with `targetDailyBudget` where `amount` may
+            be `0`.
+        mode:
+          $ref: '#/components/schemas/BudgetIncreaseMode'
+        targetDailyBudget:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          description: |
+            Optional absolute next-cycle daily budget (USD). Most useful with
+            `mode: next_renewal`.
+
+    IncreaseCampaignBudgetData:
+      type: object
+      required: [campaignId, mode, amount, walletBalance]
+      properties:
+        campaignId:
+          type: string
+        mode:
+          $ref: '#/components/schemas/BudgetIncreaseMode'
+        amount:
+          type: number
+        walletBalance:
+          type: number
+          description: Organization wallet balance after the increase.
+        walletNextCycleDailyBudget:
+          type: number
+          nullable: true
+          description: Next-cycle daily budget when set by this request.
+
+    IncreaseCampaignBudgetResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/IncreaseCampaignBudgetData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    DecreaseCampaignBudgetRequest:
+      type: object
+      required: [targetDailyBudget]
+      properties:
+        targetDailyBudget:
+          type: number
+          minimum: 10
+          description: |
+            New daily budget in USD (gross). Must be at least `$10`/day and
+            lower than the campaign's current daily budget.
+        mode:
+          $ref: '#/components/schemas/BudgetDecreaseMode'
+
+    DecreaseCampaignBudgetData:
+      type: object
+      required: [campaignId, mode, targetDailyBudget, accepted]
+      properties:
+        campaignId:
+          type: string
+        mode:
+          $ref: '#/components/schemas/BudgetDecreaseMode'
+        targetDailyBudget:
+          type: number
+        accepted:
+          type: boolean
+          enum: [true]
+          description: |
+            Always `true` on success. Unused budget refund is applied
+            asynchronously after acceptance.
+        walletNextCycleDailyBudget:
+          type: number
+          nullable: true
+          description: |
+            Present for `current_and_renewals` when the next-cycle daily
+            budget was updated. Omitted for `current_cycle`.
+
+    DecreaseCampaignBudgetResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/DecreaseCampaignBudgetData'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -1159,24 +2049,71 @@ components:
           type: number
           description: Streams per listener (`streams / listeners`). Zero if `listeners` is zero.
 
-    EngagementBreakdownResponse:
+    # --- Videos ---
+
+    VideoImportRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Public HTTPS URL to an MP4 file (max 50 MB).
+
+    VideoImportStatus:
+      type: string
+      enum: [processing, ready, failed]
+
+    VideoImportStartData:
+      type: object
+      required: [sessionId, status]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+          description: Upload session ID for status polling
+        status:
+          $ref: '#/components/schemas/VideoImportStatus'
+        videoId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present when `status` is `ready` (new or duplicate video)
+
+    VideoImportStartResponse:
       type: object
       required: [data, meta]
       properties:
         data:
-          type: object
-          required: [schemaVersion, items, pagination]
-          properties:
-            schemaVersion:
-              type: string
-              description: Version of the `campaign_engagement_daily` row schema. Pin your ingest pipeline to this.
-              example: '1.0'
-            items:
-              type: array
-              items:
-                $ref: '#/components/schemas/EngagementRow'
-            pagination:
-              $ref: '#/components/schemas/Pagination'
+          $ref: '#/components/schemas/VideoImportStartData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    VideoImportStatusData:
+      type: object
+      required: [sessionId, status]
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/VideoImportStatus'
+        videoId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Background video ID when `status` is `ready`
+        error:
+          type: string
+          nullable: true
+          description: Failure reason when `status` is `failed`
+
+    VideoImportStatusResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/VideoImportStatusData'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -1203,6 +2140,30 @@ components:
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
+    CreateCampaignBadRequest:
+      description: |
+        Missing or malformed request body, or a missing/empty
+        `Idempotency-Key` header.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing_field:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Missing required field: spotifyUrl.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            missing_idempotency_key:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Idempotency-Key header is required and must not be empty.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
     Unauthorized:
       description: Missing, malformed, revoked, or expired API key
       headers:
@@ -1219,14 +2180,14 @@ components:
               value:
                 error:
                   code: invalid_api_key
-                  message: 'Authorization header is missing or malformed.'
+                  message: 'Missing or malformed x-api-key header.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
             api_key_revoked:
               value:
                 error:
                   code: api_key_revoked
-                  message: 'This API key has been revoked. Contact Soundlink Engineering to mint a new key.'
+                  message: 'This API key has been revoked. Create a new key in Settings → Developer → API keys.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
@@ -1243,8 +2204,145 @@ components:
             meta:
               requestId: 550e8400-e29b-41d4-a716-446655440000
 
+    CreateCampaignForbidden:
+      description: |
+        Valid key but missing the `campaigns:write` scope, or the calling
+        organization is not enabled for wallet billing.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            insufficient_scope:
+              value:
+                error:
+                  code: insufficient_scope
+                  message: 'This key does not have the campaigns:write scope.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            wallet_not_enabled:
+              value:
+                error:
+                  code: wallet_not_enabled
+                  message: 'This organization does not have wallet billing enabled.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    InsufficientCredit:
+      description: Wallet balance is too low to cover `dailyBudget * durationDays`
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: insufficient_credit
+              message: 'Insufficient wallet balance for this campaign.'
+              details:
+                available: 120.00
+                required: 350.00
+            meta:
+              requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    CreateCampaignUnprocessable:
+      description: Request body is well-formed but semantically invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_genre:
+              value:
+                error:
+                  code: invalid_genre
+                  message: 'genre must be one of the supported values.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_duration_or_budget:
+              value:
+                error:
+                  code: invalid_duration_or_budget
+                  message: 'dailyBudget and durationDays must be greater than 0.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_daily_budget:
+              value:
+                error:
+                  code: invalid_daily_budget
+                  message: 'dailyBudget must be at least 10 (USD per day).'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_duration_days:
+              value:
+                error:
+                  code: invalid_duration_days
+                  message: 'durationDays must be an integer from 7 to 30, or 60, or 90.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_spotify_url:
+              summary: Malformed URL or Spotify track/playlist does not exist
+              value:
+                error:
+                  code: invalid_spotify_url
+                  message: 'Spotify track not found.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_tier_budget_allocation:
+              value:
+                error:
+                  code: invalid_tier_budget_allocation
+                  message: 'tierTargeting.customTiers[].percentBudget must sum to 100.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_request_tier_targeting:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'tierTargeting is only allowed when strategyType is custom.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    IdempotencyKeyConflict:
+      description: |
+        The `Idempotency-Key` was reused with a materially different request
+        body, or a request with the same key is still in progress.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            conflicting_body:
+              value:
+                error:
+                  code: idempotency_key_conflict
+                  message: 'This Idempotency-Key was already used with a different request body.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            in_progress:
+              value:
+                error:
+                  code: idempotency_key_conflict
+                  message: 'A request with this Idempotency-Key is still processing. Retry after a short delay.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    TierUpdateCooldown:
+      description: |
+        Campaign tiers were updated in the last 72 hours. Wait for the cooldown
+        to end before updating again.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: tier_update_cooldown
+              message: 'Campaign tiers were updated in the last 72 hours. Wait for the cooldown to end before updating again.'
+            meta:
+              requestId: 550e8400-e29b-41d4-a716-446655440000
+
     NotFound:
-      description: Campaign not found, belongs to another org, or feature flag is off
+      description: Campaign not found or belongs to another organization
       content:
         application/json:
           schema:

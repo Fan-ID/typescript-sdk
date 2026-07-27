@@ -8,7 +8,7 @@ Official TypeScript SDK for the [Soundlink Public API](https://docs.getsoundlink
 npm install soundlink
 ```
 
-> **Version note:** `1.0.0` on npm was an empty placeholder. **`1.1.0`** is the first official SDK release.
+> **Version note:** `1.0.0` on npm was an empty placeholder. Use **`>=1.1.0`** for the SDK. Write surface (create / budget / stop / tiers) ships in **`1.2.0`**.
 
 Requires **Node.js 18+** (native `fetch`). Works in Edge Runtime when `fetch` is available.
 
@@ -43,6 +43,8 @@ Pass your Soundlink API key (`sk_<prefix>_<secret>`) via the client constructor.
 The SDK sends it in the `x-api-key` header on every request.
 
 Your organization is determined from the key. Do not send Firebase Bearer tokens on the Public API host.
+
+Write methods require the `campaigns:write` scope and an `Idempotency-Key` (passed as `idempotencyKey` on the method options).
 
 ## Response pattern
 
@@ -82,11 +84,48 @@ const { data, error } = await soundlink.campaigns.list({
 });
 
 const { data: campaign } = await soundlink.campaigns.get('camp_abc123');
+// campaign.generation === 3 → wallet (writable)
 
 // Async iterator across all pages
 for await (const item of soundlink.campaigns.listAll({ pageSize: 100 })) {
-  console.log(item.campaignId);
+  console.log(item.campaignId, item.generation);
 }
+```
+
+### Create, budget, tiers, stop (wallet / `generation: 3`)
+
+```typescript
+const { data: strategies } = await soundlink.strategies.list();
+
+const { data: created, error: createError } = await soundlink.campaigns.create(
+  {
+    spotifyUrl: 'https://open.spotify.com/track/...',
+    dailyBudget: 20,
+    durationDays: 7,
+    genre: 'Pop',
+    strategyType: 'maximum_growth',
+  },
+  { idempotencyKey: 'create-mytrack-01' },
+);
+
+if (createError || !created) {
+  console.error(createError);
+  return;
+}
+
+await soundlink.campaigns.increaseBudget(
+  created.campaignId,
+  { amount: 50, mode: 'current_and_renewals' },
+  { idempotencyKey: 'budget-inc-01' },
+);
+
+await soundlink.campaigns.tiers.update(created.campaignId, {
+  items: [{ targetingTierId: 1, isEnabled: true, newAllocationPercent: 100 }],
+});
+
+await soundlink.campaigns.stop(created.campaignId, {
+  idempotencyKey: 'stop-01',
+});
 ```
 
 ## Metrics
@@ -145,33 +184,38 @@ const soundlink = new Soundlink({
   apiKey: process.env.SOUNDLINK_API_KEY!,
   baseUrl: 'https://api.getsoundlink.com', // default
   timeout: 30_000, // ms, default
-  maxRetries: 2, // retries on 429/5xx, default
+  maxRetries: 2, // retries on 429/5xx (same Idempotency-Key on writes), default
   fetch: customFetch, // optional, for Edge/tests
 });
 ```
 
 ## Error codes
 
-| Code                      | Typical HTTP |
-| ------------------------- | ------------ |
-| `invalid_api_key`         | 401          |
-| `api_key_revoked`         | 401          |
-| `api_key_expired`         | 401          |
-| `mixed_credentials`       | 401          |
-| `insufficient_scope`      | 403          |
-| `not_found`               | 404          |
-| `campaign_not_found`      | 404          |
-| `invalid_query_parameter` | 400          |
-| `invalid_date_range`      | 400          |
-| `page_size_exceeded`      | 400          |
-| `rate_limit_exceeded`     | 429          |
-| `internal_error`          | 500          |
+| Code                       | Typical HTTP |
+| -------------------------- | ------------ |
+| `invalid_api_key`          | 401          |
+| `api_key_revoked`          | 401          |
+| `api_key_expired`          | 401          |
+| `mixed_credentials`        | 401          |
+| `insufficient_scope`       | 403          |
+| `wallet_not_enabled`       | 403          |
+| `not_found`                | 404          |
+| `campaign_not_found`       | 404          |
+| `invalid_request`          | 400          |
+| `invalid_query_parameter`  | 400          |
+| `invalid_date_range`       | 400          |
+| `page_size_exceeded`       | 400          |
+| `insufficient_credit`      | 402          |
+| `idempotency_key_conflict` | 409          |
+| `tier_update_cooldown`     | 429          |
+| `rate_limit_exceeded`      | 429          |
+| `internal_error`           | 500          |
 
 Include `meta.requestId` (or `error.requestId`) when contacting Soundlink support.
 
 ## API reference
 
-Full endpoint documentation: [getsoundlink.com/docs](https://getsoundlink.com/docs).
+Full endpoint documentation: [docs.getsoundlink.com](https://docs.getsoundlink.com).
 
 OpenAPI spec shipped with this package: `openapi/soundlink-public-api-v1.yaml`.
 
@@ -193,19 +237,27 @@ SOUNDLINK_API_KEY=sk_your_prefix_your_secret npm run test:live
 npm run test:live -- sk_your_prefix_your_secret
 ```
 
-The script runs: `ping` → `campaigns.list` → `campaigns.get` → `metrics.overview` (best effort).
+The script runs: `ping` → `strategies.list` → `campaigns.list` (checks `generation`) → `campaigns.get` → `metrics.overview` (best effort).
+
+Opt-in write smoke (debits wallet — use a sandbox org):
+
+```bash
+SOUNDLINK_LIVE_WRITE=1 \
+SOUNDLINK_LIVE_SPOTIFY_URL='https://open.spotify.com/track/...' \
+SOUNDLINK_API_KEY=sk_... \
+npm run test:live
+```
 
 ## Roadmap
 
-- `metrics.engagement.list` — spec-ready; backend route pending
-- `campaigns.create` — when `campaigns:write` scope opens in v2
+- Video import helpers (`videos:write`) — when prioritized
 - Webhook helpers — when Public API webhooks ship
 
 ## Releases
 
 GitHub Releases are created automatically when a **Version packages** PR is merged. Release notes come from `CHANGELOG.md`, with PR/issue links when referenced in changesets.
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md#release-process) for the full flow.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full flow.
 
 ## Contributing
 
