@@ -1,7 +1,7 @@
-import { http } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { Soundlink } from '../../src/index.js';
-import { BASE_URL, TEST_API_KEY, errorEnvelope } from '../mocks/handlers.js';
+import { BASE_URL, TEST_API_KEY } from '../mocks/handlers.js';
 import { server } from '../mocks/server.js';
 
 describe('Strategies resource', () => {
@@ -94,10 +94,16 @@ describe('Campaigns resource', () => {
   it('returns insufficient_credit on create', async () => {
     server.use(
       http.post(`${BASE_URL}/v1/campaigns`, () =>
-        errorEnvelope(
-          'insufficient_credit',
-          'Insufficient wallet balance for this campaign.',
-          402,
+        HttpResponse.json(
+          {
+            error: {
+              code: 'insufficient_credit',
+              message: 'Insufficient wallet balance for this campaign.',
+              details: { available: 10, required: 140 },
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 402 },
         ),
       ),
     );
@@ -116,6 +122,7 @@ describe('Campaigns resource', () => {
     expect(data).toBeNull();
     expect(error?.code).toBe('insufficient_credit');
     expect(error?.status).toBe(402);
+    expect(error?.details).toEqual({ available: 10, required: 140 });
   });
 
   it('stops a campaign', async () => {

@@ -130,6 +130,11 @@ export interface ApiError {
   requestId?: string;
   /** Seconds to wait before retrying, from the `Retry-After` header on `429`. */
   retryAfter?: number;
+  /**
+   * Error-code-specific context from the API (e.g. `available` / `required` on
+   * `insufficient_credit`). Absent when the API sends no `details`.
+   */
+  details?: Record<string, unknown> | null;
 }
 
 /**
@@ -180,8 +185,8 @@ export interface CampaignSummary {
 
 /** Full campaign detail from {@link CampaignsResource.get}. */
 export interface CampaignDetail extends CampaignSummary {
-  /** Growth strategy (e.g. `custom`, `maximum_growth`). */
-  strategyType?: string;
+  /** Growth strategy set at creation (e.g. `custom`, `maximum_growth`). */
+  strategyType?: StrategyType;
 }
 
 /** Paginated campaign list payload. */
@@ -320,6 +325,10 @@ export interface CampaignTiersData {
 }
 
 export interface TierStatusUpdateItem {
+  /**
+   * Targeting tier id — same value as `tierId` returned by
+   * `campaigns.tiers.get` (`CampaignTier.tierId`).
+   */
   targetingTierId: number;
   isEnabled: boolean;
   newAllocationPercent: number;
@@ -505,6 +514,7 @@ export interface ApiEnvelopeError {
   error: {
     code: string;
     message: string;
+    details?: Record<string, unknown> | null;
   };
   meta: ApiMeta;
 }

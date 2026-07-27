@@ -119,13 +119,37 @@ await soundlink.campaigns.increaseBudget(
   { idempotencyKey: 'budget-inc-01' },
 );
 
+// GET returns `tierId`; PATCH expects the same value as `targetingTierId`
+const { data: tiers } = await soundlink.campaigns.tiers.get(created.campaignId);
 await soundlink.campaigns.tiers.update(created.campaignId, {
-  items: [{ targetingTierId: 1, isEnabled: true, newAllocationPercent: 100 }],
+  items: (tiers?.tiers ?? []).map((tier) => ({
+    targetingTierId: tier.tierId,
+    isEnabled: tier.isEnabled,
+    newAllocationPercent: tier.allocationPercent,
+  })),
 });
 
 await soundlink.campaigns.stop(created.campaignId, {
   idempotencyKey: 'stop-01',
 });
+```
+
+Custom strategy create (requires `tierTargeting`):
+
+```typescript
+const { data: created } = await soundlink.campaigns.create(
+  {
+    spotifyUrl: 'https://open.spotify.com/track/...',
+    dailyBudget: 20,
+    durationDays: 7,
+    genre: 'Pop',
+    strategyType: 'custom',
+    tierTargeting: {
+      customTiers: [{ name: 'US focus', countries: ['US'], percentBudget: 100 }],
+    },
+  },
+  { idempotencyKey: 'create-custom-01' },
+);
 ```
 
 ## Metrics
@@ -207,11 +231,11 @@ const soundlink = new Soundlink({
 | `page_size_exceeded`       | 400          |
 | `insufficient_credit`      | 402          |
 | `idempotency_key_conflict` | 409          |
-| `tier_update_cooldown`     | 429          |
+| `tier_update_cooldown`     | 409          |
 | `rate_limit_exceeded`      | 429          |
 | `internal_error`           | 500          |
 
-Include `meta.requestId` (or `error.requestId`) when contacting Soundlink support.
+Include `meta.requestId` (or `error.requestId`) when contacting Soundlink support. On `402 insufficient_credit`, check `error.details` for `available` / `required` wallet amounts.
 
 ## API reference
 

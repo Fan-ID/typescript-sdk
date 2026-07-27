@@ -154,6 +154,8 @@ export class CampaignTiersResource {
    *
    * Maps to `PATCH /v1/campaigns/{campaignId}/tiers`. Requires `campaigns:write`.
    * Allocation percents across items must sum to 100.
+   * Use each tier's `tierId` from {@link CampaignTiersResource.get} as `targetingTierId`.
+   * Does not require an `Idempotency-Key` (unlike create / stop / budget).
    */
   update(
     campaignId: string,
