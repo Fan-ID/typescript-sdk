@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, type HttpHandler, type JsonBodyType } from 'msw';
 
 export const BASE_URL = 'https://api.getsoundlink.com';
 
@@ -6,7 +6,7 @@ export const TEST_API_KEY = 'sk_test_prefix_secret';
 
 export const REQUEST_ID = '550e8400-e29b-41d4-a716-446655440000';
 
-export function successEnvelope(data: unknown) {
+export function successEnvelope(data: unknown): HttpResponse<JsonBodyType> {
   return HttpResponse.json({
     data,
     meta: { requestId: REQUEST_ID },
@@ -18,7 +18,7 @@ export function errorEnvelope(
   message: string,
   status = 400,
   headers?: Record<string, string>,
-) {
+): HttpResponse<JsonBodyType> {
   return HttpResponse.json(
     {
       error: { code, message },
@@ -28,7 +28,7 @@ export function errorEnvelope(
   );
 }
 
-export const handlers = [
+export const handlers: HttpHandler[] = [
   http.get(`${BASE_URL}/v1/ping`, ({ request }) => {
     const apiKey = request.headers.get('x-api-key');
     if (!apiKey) {
