@@ -30,10 +30,22 @@ describe('Soundlink client', () => {
     expect(() => resolveClientOptions('sl_invalid_key')).toThrow(SoundlinkConfigError);
   });
 
-  it('sends x-api-key header on ping', async () => {
-    const soundlink = new Soundlink({ apiKey: TEST_API_KEY, baseUrl: BASE_URL });
+  it('sends Authorization Bearer header on ping', async () => {
+    let authorization: string | null = null;
+
+    const soundlink = new Soundlink({
+      apiKey: TEST_API_KEY,
+      baseUrl: BASE_URL,
+      fetch: async (input, init) => {
+        const headers = new Headers(init?.headers);
+        authorization = headers.get('Authorization');
+        return fetch(input, init);
+      },
+    });
+
     const { data, error, meta } = await soundlink.ping();
 
+    expect(authorization).toBe(`Bearer ${TEST_API_KEY}`);
     expect(error).toBeNull();
     expect(data).toEqual({ status: 'ok' });
     expect(meta?.requestId).toBeTruthy();

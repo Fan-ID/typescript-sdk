@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.0.0
+
+### Major Changes
+
+- [#SOU-6455](https://linear.app/getsoundlink/issue/SOU-6455) — **Breaking:** the SDK sends `Authorization: Bearer sk_...` instead of the deprecated `x-api-key` header. Constructor API is unchanged (`new Soundlink({ apiKey })`). Migrate by upgrading the package; no code changes required unless you were reading request headers in tests or proxies that expected `x-api-key`.
+
 ## 1.2.0
 
 ### Minor Changes

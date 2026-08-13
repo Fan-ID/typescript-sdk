@@ -449,7 +449,7 @@ export interface JsonlStream<T> extends AsyncIterable<T> {
 
 /** Options for {@link Soundlink} and {@link HttpClient}. */
 export interface SoundlinkClientOptions {
-  /** Soundlink API key (`sk_<prefix>_<secret>`). Sent as the `x-api-key` header. */
+  /** Soundlink API key (`sk_<prefix>_<secret>`). Sent as `Authorization: Bearer`. */
   apiKey: string;
   /** API base URL. Defaults to `https://api.getsoundlink.com`. */
   baseUrl?: string;

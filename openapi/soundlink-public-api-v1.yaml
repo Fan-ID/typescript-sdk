@@ -7,10 +7,19 @@ info:
 
     **Base URL:** `https://api.getsoundlink.com`
 
-    **Authentication:** `x-api-key` header using a `sk_*` API key created in the Soundlink app (Settings → Developer → API keys).
-    ```
-    x-api-key: sk_abc123_<token>
-    ```
+    **Authentication:** send a `sk_*` API key created in the Soundlink app (Settings → Developer → API keys) using one of:
+
+    1. **`Authorization: Bearer` (recommended)**:
+       ```
+       Authorization: Bearer sk_abc123_<token>
+       ```
+
+    2. **`x-api-key` header (deprecated, retiring 2026-08-17)** — migrate to Bearer above before then:
+       ```
+       x-api-key: sk_abc123_<token>
+       ```
+
+    Sending both headers returns `401 mixed_credentials`.
 
     All responses are wrapped in a standard envelope:
     ```json
@@ -25,6 +34,7 @@ servers:
 
 security:
   - apiKeyAuth: []
+  - apiKeyBearerAuth: []
 
 tags:
   - name: System
@@ -48,6 +58,7 @@ paths:
       tags: [System]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       responses:
         '200':
           description: Authenticated and reachable
@@ -88,6 +99,7 @@ paths:
       tags: [Campaigns]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       x-required-scope: campaigns:read
       responses:
         '200':
@@ -124,6 +136,7 @@ paths:
       tags: [Campaigns]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize100'
@@ -180,6 +193,7 @@ paths:
       tags: [Campaigns]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       x-required-scope: campaigns:write
       parameters:
         - $ref: '#/components/parameters/idempotencyKey'
@@ -273,6 +287,7 @@ paths:
       tags: [Campaigns]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
       responses:
@@ -320,6 +335,7 @@ paths:
       x-required-scope: campaigns:write
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/idempotencyKey'
@@ -365,6 +381,7 @@ paths:
       x-required-scope: campaigns:write
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/idempotencyKey'
@@ -437,6 +454,7 @@ paths:
       x-required-scope: campaigns:write
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/idempotencyKey'
@@ -487,6 +505,7 @@ paths:
       x-required-scope: campaigns:read
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
       responses:
@@ -537,6 +556,7 @@ paths:
       x-required-scope: campaigns:write
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
       requestBody:
@@ -601,6 +621,7 @@ paths:
       tags: [Metrics]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -659,6 +680,7 @@ paths:
       tags: [Metrics]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -761,6 +783,7 @@ paths:
       tags: [Metrics]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -830,6 +853,7 @@ paths:
       tags: [Metrics]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -862,7 +886,7 @@ paths:
                 $ref: '#/components/schemas/EngagementRow'
               example: |
                 {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112cc9a","schema_version":"1.0","report_date":"2026-04-08","report_date_timezone":"UTC","exported_at":"2026-05-22T10:12:11Z","campaign_id":"8ccd7b88-2591-4b94-848f-f142f5c6bba1","campaign_name":"9 To 5","campaign_target_type":"track","campaign_target_isrc":"DEXW62500272","campaign_target_spotify_track_id":"2RkZ5WPkKyBf0u8vN3dNgb","campaign_target_playlist_id":null,"status":"ended","engagement_context":"catalog","country_code":"US","engaged_track_isrc":"DEXW62500001","engaged_spotify_track_id":"4cOdK2wGLETKBW3PvgPWqT","engaged_track_name":"Till The Sunrise","playlist_position":null,"new_listeners":42,"returning_listeners":18,"listeners":60,"new_listener_streams":58,"returning_listener_streams":31,"streams":89,"spl":1.48}
-                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112cc9a","schema_version":"1.0","report_date":"2026-04-08","report_date_timezone":"UTC","exported_at":"2026-05-22T10:12:11Z","campaign_id":"8ccd7b88-2591-4b94-848f-f142f5c6bba1","campaign_name":"9 To 5","campaign_target_type":"track","campaign_target_isrc":"DEXW62500272","campaign_target_spotify_track_id":"2RkZ5WPkKyBf0u8vN3dNgb","campaign_target_playlist_id":null,"status":"ended","engagement_context":"catalog","country_code":"DE","engaged_track_isrc":"DEXW62500001","engaged_spotify_track_id":"4cOdK2wGLETKBW3PvgPWqT","engaged_track_name":"Till The Sunrise","playlist_position":14,"new_listeners":19,"returning_listeners":7,"listeners":26,"new_listener_streams":24,"returning_listener_streams":11,"streams":35,"spl":1.35}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-08","report_date_timezone":"UTC","exported_at":"2026-05-22T10:12:11Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"playlist","campaign_target_isrc":null,"campaign_target_spotify_track_id":null,"campaign_target_playlist_id":"37i9dQZF1DXcBWIGoYBM5M","status":"active","engagement_context":"playlist","country_code":"DE","engaged_track_isrc":"DEXW62500001","engaged_spotify_track_id":"4cOdK2wGLETKBW3PvgPWqT","engaged_track_name":"Till The Sunrise","playlist_position":14,"new_listeners":19,"returning_listeners":7,"listeners":26,"new_listener_streams":24,"returning_listener_streams":11,"streams":35,"spl":1.35}
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -888,6 +912,7 @@ paths:
       tags: [Videos]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       x-required-scope: videos:write
       requestBody:
         required: true
@@ -926,6 +951,7 @@ paths:
       tags: [Videos]
       security:
         - apiKeyAuth: []
+        - apiKeyBearerAuth: []
       x-required-scope: videos:write
       parameters:
         - name: sessionId
@@ -957,6 +983,17 @@ components:
       description: |
         Pass your Soundlink `sk_*` API key in the `x-api-key` header.
         Keys can carry explicit scopes (for example `campaigns:read`, `metrics:read`, `videos:write`) enforced by the backend.
+
+        **Deprecated, retiring 2026-08-17** — migrate to `Authorization: Bearer sk_...` (see `apiKeyBearerAuth`) before then.
+
+    apiKeyBearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Pass your Soundlink `sk_*` API key as a Bearer token:
+        `Authorization: Bearer sk_<prefix>_<token>`. Verified with the exact
+        same key as `apiKeyAuth` — just the recommended header for the same
+        `sk_*` credential. Do not combine with `x-api-key`.
 
   parameters:
     campaignId:
@@ -2014,9 +2051,11 @@ components:
           nullable: true
           minimum: 1
           description: |
-            1-based slot index of the engaged track in the promoted playlist on `report_date`.
-            Populated for `engagement_context = playlist` when playlist snapshot data is available.
-            `null` for catalog rows and until position data is delivered (reserved for future delivery in v1.0).
+            1-based slot of the engaged track on the promoted playlist for `report_date` (1 = top).
+            Populated only when `engagement_context = playlist` and that day's playlist crawl listed the track.
+            `null` for catalog rows; before the day's crawl completes (current UTC day is often null until later morning UTC);
+            when the track was not listed or could not be matched to that day's crawl; or while historical backfill is still catching up.
+            Field is beta until historical backfill finishes. Treat `null` as unavailable — not an error.
         new_listeners:
           type: integer
           minimum: 0
@@ -2180,7 +2219,7 @@ components:
               value:
                 error:
                   code: invalid_api_key
-                  message: 'Missing or malformed x-api-key header.'
+                  message: 'Missing or malformed API key. Expected: sk_<prefix>_<token> (sent via x-api-key or Authorization: Bearer).'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
             api_key_revoked:
