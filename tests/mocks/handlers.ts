@@ -30,8 +30,8 @@ export function errorEnvelope(
 
 export const handlers: HttpHandler[] = [
   http.get(`${BASE_URL}/v1/ping`, ({ request }) => {
-    const apiKey = request.headers.get('x-api-key');
-    if (!apiKey) {
+    const authorization = request.headers.get('Authorization');
+    if (!authorization?.startsWith('Bearer sk_')) {
       return errorEnvelope('invalid_api_key', 'Missing API key.', 401);
     }
     return successEnvelope({ status: 'ok' });

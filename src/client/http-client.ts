@@ -207,7 +207,7 @@ export class HttpClient {
 
   private buildHeaders(extra: Record<string, string> = {}): Record<string, string> {
     return {
-      'x-api-key': this.options.apiKey,
+      Authorization: `Bearer ${this.options.apiKey}`,
       Accept: 'application/json',
       ...extra,
     };

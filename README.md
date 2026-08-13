@@ -8,7 +8,7 @@ Official TypeScript SDK for the [Soundlink Public API](https://docs.getsoundlink
 npm install soundlink
 ```
 
-> **Version note:** `1.0.0` on npm was an empty placeholder. Use **`>=1.1.0`** for the SDK. Write surface (create / budget / stop / tiers) ships in **`1.2.0`**.
+> **Version note:** `2.x` is the current line. `1.x` sent the deprecated `x-api-key` header — upgrade to `2.0.0+` for `Authorization: Bearer`. Write surface (create / budget / stop / tiers) shipped in `1.2.0` and remains in `2.x`.
 
 Requires **Node.js 18+** (native `fetch`). Works in Edge Runtime when `fetch` is available.
 
@@ -40,9 +40,9 @@ const soundlink = new Soundlink('sk_your_prefix_your_secret');
 ## Authentication
 
 Pass your Soundlink API key (`sk_<prefix>_<secret>`) via the client constructor.
-The SDK sends it in the `x-api-key` header on every request.
+The SDK sends it as `Authorization: Bearer sk_...` on every request.
 
-Your organization is determined from the key. Do not send Firebase Bearer tokens on the Public API host.
+Your organization is determined from the key. Do not send Firebase ID tokens on the Public API host.
 
 Write methods require the `campaigns:write` scope and an `Idempotency-Key` (passed as `idempotencyKey` on the method options).
 
