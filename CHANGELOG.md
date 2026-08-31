@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.1.0
+
+### Minor Changes
+
+- [#11](https://github.com/Fan-ID/lib/pull/11) [`9429f58`](https://github.com/Fan-ID/lib/commit/9429f58799d8fcf4bb53701dec4d3c87dabf2e30) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add self-serve soundlinks API methods (`list`, `get`, `metricsOverview`, `metricsTimeseries`, `engagement`) with TypeScript types. Requires `soundlinks:read`.
+
 ## 2.0.0
 
 ### Major Changes
