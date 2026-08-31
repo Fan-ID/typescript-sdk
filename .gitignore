@@ -9,3 +9,9 @@ src/types/generated
 .env.production.local
 *.tsbuildinfo
 .DS_Store
+
+change_state_management.md
+pr_body.md
+pr_body*.md
+test.js
+scripts/index.ts

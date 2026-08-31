@@ -7,19 +7,43 @@ info:
 
     **Base URL:** `https://api.getsoundlink.com`
 
-    **Authentication:** send a `sk_*` API key created in the Soundlink app (Settings → Developer → API keys) using one of:
+    ## Authentication
 
-    1. **`Authorization: Bearer` (recommended)**:
+    Send `Authorization: Bearer` with one of:
+
+    1. **API key (recommended)** — a `sk_*` key from the Soundlink app
+       (Settings → Developer → API keys):
        ```
        Authorization: Bearer sk_abc123_<token>
        ```
 
-    2. **`x-api-key` header (deprecated, retiring 2026-08-17)** — migrate to Bearer above before then:
+    2. **OAuth Bearer** — an access token from Sign in with Soundlink
+       (authorization code or client credentials). Token scopes use the
+       same strings as Public API key scopes (for example `campaigns:read`,
+       `metrics:read`):
        ```
-       x-api-key: sk_abc123_<token>
+       Authorization: Bearer <oauth_access_token>
        ```
 
-    Sending both headers returns `401 mixed_credentials`.
+    `x-api-key` is no longer accepted and is ignored if sent. Requests
+    without `Authorization: Bearer` return `401 invalid_api_key` (or
+    `401 invalid_token` when a Bearer value is present but neither a
+    recognized `sk_*` key nor a valid OAuth access token).
+
+    ### Which operations accept OAuth?
+
+    | Operations | Required scope | Auth |
+    | --- | --- | --- |
+    | `GET /v1/ping` | any granted Public API scope | API key (Bearer) or OAuth Bearer |
+    | Campaign reads (`GET /v1/strategies`, `GET /v1/campaigns`, campaign detail, tiers) | `campaigns:read` | API key (Bearer) or OAuth Bearer |
+    | Metrics reads (overview, breakdown, exports) | `metrics:read` | API key (Bearer) or OAuth Bearer |
+    | Campaign writes (create, stop, budget, tier updates) | `campaigns:write` | API key (Bearer) or OAuth Bearer |
+    | Video import / import status | `videos:write` | API key (Bearer) or OAuth Bearer |
+    | Soundlink reads (list, detail, metrics overview/timeseries/engagement) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
+
+    Per-operation scope requirements are also marked with `x-required-scope`
+    (except `GET /v1/ping`, which accepts any valid credential with at least
+    one Public API scope granted to the key/token).
 
     All responses are wrapped in a standard envelope:
     ```json
@@ -33,8 +57,8 @@ servers:
     description: Production
 
 security:
-  - apiKeyAuth: []
   - apiKeyBearerAuth: []
+  - oauthBearer: []
 
 tags:
   - name: System
@@ -45,6 +69,8 @@ tags:
     description: Campaign performance metrics
   - name: Videos
     description: Partner video library import for Full Control campaigns
+  - name: Soundlinks
+    description: Soundlink listing, detail, and performance metrics
 
 paths:
   /v1/ping:
@@ -53,12 +79,13 @@ paths:
       summary: Verify connectivity and authentication
       description: |
         Returns `{ "status": "ok" }` if the request is authenticated and the
-        API is reachable. Useful for verifying a newly issued key before making
-        data requests.
+        API is reachable. Useful for verifying a newly issued API key or OAuth
+        access token before making data requests. Accepts either credential;
+        no specific scope is required beyond a valid key/token.
       tags: [System]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       responses:
         '200':
           description: Authenticated and reachable
@@ -95,11 +122,11 @@ paths:
         `POST /v1/campaigns`. Built-in strategies apply platform default
         tiering internally; only `custom` allows `tierTargeting` on create.
 
-        Requires the `campaigns:read` scope.
+        Requires the `campaigns:read` scope. Accepts API key or OAuth Bearer.
       tags: [Campaigns]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       x-required-scope: campaigns:read
       responses:
         '200':
@@ -133,10 +160,13 @@ paths:
       description: |
         Returns all campaigns for the authenticated organization.
         Intended for reporting and data warehouse sync.
+
+        Requires the `campaigns:read` scope. Accepts API key or OAuth Bearer.
       tags: [Campaigns]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: campaigns:read
       parameters:
         - $ref: '#/components/parameters/page'
         - $ref: '#/components/parameters/pageSize100'
@@ -190,10 +220,12 @@ paths:
         deducted from the wallet balance), so the `Idempotency-Key` header
         is **required** on every request. See the header description below
         for retry semantics.
+
+        **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
       tags: [Campaigns]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       x-required-scope: campaigns:write
       parameters:
         - $ref: '#/components/parameters/idempotencyKey'
@@ -283,11 +315,15 @@ paths:
     get:
       operationId: getCampaign
       summary: Get campaign
-      description: Fetch full details for a single campaign.
+      description: |
+        Fetch full details for a single campaign.
+
+        Requires the `campaigns:read` scope. Accepts API key or OAuth Bearer.
       tags: [Campaigns]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: campaigns:read
       parameters:
         - $ref: '#/components/parameters/campaignId'
       responses:
@@ -331,11 +367,13 @@ paths:
         already-stopped campaign succeeds without double-refunding. The
         `Idempotency-Key` header is also **required** so retries of the same
         request replay the original response without repeating side effects.
+
+        **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
       tags: [Campaigns]
       x-required-scope: campaigns:write
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/idempotencyKey'
@@ -377,11 +415,13 @@ paths:
         - `current_and_renewals` — applies to the current cycle and future renewals
 
         Debits the organization wallet when the current cycle is increased.
+
+        **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
       tags: [Campaigns]
       x-required-scope: campaigns:write
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/idempotencyKey'
@@ -450,11 +490,13 @@ paths:
         - `targetDailyBudget` must be at least `$10`/day and lower than the
           current daily budget
         - more than 3 days must remain in the current cycle
+
+        **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
       tags: [Campaigns]
       x-required-scope: campaigns:write
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/idempotencyKey'
@@ -501,11 +543,13 @@ paths:
         updated (`lastUpdate`). Use this before `PATCH` to build a valid request.
 
         **Wallet campaigns only** (`generation: 3`).
+
+        Requires the `campaigns:read` scope. Accepts API key or OAuth Bearer.
       tags: [Campaigns]
       x-required-scope: campaigns:read
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
       responses:
@@ -552,11 +596,13 @@ paths:
 
         **Cooldown:** after a successful update, further tier changes are
         blocked for **72 hours** (`409 tier_update_cooldown`).
+
+        **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
       tags: [Campaigns]
       x-required-scope: campaigns:write
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       parameters:
         - $ref: '#/components/parameters/campaignId'
       requestBody:
@@ -618,10 +664,13 @@ paths:
         `/metrics/breakdown` for those.
 
         Suitable for dashboards and quick syncs.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
       tags: [Metrics]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -677,10 +726,13 @@ paths:
 
         Maps to the **Countries** tab in the Soundlink Insights UI.
         Use for daily warehouse loads.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
       tags: [Metrics]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -780,10 +832,13 @@ paths:
         to 7 days after the date closes due to delayed events from Meta and
         Spotify. Re-fetching and re-ingesting on the primary key is safe
         (idempotent).
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
       tags: [Metrics]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -850,10 +905,13 @@ paths:
         **Mutability:** rows for a given `report_date` can be revised for up to
         7 days after the date closes. Re-fetching and re-ingesting on the
         primary key is safe (idempotent).
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
       tags: [Metrics]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
       parameters:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
@@ -894,25 +952,336 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/soundlinks:
+    get:
+      operationId: listSoundlinks
+      summary: List soundlinks
+      description: |
+        Returns the organization's self-serve soundlinks. Soundlinks linked
+        to a campaign are the campaign's underlying resource and are served
+        by the Campaigns endpoints instead.
+
+        Soundlink schemas contain no financial fields: ads for self-serve
+        soundlinks run in your own Meta account, so spend is not visible to
+        Soundlink.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize100'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [createdAt]
+            default: createdAt
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated list of soundlinks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkListResponse'
+              example:
+                data:
+                  items:
+                    - soundlinkId: V1StGXR8_Z5jdHi6B-myT
+                      organizationId: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                      name: Midnight Drive
+                      url: https://sndl.ink/soundlink/V1StGXR8_Z5jdHi6B-myT
+                      targetType: track
+                      spotifyUrl: https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
+                      status: active
+                      createdAt: '2026-04-01T10:00:00Z'
+                  pagination:
+                    page: 1
+                    pageSize: 10
+                    totalCount: 42
+                    totalPages: 5
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}:
+    get:
+      operationId: getSoundlink
+      summary: Get soundlink
+      description: |
+        Fetch details for a single self-serve soundlink. Soundlinks linked
+        to a campaign are not addressable here and return `404`.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+      responses:
+        '200':
+          description: Soundlink detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkDetailResponse'
+              example:
+                data:
+                  soundlinkId: V1StGXR8_Z5jdHi6B-myT
+                  organizationId: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                  name: Midnight Drive
+                  url: https://sndl.ink/soundlink/V1StGXR8_Z5jdHi6B-myT
+                  targetType: track
+                  spotifyUrl: https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
+                  status: active
+                  createdAt: '2026-04-01T10:00:00Z'
+                  autoFollow: true
+                  metaPixelId: '1234567890123456'
+                  tiktokPixelId: null
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/metrics/overview:
+    get:
+      operationId: getSoundlinkMetricsOverview
+      summary: Soundlink metrics overview
+      description: |
+        Soundlink-level totals for a date range: landing page views, outbound
+        clicks, listeners (with new/returning splits), streams, followers, and
+        derived ratios. No per-day rows — use `/metrics/timeseries` for those.
+
+        Maps to the **Overview** tab in the Soundlink Insights UI.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/soundlinkStartDate'
+        - $ref: '#/components/parameters/soundlinkEndDate'
+      responses:
+        '200':
+          description: Soundlink totals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkMetricsOverviewResponse'
+              example:
+                data:
+                  views: 4821
+                  link_clicks: 890
+                  streams: 9340
+                  listeners: 4821
+                  new_listeners: 3980
+                  returning_listeners: 841
+                  new_listener_streams: 7104
+                  returning_listener_streams: 2236
+                  followers: 312
+                  streams_per_listener: 1.94
+                  ctr_lp: 0.185
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/metrics/timeseries:
+    get:
+      operationId: getSoundlinkMetricsTimeseries
+      summary: Soundlink metrics timeseries
+      description: |
+        Per-day metrics for a soundlink. One row per `report_date`. Results
+        are paginated.
+
+        **Row schema:** `soundlink_daily` v1.0. Rows are idempotent on the
+        primary key `(provider, account_id, report_date, soundlink_id)`;
+        re-ingesting is safe.
+
+        **Mutability window:** rows for a given `report_date` can be revised
+        for up to 7 days after the date closes due to delayed Spotify playback
+        events. Re-fetch or re-ingest accordingly.
+
+        Rows are aggregated across countries (no `country_code` in v1.0) and
+        contain no financial fields.
+
+        Maps to the **Trends** tab in the Soundlink Insights UI.
+        Use for daily warehouse loads.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/soundlinkStartDate'
+        - $ref: '#/components/parameters/soundlinkEndDate'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize500'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [report_date]
+            default: report_date
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated per-day rows (`soundlink_daily` schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkTimeseriesResponse'
+              example:
+                data:
+                  schemaVersion: '1.0'
+                  items:
+                    - provider: soundlink
+                      account_id: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                      schema_version: '1.0'
+                      report_date: '2026-08-01'
+                      report_date_timezone: UTC
+                      exported_at: '2026-08-28T03:00:00Z'
+                      soundlink_id: V1StGXR8_Z5jdHi6B-myT
+                      soundlink_name: Midnight Drive
+                      soundlink_target_type: track
+                      soundlink_target_isrc: DEXW62500259
+                      soundlink_target_spotify_track_id: 11dFghVXANMlKmJXsNCbNl
+                      soundlink_target_playlist_id: null
+                      views: 4821
+                      link_clicks: 890
+                      streams: 203
+                      listeners: 145
+                      new_listeners: 120
+                      returning_listeners: 25
+                      new_listener_streams: 160
+                      returning_listener_streams: 43
+                      followers: 12
+                      streams_per_listener: 1.4
+                      ctr_lp: 0.185
+                  pagination:
+                    page: 1
+                    pageSize: 50
+                    totalCount: 90
+                    totalPages: 2
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/metrics/engagement:
+    get:
+      operationId: getSoundlinkEngagement
+      summary: Soundlink engagement (top tracks)
+      description: |
+        Top tracks for a soundlink, aggregated over the requested date range.
+        One item per track, sorted by streams by default. Results are
+        paginated.
+
+        Returns period totals per track (not daily rows). Maps to the top
+        tracks section of the **Overview** tab in the Soundlink Insights UI.
+        `startDate`/`endDate` snap to the same Insights windows: yesterday,
+        last 7 days (inclusive span ending today), or all-time. Omitting
+        `startDate` always uses all-time (it is not inferred from createdAt).
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/soundlinkEngagementStartDate'
+        - $ref: '#/components/parameters/soundlinkEndDate'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize100'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [totalStreams, totalListeners]
+            default: totalStreams
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated aggregated top tracks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkEngagementResponse'
+              example:
+                data:
+                  items:
+                    - trackId: 11dFghVXANMlKmJXsNCbNl
+                      trackName: Midnight Drive
+                      totalStreams: 892
+                      totalListeners: 603
+                      streamsPerListener: 1.48
+                    - trackId: 4cOdK2wGLETKBW3PvgPWqT
+                      trackName: Till The Sunrise
+                      totalStreams: 411
+                      totalListeners: 322
+                      streamsPerListener: 1.28
+                  pagination:
+                    page: 1
+                    pageSize: 10
+                    totalCount: 24
+                    totalPages: 3
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/videos/import:
     post:
       operationId: importVideo
-      summary: Import a video from a public HTTPS MP4 URL
+      summary: Import video(s) from public HTTPS MP4 URL(s)
       description: |
-        Downloads a single public HTTPS MP4, stages it for ingestion, and starts
-        the background video pipeline. Returns `202` while processing, or `200`
-        with `videoId` immediately when the organization already has the same video
-        (content duplicate).
+        Accepts a single `url` or a `videos` array (1–5 items). Creates one upload
+        session, enqueues async download/staging, and returns `202` with `sessionId`.
 
-        Requires the `videos:write` scope. Subject to a stricter per-key rate limit
-        than generic public API routes (default 5 imports per hour per API key).
+        Requires the `videos:write` scope. Subject to a stricter per-credential rate
+        limit than generic public API routes (default 20 imports per hour per API key
+        or OAuth grant). This caps how many import requests are accepted per hour,
+        not how long ingestion takes.
 
-        Poll `GET /v1/videos/import/{sessionId}` until `status` is `ready` or `failed`.
-        Use the returned `videoId` in Full Control campaign `creativeDirection.selectedCreatives`.
+        Poll `GET /v1/videos/import/{sessionId}` until `status` is `ready`, `partial`,
+        or `failed`. For single-URL imports, use `videoId` when ready. For batches
+        (`count > 1`), use `videoIds`.
       tags: [Videos]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       x-required-scope: videos:write
       requestBody:
         required: true
@@ -920,11 +1289,20 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/VideoImportRequest'
-            example:
-              url: 'https://cdn.example.com/promo.mp4'
+            examples:
+              single:
+                summary: Single URL (legacy)
+                value:
+                  url: 'https://cdn.example.com/promo.mp4'
+              batch:
+                summary: Batch of URLs
+                value:
+                  videos:
+                    - url: 'https://cdn.example.com/a.mp4'
+                    - url: 'https://cdn.example.com/b.mp4'
       responses:
         '200':
-          description: Duplicate video already in the organization's library
+          description: Duplicate video already in the organization's library (sync legacy path only)
           content:
             application/json:
               schema:
@@ -946,12 +1324,13 @@ paths:
       operationId: getVideoImportStatus
       summary: Get video import session status
       description: |
-        Returns processing status and the resulting `videoId` when ingestion completes.
+        Returns processing status. For single-URL sessions, includes `videoId` when ready.
+        For batch sessions (`count > 1`), includes `videoIds` and `counts`.
         Requires the `videos:write` scope.
       tags: [Videos]
       security:
-        - apiKeyAuth: []
         - apiKeyBearerAuth: []
+        - oauthBearer: []
       x-required-scope: videos:write
       parameters:
         - name: sessionId
@@ -976,24 +1355,25 @@ paths:
 
 components:
   securitySchemes:
-    apiKeyAuth:
-      type: apiKey
-      in: header
-      name: x-api-key
-      description: |
-        Pass your Soundlink `sk_*` API key in the `x-api-key` header.
-        Keys can carry explicit scopes (for example `campaigns:read`, `metrics:read`, `videos:write`) enforced by the backend.
-
-        **Deprecated, retiring 2026-08-17** — migrate to `Authorization: Bearer sk_...` (see `apiKeyBearerAuth`) before then.
-
     apiKeyBearerAuth:
       type: http
       scheme: bearer
       description: |
         Pass your Soundlink `sk_*` API key as a Bearer token:
-        `Authorization: Bearer sk_<prefix>_<token>`. Verified with the exact
-        same key as `apiKeyAuth` — just the recommended header for the same
-        `sk_*` credential. Do not combine with `x-api-key`.
+        `Authorization: Bearer sk_<prefix>_<token>` (not an OAuth token; see
+        `oauthBearer` for that). Accepted on all Public API operations. Send
+        only one `Authorization` header per request.
+
+    oauthBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        OAuth 2.0 access token from Sign in with Soundlink
+        (`Authorization: Bearer <oauth_access_token>`).
+        Token scopes must include the operation's required scope
+        (see `x-required-scope` and the Authentication section).
+        Accepted on all Public API operations (reads and writes).
 
   parameters:
     campaignId:
@@ -1074,6 +1454,44 @@ components:
         format: date
       description: Inclusive end date (`YYYY-MM-DD`). Defaults to today.
 
+    soundlinkId:
+      name: soundlinkId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Soundlink identifier (URL-safe string, same ID used in the public sndl.ink URL)
+
+    soundlinkStartDate:
+      name: startDate
+      in: query
+      schema:
+        type: string
+        format: date
+      description: |
+        Inclusive start date (`YYYY-MM-DD`) for soundlink overview and
+        timeseries. Defaults to the soundlink creation date when omitted.
+
+    soundlinkEngagementStartDate:
+      name: startDate
+      in: query
+      schema:
+        type: string
+        format: date
+      description: |
+        Inclusive start date (`YYYY-MM-DD`) for soundlink engagement
+        (top tracks). Omit for all-time (not createdAt). When set, snaps
+        to Insights windows (yesterday / last 7 days ending today /
+        all-time); other ranges resolve to all-time.
+
+    soundlinkEndDate:
+      name: endDate
+      in: query
+      schema:
+        type: string
+        format: date
+      description: Inclusive end date (`YYYY-MM-DD`). Defaults to today.
+
   schemas:
     # --- Shared ---
 
@@ -1110,8 +1528,9 @@ components:
             - invalid_api_key
             - api_key_revoked
             - api_key_expired
-            - mixed_credentials
+            - invalid_token
             - insufficient_scope
+            - access_denied
             - not_found
             - campaign_not_found
             - invalid_query_parameter
@@ -2088,20 +2507,389 @@ components:
           type: number
           description: Streams per listener (`streams / listeners`). Zero if `listeners` is zero.
 
+    # --- Soundlinks ---
+
+    SoundlinkStatus:
+      type: string
+      enum: [draft, active, archived]
+
+    SoundlinkSummary:
+      type: object
+      required: [soundlinkId, organizationId, name, url, targetType, status, createdAt]
+      properties:
+        soundlinkId:
+          type: string
+          description: |
+            Unique ID of this soundlink (URL-safe string, same ID used in the
+            public sndl.ink URL).
+          example: V1StGXR8_Z5jdHi6B-myT
+        organizationId:
+          type: string
+          description: Soundlink organization ID (UUID).
+        name:
+          type: string
+          description: Human-readable soundlink name.
+        url:
+          type: string
+          format: uri
+          description: Public soundlink landing page URL.
+          example: https://sndl.ink/soundlink/V1StGXR8_Z5jdHi6B-myT
+        targetType:
+          type: string
+          nullable: true
+          enum: [track, album, playlist]
+          description: |
+            Type of Spotify resource this soundlink promotes. `null` if the
+            target could not be determined.
+        spotifyUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Spotify URL of the promoted resource.
+        status:
+          $ref: '#/components/schemas/SoundlinkStatus'
+        createdAt:
+          type: string
+          format: date-time
+
+    SoundlinkListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items, pagination]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SoundlinkSummary'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SoundlinkDetail:
+      allOf:
+        - $ref: '#/components/schemas/SoundlinkSummary'
+        - type: object
+          required: [autoFollow, metaPixelId, tiktokPixelId]
+          properties:
+            autoFollow:
+              type: boolean
+              description: |
+                Whether auto-follow is configured for this soundlink. Whether
+                it takes effect also depends on the organization's plan.
+            metaPixelId:
+              type: string
+              nullable: true
+              description: Meta pixel ID configured on this soundlink. `null` if not set.
+            tiktokPixelId:
+              type: string
+              nullable: true
+              description: TikTok pixel ID configured on this soundlink. `null` if not set.
+
+    SoundlinkDetailResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/SoundlinkDetail'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SoundlinkMetricsOverview:
+      type: object
+      description: Soundlink-level totals for the requested date range.
+      required: [views, streams, listeners, followers, streams_per_listener]
+      properties:
+        views:
+          type: integer
+          description: Soundlink landing page views in the period.
+        link_clicks:
+          type: integer
+          nullable: true
+          description: |
+            Clicks on "Continue with Spotify" on the landing page — outbound
+            clicks to Spotify. Null if not tracked for this soundlink type.
+        streams:
+          type: integer
+          description: Attributed Spotify streams (sum of daily rows).
+        listeners:
+          type: integer
+          description: Unique attributed Spotify listeners in the period.
+        new_listeners:
+          type: integer
+          nullable: true
+          description: Unique listeners whose first play via this soundlink occurred in the period.
+        returning_listeners:
+          type: integer
+          nullable: true
+          description: Unique listeners who played in the period but whose first play was earlier.
+        new_listener_streams:
+          type: integer
+          nullable: true
+          description: Stream count from new listeners in the period.
+        returning_listener_streams:
+          type: integer
+          nullable: true
+          description: Stream count from returning listeners in the period.
+        followers:
+          type: integer
+          description: Attributed Spotify artist follower gains in the period.
+        streams_per_listener:
+          type: number
+          description: streams / listeners. Zero if listeners is zero.
+        ctr_lp:
+          type: number
+          nullable: true
+          description: |
+            Landing page click-through rate (link_clicks / views). Computed
+            against landing page views, not ad impressions — do not combine
+            with `ctr_linkclick` from campaign metrics. Null if views is zero
+            or link_clicks is null.
+
+    SoundlinkMetricsOverviewResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/SoundlinkMetricsOverview'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SoundlinkDailyRow:
+      type: object
+      description: |
+        One row of the `soundlink_daily` v1.0 schema.
+        Primary key: `(provider, account_id, report_date, soundlink_id)`.
+        Rows are idempotent — re-ingesting on the primary key is safe.
+        Values for a given `report_date` may be revised for up to 7 days after
+        the date closes due to delayed Spotify playback events.
+        Rows are aggregated across countries (no `country_code` in v1.0) and
+        contain no financial fields.
+      required:
+        - provider
+        - account_id
+        - schema_version
+        - report_date
+        - report_date_timezone
+        - exported_at
+        - soundlink_id
+        - soundlink_name
+        - soundlink_target_type
+        - views
+        - streams
+        - listeners
+        - followers
+        - streams_per_listener
+      properties:
+        provider:
+          type: string
+          enum: [soundlink]
+          description: Always `soundlink`. Identifies the data provider for multi-source warehouses.
+        account_id:
+          type: string
+          description: Soundlink organization ID (UUID).
+        schema_version:
+          type: string
+          description: Schema version. Pin your ingest pipeline to this value.
+          example: '1.0'
+        report_date:
+          type: string
+          format: date
+          description: UTC calendar date the metrics belong to (`YYYY-MM-DD`).
+        report_date_timezone:
+          type: string
+          enum: [UTC]
+          description: Always `UTC`.
+        exported_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp when this row was generated. Use for deduplication if the same `report_date` is re-delivered.
+        soundlink_id:
+          type: string
+          description: Unique ID of this soundlink.
+          example: V1StGXR8_Z5jdHi6B-myT
+        soundlink_name:
+          type: string
+          description: Human-readable soundlink name.
+        soundlink_target_type:
+          type: string
+          nullable: true
+          enum: [track, playlist]
+          description: Whether this soundlink promotes a track or playlist. `null` if undetermined.
+        soundlink_target_isrc:
+          type: string
+          nullable: true
+          description: ISRC of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
+        soundlink_target_spotify_track_id:
+          type: string
+          nullable: true
+          description: Spotify track ID of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
+        soundlink_target_playlist_id:
+          type: string
+          nullable: true
+          description: Spotify playlist ID. Populated when `soundlink_target_type = playlist`; otherwise `null`.
+        views:
+          type: integer
+          description: Soundlink landing page views on this day.
+        link_clicks:
+          type: integer
+          nullable: true
+          description: |
+            Clicks on "Continue with Spotify" on the landing page — outbound
+            clicks to Spotify. Null if not tracked for this soundlink type.
+        streams:
+          type: integer
+          description: |
+            Spotify streams attributed to this soundlink on this day:
+            `new_listener_streams + returning_listener_streams`. Observed
+            Spotify-side events, not modelled estimates. Safe to sum within a
+            day; summing across days counts repeat listens.
+        listeners:
+          type: integer
+          description: |
+            Unique Spotify listeners attributed to this soundlink on this day:
+            `new_listeners + returning_listeners`. **Do not sum across days** —
+            the same listener can appear on multiple `report_date` rows.
+        new_listeners:
+          type: integer
+          nullable: true
+          description: Unique listeners whose first play via this soundlink occurred on `report_date`.
+        returning_listeners:
+          type: integer
+          nullable: true
+          description: Unique listeners who played on `report_date` but whose first play was on an earlier date.
+        new_listener_streams:
+          type: integer
+          nullable: true
+          description: Stream count from new listeners on `report_date`.
+        returning_listener_streams:
+          type: integer
+          nullable: true
+          description: Stream count from returning listeners on `report_date`.
+        followers:
+          type: integer
+          description: Spotify artist follower gains attributed to this soundlink on this day.
+        streams_per_listener:
+          type: number
+          description: streams / listeners for this row. Zero if listeners is zero.
+        ctr_lp:
+          type: number
+          nullable: true
+          description: |
+            Landing page click-through rate (link_clicks / views). Computed
+            against landing page views, not ad impressions — do not combine
+            with `ctr_linkclick` from `campaign_country_daily`. Null if views
+            is zero or link_clicks is null.
+
+    SoundlinkTimeseriesResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [schemaVersion, items, pagination]
+          properties:
+            schemaVersion:
+              type: string
+              description: Version of the `soundlink_daily` row schema. Pin your ingest pipeline to this.
+              example: '1.0'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SoundlinkDailyRow'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SoundlinkEngagementItem:
+      type: object
+      description: |
+        One track aggregated over the requested date range (period totals,
+        not daily rows).
+      required: [trackId, trackName, totalStreams, totalListeners, streamsPerListener]
+      properties:
+        trackId:
+          type: string
+          description: Spotify track ID of the engaged track.
+          example: 4cOdK2wGLETKBW3PvgPWqT
+        trackName:
+          type: string
+          description: Display name of the engaged track.
+        totalStreams:
+          type: integer
+          minimum: 0
+          description: Total streams of this track in the period.
+        totalListeners:
+          type: integer
+          minimum: 0
+          description: Unique listeners of this track in the period.
+        streamsPerListener:
+          type: number
+          description: totalStreams / totalListeners. Zero if totalListeners is zero.
+
+    SoundlinkEngagementResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items, pagination]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SoundlinkEngagementItem'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     # --- Videos ---
 
     VideoImportRequest:
       type: object
-      required: [url]
+      description: |
+        Provide either `url` (single) or `videos` (batch of 1–5). Do not send both.
       properties:
         url:
           type: string
           format: uri
-          description: Public HTTPS URL to an MP4 file (max 50 MB).
+          description: Public HTTPS URL to an MP4 file (max 50 MB). Mutually exclusive with `videos`.
+        videos:
+          type: array
+          minItems: 1
+          maxItems: 5
+          description: Batch of video URLs. Mutually exclusive with `url`.
+          items:
+            type: object
+            required: [url]
+            properties:
+              url:
+                type: string
+                format: uri
+                description: Public HTTPS URL to an MP4 file (max 50 MB).
 
     VideoImportStatus:
       type: string
-      enum: [processing, ready, failed]
+      enum: [processing, ready, failed, partial]
+
+    VideoImportCounts:
+      type: object
+      required: [total, ready, failed]
+      properties:
+        total:
+          type: integer
+          description: Videos admitted in the session
+        ready:
+          type: integer
+          description: Ingested successfully
+        failed:
+          type: integer
+          description: Ingestion failures (download failures fail the whole session in this phase)
 
     VideoImportStartData:
       type: object
@@ -2113,6 +2901,9 @@ components:
           description: Upload session ID for status polling
         status:
           $ref: '#/components/schemas/VideoImportStatus'
+        count:
+          type: integer
+          description: Number of videos accepted for import
         videoId:
           type: string
           format: uuid
@@ -2141,11 +2932,40 @@ components:
           type: string
           format: uuid
           nullable: true
-          description: Background video ID when `status` is `ready`
+          description: Present for single-URL sessions when ready or failed after ingest
+        videoIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Ready video IDs for batch sessions (`count > 1`)
+        counts:
+          $ref: '#/components/schemas/VideoImportCounts'
         error:
-          type: string
+          allOf:
+            - $ref: '#/components/schemas/VideoImportStatusError'
           nullable: true
-          description: Failure reason when `status` is `failed`
+          description: Present when status is failed
+
+    VideoImportStatusError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - video_too_large
+            - invalid_video_content_type
+            - storage_limit_exceeded
+            - no_videos_imported
+            - duplicate_videos
+            - import_failed
+          description: >
+            Machine-readable failure code. Legacy sessions without a stored
+            code fall back to import_failed.
+        message:
+          type: string
+          description: Human-readable failure message
 
     VideoImportStatusResponse:
       type: object
@@ -2204,7 +3024,10 @@ components:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
     Unauthorized:
-      description: Missing, malformed, revoked, or expired API key
+      description: |
+        Missing or invalid credentials. Covers missing/malformed API keys,
+        invalid or expired OAuth access tokens, and revoked API keys.
+        `x-api-key` is not accepted and is ignored if sent.
       headers:
         Retry-After:
           schema:
@@ -2219,7 +3042,14 @@ components:
               value:
                 error:
                   code: invalid_api_key
-                  message: 'Missing or malformed API key. Expected: sk_<prefix>_<token> (sent via x-api-key or Authorization: Bearer).'
+                  message: 'Missing credentials. Send Authorization: Bearer.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            invalid_token:
+              value:
+                error:
+                  code: invalid_token
+                  message: 'OAuth access token is invalid or expired.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
             api_key_revoked:
@@ -2231,17 +3061,28 @@ components:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
     Forbidden:
-      description: Valid key but missing required scope
+      description: |
+        Authenticated but not allowed: missing required scope, or OAuth access
+        disabled for the organization (`access_denied`).
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
-          example:
-            error:
-              code: insufficient_scope
-              message: 'This key does not have the metrics:read scope.'
-            meta:
-              requestId: 550e8400-e29b-41d4-a716-446655440000
+          examples:
+            insufficient_scope:
+              value:
+                error:
+                  code: insufficient_scope
+                  message: 'This token does not have the metrics:read scope.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            access_denied:
+              value:
+                error:
+                  code: access_denied
+                  message: 'OAuth access is not enabled for this organization.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
 
     CreateCampaignForbidden:
       description: |

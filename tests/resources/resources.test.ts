@@ -275,3 +275,86 @@ describe('Metrics resource', () => {
     expect(rows).toHaveLength(1);
   });
 });
+
+describe('Soundlinks resource', () => {
+  let soundlink: Soundlink;
+
+  beforeEach(() => {
+    soundlink = new Soundlink({ apiKey: TEST_API_KEY, baseUrl: BASE_URL });
+  });
+
+  it('lists soundlinks with pagination', async () => {
+    const response = await soundlink.soundlinks.list({ page: 1, pageSize: 10 });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [{ soundlinkId: 'sl_abc123', status: 'active' }],
+        pagination: { totalCount: 1 },
+      },
+    });
+  });
+
+  it('gets a soundlink by id', async () => {
+    const response = await soundlink.soundlinks.get('sl_abc123');
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        soundlinkId: 'sl_abc123',
+        autoFollow: true,
+        metaPixelId: '1234567890123456',
+        tiktokPixelId: null,
+      },
+    });
+  });
+
+  it('returns not_found for a missing soundlink', async () => {
+    const response = await soundlink.soundlinks.get('missing');
+
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'not_found', status: 404 },
+    });
+  });
+
+  it('fetches soundlink metrics overview', async () => {
+    const response = await soundlink.soundlinks.metricsOverview('sl_abc123', {
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: { views: 4821, streams: 9340 },
+    });
+  });
+
+  it('fetches soundlink metrics timeseries', async () => {
+    const response = await soundlink.soundlinks.metricsTimeseries('sl_abc123', {
+      page: 1,
+      pageSize: 50,
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        schemaVersion: '1.0',
+        items: [{ soundlink_id: 'sl_abc123', report_date: '2026-08-01' }],
+      },
+    });
+  });
+
+  it('fetches soundlink engagement top tracks', async () => {
+    const response = await soundlink.soundlinks.engagement('sl_abc123', {
+      sortBy: 'totalStreams',
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [{ trackId: '11dFghVXANMlKmJXsNCbNl', totalStreams: 892 }],
+      },
+    });
+  });
+});
