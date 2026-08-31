@@ -255,8 +255,9 @@ const soundlink = new Soundlink({
 | `invalid_api_key`          | 401          |
 | `api_key_revoked`          | 401          |
 | `api_key_expired`          | 401          |
-| `mixed_credentials`        | 401          |
+| `invalid_token`            | 401          |
 | `insufficient_scope`       | 403          |
+| `access_denied`            | 403          |
 | `wallet_not_enabled`       | 403          |
 | `not_found`                | 404          |
 | `campaign_not_found`       | 404          |
