@@ -25,7 +25,6 @@ import type {
   IncreaseCampaignBudgetRequest,
   MetricsOverview,
   PingData,
-  SoundlinkDateRangeParams,
   SoundlinkDetail,
   SoundlinkEngagementData,
   SoundlinkEngagementParams,
@@ -408,7 +407,7 @@ export class SoundlinksResource {
    */
   metricsOverview(
     soundlinkId: string,
-    params: SoundlinkDateRangeParams = {},
+    params: DateRangeParams = {},
   ): Promise<ApiResponse<SoundlinkMetricsOverview>> {
     return this.http.get<SoundlinkMetricsOverview>({
       path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/overview`,

@@ -512,16 +512,8 @@ export interface DateRangeParams {
   endDate?: string;
 }
 
-/**
- * Date range for soundlink overview / timeseries.
- *
- * Omit `startDate` to default to the soundlink creation date (API).
- * Omit `endDate` to default to today.
- */
-export type SoundlinkDateRangeParams = DateRangeParams;
-
 /** Query params for {@link SoundlinksResource.metricsTimeseries}. */
-export interface SoundlinkTimeseriesParams extends SoundlinkDateRangeParams {
+export interface SoundlinkTimeseriesParams extends DateRangeParams {
   page?: number;
   /** Default: `50`. Max: **500**. */
   pageSize?: number;
@@ -538,7 +530,7 @@ export interface SoundlinkTimeseriesParams extends SoundlinkDateRangeParams {
  * ending today, or all-time). Arbitrary ranges resolve to all-time.
  * Omitting `startDate` always uses all-time (not createdAt).
  */
-export interface SoundlinkEngagementParams extends SoundlinkDateRangeParams {
+export interface SoundlinkEngagementParams extends DateRangeParams {
   page?: number;
   /** Default: `10`. Max: **100**. */
   pageSize?: number;

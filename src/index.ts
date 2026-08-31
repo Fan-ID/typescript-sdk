@@ -61,7 +61,6 @@ export type {
   SortOrder,
   SoundlinkClientOptions,
   SoundlinkDailyRow,
-  SoundlinkDateRangeParams,
   SoundlinkDetail,
   SoundlinkEngagementData,
   SoundlinkEngagementItem,

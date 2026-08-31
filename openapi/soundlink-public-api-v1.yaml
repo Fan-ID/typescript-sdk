@@ -1469,9 +1469,8 @@ components:
         type: string
         format: date
       description: |
-        Inclusive start date (`YYYY-MM-DD`) for overview and timeseries.
-        Defaults to the soundlink creation date. Not used by engagement —
-        that endpoint uses `soundlinkEngagementStartDate`.
+        Inclusive start date (`YYYY-MM-DD`) for soundlink overview and
+        timeseries. Defaults to the soundlink creation date when omitted.
 
     soundlinkEngagementStartDate:
       name: startDate
@@ -1480,11 +1479,10 @@ components:
         type: string
         format: date
       description: |
-        Inclusive start date (`YYYY-MM-DD`) for engagement (top tracks).
-        Dates snap to Insights windows only: yesterday, last 7 days
-        (inclusive span ending today), or all-time. Omitting `startDate`
-        always uses all-time — it is not inferred from createdAt.
-        Arbitrary ranges that do not match those windows resolve to all-time.
+        Inclusive start date (`YYYY-MM-DD`) for soundlink engagement
+        (top tracks). Omit for all-time (not createdAt). When set, snaps
+        to Insights windows (yesterday / last 7 days ending today /
+        all-time); other ranges resolve to all-time.
 
     soundlinkEndDate:
       name: endDate
