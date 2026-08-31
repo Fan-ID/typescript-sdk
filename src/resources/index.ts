@@ -25,6 +25,15 @@ import type {
   IncreaseCampaignBudgetRequest,
   MetricsOverview,
   PingData,
+  SoundlinkDateRangeParams,
+  SoundlinkDetail,
+  SoundlinkEngagementData,
+  SoundlinkEngagementParams,
+  SoundlinkListData,
+  SoundlinkListParams,
+  SoundlinkMetricsOverview,
+  SoundlinkTimeseriesData,
+  SoundlinkTimeseriesParams,
   StrategiesCatalogData,
   UpdateCampaignTiersRequest,
 } from '../types/api.js';
@@ -330,6 +339,140 @@ export class CampaignsResource {
       totalPages = response.data.pagination.totalPages;
       page += 1;
     }
+  }
+}
+
+/**
+ * Self-serve soundlinks (`/v1/soundlinks/*`). Requires `soundlinks:read`.
+ *
+ * Only soundlinks that are **not** linked to a campaign. Campaign-backed
+ * soundlinks are served by the Campaigns API.
+ *
+ * @example
+ * ```ts
+ * await soundlink.soundlinks.list();
+ * await soundlink.soundlinks.get(soundlinkId);
+ * await soundlink.soundlinks.metricsOverview(soundlinkId);
+ * ```
+ */
+export class SoundlinksResource {
+  constructor(private readonly http: HttpClient) {}
+
+  /**
+   * List self-serve soundlinks for the authenticated organization.
+   *
+   * Maps to `GET /v1/soundlinks`. Max `pageSize` is **100**. Requires `soundlinks:read`.
+   *
+   * @param params - Pagination and sort options.
+   *
+   * @example
+   * ```ts
+   * const { data, error } = await soundlink.soundlinks.list({ page: 1, pageSize: 100 });
+   * ```
+   */
+  list(params: SoundlinkListParams = {}): Promise<ApiResponse<SoundlinkListData>> {
+    return this.http.get<SoundlinkListData>({
+      path: '/soundlinks',
+      query: {
+        page: params.page,
+        pageSize: params.pageSize,
+        sortBy: params.sortBy,
+        sortOrder: params.sortOrder,
+      },
+    });
+  }
+
+  /**
+   * Fetch details for a single self-serve soundlink.
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}`. Requires `soundlinks:read`.
+   * Campaign-linked soundlinks return `404`.
+   *
+   * @param soundlinkId - Identifier returned by {@link SoundlinksResource.list}.
+   */
+  get(soundlinkId: string): Promise<ApiResponse<SoundlinkDetail>> {
+    return this.http.get<SoundlinkDetail>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}`,
+    });
+  }
+
+  /**
+   * Soundlink-level metric totals for a date range.
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/overview`.
+   * Omit `startDate` to default to the soundlink creation date.
+   * No financial fields. Requires `soundlinks:read`.
+   *
+   * @param soundlinkId - Soundlink identifier.
+   * @param params - Inclusive `YYYY-MM-DD` date range.
+   */
+  metricsOverview(
+    soundlinkId: string,
+    params: SoundlinkDateRangeParams = {},
+  ): Promise<ApiResponse<SoundlinkMetricsOverview>> {
+    return this.http.get<SoundlinkMetricsOverview>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/overview`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+      },
+    });
+  }
+
+  /**
+   * Per-day metrics for a soundlink (`soundlink_daily` schema).
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/timeseries`.
+   * Max `pageSize` is **500** (default 50). Requires `soundlinks:read`.
+   *
+   * @param soundlinkId - Soundlink identifier.
+   * @param params - Date range, pagination, and sort options.
+   */
+  metricsTimeseries(
+    soundlinkId: string,
+    params: SoundlinkTimeseriesParams = {},
+  ): Promise<ApiResponse<SoundlinkTimeseriesData>> {
+    return this.http.get<SoundlinkTimeseriesData>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/timeseries`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: params.page,
+        pageSize: params.pageSize,
+        sortBy: params.sortBy,
+        sortOrder: params.sortOrder,
+      },
+    });
+  }
+
+  /**
+   * Top tracks for a soundlink (period totals, not daily rows).
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/engagement`.
+   * Max `pageSize` is **100**. Requires `soundlinks:read`.
+   *
+   * Date ranges snap to Insights windows only: yesterday, last 7 days ending
+   * today, or all-time. Arbitrary ranges resolve to all-time. Omitting
+   * `startDate` always uses all-time (not createdAt).
+   *
+   * @param soundlinkId - Soundlink identifier.
+   * @param params - Date range, pagination, and sort options.
+   */
+  engagement(
+    soundlinkId: string,
+    params: SoundlinkEngagementParams = {},
+  ): Promise<ApiResponse<SoundlinkEngagementData>> {
+    return this.http.get<SoundlinkEngagementData>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/engagement`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: params.page,
+        pageSize: params.pageSize,
+        sortBy: params.sortBy,
+        sortOrder: params.sortOrder,
+      },
+    });
   }
 }
 

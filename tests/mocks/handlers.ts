@@ -310,4 +310,126 @@ export const handlers: HttpHandler[] = [
       },
     });
   }),
+
+  http.get(`${BASE_URL}/v1/soundlinks`, ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get('page') ?? '1');
+    const pageSize = Number(url.searchParams.get('pageSize') ?? '10');
+
+    return successEnvelope({
+      items: [
+        {
+          soundlinkId: 'sl_abc123',
+          organizationId: 'org_xyz',
+          name: 'Midnight Drive',
+          url: 'https://sndl.ink/soundlink/sl_abc123',
+          targetType: 'track',
+          spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+          status: 'active',
+          createdAt: '2026-04-01T10:00:00.000Z',
+        },
+      ],
+      pagination: {
+        page,
+        pageSize,
+        totalCount: 1,
+        totalPages: 1,
+      },
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId`, ({ params }) => {
+    if (params.soundlinkId === 'missing') {
+      return errorEnvelope('not_found', 'Soundlink not found.', 404);
+    }
+
+    return successEnvelope({
+      soundlinkId: String(params.soundlinkId),
+      organizationId: 'org_xyz',
+      name: 'Midnight Drive',
+      url: `https://sndl.ink/soundlink/${String(params.soundlinkId)}`,
+      targetType: 'track',
+      spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+      status: 'active',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      autoFollow: true,
+      metaPixelId: '1234567890123456',
+      tiktokPixelId: null,
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/overview`, () => {
+    return successEnvelope({
+      views: 4821,
+      link_clicks: 890,
+      streams: 9340,
+      listeners: 4821,
+      new_listeners: 3980,
+      returning_listeners: 841,
+      new_listener_streams: 7104,
+      returning_listener_streams: 2236,
+      followers: 312,
+      streams_per_listener: 1.94,
+      ctr_lp: 0.185,
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/timeseries`, () => {
+    return successEnvelope({
+      schemaVersion: '1.0',
+      items: [
+        {
+          provider: 'soundlink',
+          account_id: 'org_xyz',
+          schema_version: '1.0',
+          report_date: '2026-08-01',
+          report_date_timezone: 'UTC',
+          exported_at: '2026-08-28T03:00:00.000Z',
+          soundlink_id: 'sl_abc123',
+          soundlink_name: 'Midnight Drive',
+          soundlink_target_type: 'track',
+          soundlink_target_isrc: 'DEXW62500259',
+          soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+          soundlink_target_playlist_id: null,
+          views: 4821,
+          link_clicks: 890,
+          streams: 203,
+          listeners: 145,
+          new_listeners: 120,
+          returning_listeners: 25,
+          new_listener_streams: 160,
+          returning_listener_streams: 43,
+          followers: 12,
+          streams_per_listener: 1.4,
+          ctr_lp: 0.185,
+        },
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 50,
+        totalCount: 1,
+        totalPages: 1,
+      },
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/engagement`, () => {
+    return successEnvelope({
+      items: [
+        {
+          trackId: '11dFghVXANMlKmJXsNCbNl',
+          trackName: 'Midnight Drive',
+          totalStreams: 892,
+          totalListeners: 410,
+          streamsPerListener: 2.18,
+        },
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 10,
+        totalCount: 1,
+        totalPages: 1,
+      },
+    });
+  }),
 ];

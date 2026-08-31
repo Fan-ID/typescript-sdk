@@ -3,6 +3,7 @@ import {
   CampaignsResource,
   MetricsResource,
   PingResource,
+  SoundlinksResource,
   StrategiesResource,
 } from '../resources/index.js';
 import type { SoundlinkOptions } from '../types/api.js';
@@ -39,6 +40,9 @@ export class Soundlink {
   /** List, fetch, and manage campaigns. Read needs `campaigns:read`; writes need `campaigns:write`. */
   readonly campaigns: CampaignsResource;
 
+  /** Self-serve soundlinks (list, detail, metrics). Requires `soundlinks:read` scope. */
+  readonly soundlinks: SoundlinksResource;
+
   /** Campaign metrics, breakdowns, and JSONL exports. Requires `metrics:read` scope. */
   readonly metrics: MetricsResource;
 
@@ -54,6 +58,7 @@ export class Soundlink {
     this.ping = pingResource.ping.bind(pingResource);
     this.strategies = new StrategiesResource(http);
     this.campaigns = new CampaignsResource(http);
+    this.soundlinks = new SoundlinksResource(http);
     this.metrics = new MetricsResource(http);
   }
 }

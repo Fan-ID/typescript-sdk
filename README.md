@@ -155,6 +155,38 @@ const { data: created } = await soundlink.campaigns.create(
 );
 ```
 
+## Soundlinks (self-serve)
+
+Requires `soundlinks:read`. Lists only soundlinks **not** linked to a campaign (campaign-backed links use the Campaigns API). Schemas have no spend/fee fields.
+
+```typescript
+const { data, error } = await soundlink.soundlinks.list({
+  page: 1,
+  pageSize: 100,
+  sortBy: 'createdAt',
+  sortOrder: 'desc',
+});
+
+const { data: detail } = await soundlink.soundlinks.get('sl_abc123');
+// detail.autoFollow, detail.metaPixelId, detail.tiktokPixelId
+
+const { data: overview } = await soundlink.soundlinks.metricsOverview('sl_abc123', {
+  startDate: '2026-08-01',
+  endDate: '2026-08-31',
+});
+
+const { data: timeseries } = await soundlink.soundlinks.metricsTimeseries('sl_abc123', {
+  page: 1,
+  pageSize: 50,
+});
+
+// Date ranges snap to Insights windows (yesterday / last 7 days / all-time).
+// Omitting startDate → all-time (not createdAt).
+const { data: engagement } = await soundlink.soundlinks.engagement('sl_abc123', {
+  sortBy: 'totalStreams',
+});
+```
+
 ## Metrics
 
 ```typescript
