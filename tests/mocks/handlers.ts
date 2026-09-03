@@ -363,18 +363,14 @@ export const handlers: HttpHandler[] = [
       views: 4821,
       link_clicks: 890,
       streams: 9340,
-      listeners: 4821,
-      new_listeners: 3980,
-      returning_listeners: 841,
-      new_listener_streams: 7104,
-      returning_listener_streams: 2236,
+      listeners: 3980,
       followers: 312,
-      streams_per_listener: 1.94,
+      streams_per_listener: 2.35,
       ctr_lp: 0.185,
     });
   }),
 
-  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/timeseries`, () => {
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/breakdown`, () => {
     return successEnvelope({
       schemaVersion: '1.0',
       items: [
@@ -391,6 +387,7 @@ export const handlers: HttpHandler[] = [
           soundlink_target_isrc: 'DEXW62500259',
           soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
           soundlink_target_playlist_id: null,
+          country_code: 'US',
           views: 4821,
           link_clicks: 890,
           streams: 203,
@@ -413,22 +410,118 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/breakdown/export`, () => {
+    const row = JSON.stringify({
+      provider: 'soundlink',
+      account_id: 'org_xyz',
+      schema_version: '1.0',
+      report_date: '2026-08-01',
+      report_date_timezone: 'UTC',
+      exported_at: '2026-08-28T03:00:00.000Z',
+      soundlink_id: 'sl_abc123',
+      soundlink_name: 'Midnight Drive',
+      soundlink_target_type: 'track',
+      soundlink_target_isrc: 'DEXW62500259',
+      soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+      soundlink_target_playlist_id: null,
+      country_code: 'US',
+      views: 4821,
+      link_clicks: 890,
+      streams: 203,
+      listeners: 145,
+      new_listeners: 120,
+      returning_listeners: 25,
+      new_listener_streams: 160,
+      returning_listener_streams: 43,
+      followers: 12,
+      streams_per_listener: 1.4,
+      ctr_lp: 0.185,
+    });
+
+    return new HttpResponse(`${row}\n`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        'X-Row-Count': '1',
+      },
+    });
+  }),
+
   http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/engagement`, () => {
     return successEnvelope({
+      schemaVersion: '1.0',
       items: [
         {
-          trackId: '11dFghVXANMlKmJXsNCbNl',
-          trackName: 'Midnight Drive',
-          totalStreams: 892,
-          totalListeners: 410,
-          streamsPerListener: 2.18,
+          provider: 'soundlink',
+          account_id: 'org_xyz',
+          schema_version: '1.0',
+          report_date: '2026-08-01',
+          report_date_timezone: 'UTC',
+          exported_at: '2026-08-28T03:00:00.000Z',
+          soundlink_id: 'sl_abc123',
+          soundlink_name: 'Midnight Drive',
+          soundlink_target_type: 'track',
+          soundlink_target_isrc: 'DEXW62500259',
+          soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+          soundlink_target_playlist_id: null,
+          engagement_context: 'catalog',
+          country_code: 'US',
+          engaged_track_isrc: 'DEXW62500001',
+          engaged_spotify_track_id: '4cOdK2wGLETKBW3PvgPWqT',
+          engaged_track_name: 'Till The Sunrise',
+          playlist_position: null,
+          new_listeners: 42,
+          returning_listeners: 18,
+          listeners: 60,
+          new_listener_streams: 58,
+          returning_listener_streams: 31,
+          streams: 89,
+          spl: 1.48,
         },
       ],
       pagination: {
         page: 1,
-        pageSize: 10,
+        pageSize: 50,
         totalCount: 1,
         totalPages: 1,
+      },
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/engagement/export`, () => {
+    const row = JSON.stringify({
+      provider: 'soundlink',
+      account_id: 'org_xyz',
+      schema_version: '1.0',
+      report_date: '2026-08-01',
+      report_date_timezone: 'UTC',
+      exported_at: '2026-08-28T03:00:00.000Z',
+      soundlink_id: 'sl_abc123',
+      soundlink_name: 'Midnight Drive',
+      soundlink_target_type: 'track',
+      soundlink_target_isrc: 'DEXW62500259',
+      soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+      soundlink_target_playlist_id: null,
+      engagement_context: 'catalog',
+      country_code: 'US',
+      engaged_track_isrc: 'DEXW62500001',
+      engaged_spotify_track_id: '4cOdK2wGLETKBW3PvgPWqT',
+      engaged_track_name: 'Till The Sunrise',
+      playlist_position: null,
+      new_listeners: 42,
+      returning_listeners: 18,
+      listeners: 60,
+      new_listener_streams: 58,
+      returning_listener_streams: 31,
+      streams: 89,
+      spl: 1.48,
+    });
+
+    return new HttpResponse(`${row}\n`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        'X-Row-Count': '1',
       },
     });
   }),

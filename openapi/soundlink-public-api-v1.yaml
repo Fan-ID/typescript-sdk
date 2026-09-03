@@ -39,7 +39,7 @@ info:
     | Metrics reads (overview, breakdown, exports) | `metrics:read` | API key (Bearer) or OAuth Bearer |
     | Campaign writes (create, stop, budget, tier updates) | `campaigns:write` | API key (Bearer) or OAuth Bearer |
     | Video import / import status | `videos:write` | API key (Bearer) or OAuth Bearer |
-    | Soundlink reads (list, detail, metrics overview/timeseries/engagement) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
+    | Soundlink reads (list, detail, metrics overview/timeseries/breakdown/engagement, JSONL exports) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
 
     Per-operation scope requirements are also marked with `x-required-scope`
     (except `GET /v1/ping`, which accepts any valid credential with at least
@@ -873,6 +873,116 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/campaigns/{campaignId}/metrics/engagement:
+    get:
+      operationId: getCampaignEngagement
+      summary: Campaign engagement breakdown
+      description: |
+        Per-day, per-track engagement metrics for a campaign. One row per
+        `(report_date, campaign_id, engagement_context, country_code, engaged_spotify_track_id)`.
+        Results are paginated.
+
+        **Row schema:** `campaign_engagement_daily` v1.0 — the same schema used
+        in JSONL bulk exports. Rows are idempotent on the primary key; re-ingesting
+        is safe.
+
+        **Key difference from `/metrics/breakdown`:** this endpoint covers the
+        full engagement window — including post-campaign streaming activity —
+        not just dates when the campaign was actively running.
+
+        **`engagement_context` values:**
+        - `catalog` — same-artist spillover (and direct promoted-track plays)
+          on track campaigns.
+        - `playlist` — per-track performance inside the promoted playlist on
+          playlist campaigns.
+
+        **`listeners` is deduplicated within each row only.** Do not sum
+        `listeners` across days to get a campaign total.
+
+        **Date range:** if you omit both dates, defaults to the last **90 days**
+        ending today. Override with `startDate` / `endDate`. **Responses are
+        capped at 90 days** — a wider range returns `400 invalid_query_parameter`.
+
+        **Mutability window:** rows for a given `report_date` can be revised
+        for up to 7 days after the date closes due to delayed Spotify
+        playback events.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - name: engagementContext
+          in: query
+          schema:
+            type: string
+            enum: [catalog, playlist]
+          description: Filter to a single engagement context. Omit to return both.
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize500'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [report_date]
+            default: report_date
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated engagement rows (`campaign_engagement_daily` schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MetricsEngagementResponse'
+              example:
+                data:
+                  schemaVersion: '1.0'
+                  items:
+                    - provider: soundlink
+                      account_id: a7ac3173-2f71-4e79-921f-d15d7112cc9a
+                      schema_version: '1.0'
+                      report_date: '2026-04-08'
+                      report_date_timezone: UTC
+                      exported_at: '2026-05-22T10:12:11Z'
+                      campaign_id: 8ccd7b88-2591-4b94-848f-f142f5c6bba1
+                      campaign_name: 9 To 5
+                      campaign_target_type: track
+                      campaign_target_isrc: DEXW62500272
+                      campaign_target_spotify_track_id: 2RkZ5WPkKyBf0u8vN3dNgb
+                      campaign_target_playlist_id: null
+                      status: ended
+                      engagement_context: catalog
+                      country_code: US
+                      engaged_track_isrc: DEXW62500001
+                      engaged_spotify_track_id: 4cOdK2wGLETKBW3PvgPWqT
+                      engaged_track_name: Till The Sunrise
+                      playlist_position: null
+                      new_listeners: 42
+                      returning_listeners: 18
+                      listeners: 60
+                      new_listener_streams: 58
+                      returning_listener_streams: 31
+                      streams: 89
+                      spl: 1.48
+                  pagination:
+                    page: 1
+                    pageSize: 50
+                    totalCount: 120
+                    totalPages: 3
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/campaigns/{campaignId}/metrics/engagement/export:
     get:
       operationId: exportCampaignEngagement
@@ -880,7 +990,9 @@ paths:
       description: |
         Streams the full engagement dataset for a campaign as
         **newline-delimited JSON (JSONL)**. Every line is a complete, valid
-        JSON object conforming to the `campaign_engagement_daily` v1.0 schema.
+        JSON object conforming to the `campaign_engagement_daily` v1.0 schema
+        — identical to the rows returned by `GET /metrics/engagement` but
+        without pagination or an envelope wrapper.
 
         Designed for data pipeline consumers: load directly into BigQuery,
         Snowflake, or any JSONL-aware ingest tool without cursor logic.
@@ -1061,10 +1173,12 @@ paths:
       summary: Soundlink metrics overview
       description: |
         Soundlink-level totals for a date range: landing page views, outbound
-        clicks, listeners (with new/returning splits), streams, followers, and
-        derived ratios. No per-day rows — use `/metrics/timeseries` for those.
-
-        Maps to the **Overview** tab in the Soundlink Insights UI.
+        clicks, listeners, streams, followers, and derived ratios. Totals are
+        sums of country-day mart rows (`api_smart_link_country_daily`);
+        `listeners` is the sum of daily country `new_listeners` (not
+        period-unique). No per-day rows — use `/metrics/timeseries` for those,
+        or `/metrics/breakdown` for country-day rows (including new/returning
+        splits).
 
         Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
       tags: [Soundlinks]
@@ -1088,13 +1202,9 @@ paths:
                   views: 4821
                   link_clicks: 890
                   streams: 9340
-                  listeners: 4821
-                  new_listeners: 3980
-                  returning_listeners: 841
-                  new_listener_streams: 7104
-                  returning_listener_streams: 2236
+                  listeners: 3980
                   followers: 312
-                  streams_per_listener: 1.94
+                  streams_per_listener: 2.35
                   ctr_lp: 0.185
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
@@ -1121,11 +1231,11 @@ paths:
         for up to 7 days after the date closes due to delayed Spotify playback
         events. Re-fetch or re-ingest accordingly.
 
-        Rows are aggregated across countries (no `country_code` in v1.0) and
-        contain no financial fields.
+        Rows are aggregated across countries (no `country_code`) and
+        contain no financial fields. For country-day rows use
+        `/metrics/breakdown` (and `/metrics/breakdown/export`).
 
         Maps to the **Trends** tab in the Soundlink Insights UI.
-        Use for daily warehouse loads.
 
         Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
       tags: [Soundlinks]
@@ -1194,20 +1304,29 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/soundlinks/{soundlinkId}/metrics/engagement:
+  /v1/soundlinks/{soundlinkId}/metrics/breakdown:
     get:
-      operationId: getSoundlinkEngagement
-      summary: Soundlink engagement (top tracks)
+      operationId: getSoundlinkMetricsBreakdown
+      summary: Soundlink metrics breakdown
       description: |
-        Top tracks for a soundlink, aggregated over the requested date range.
-        One item per track, sorted by streams by default. Results are
-        paginated.
+        Per-day metrics broken down by country. One row per
+        `(report_date, soundlink_id, country_code)`. Can be large, so results
+        are paginated.
 
-        Returns period totals per track (not daily rows). Maps to the top
-        tracks section of the **Overview** tab in the Soundlink Insights UI.
-        `startDate`/`endDate` snap to the same Insights windows: yesterday,
-        last 7 days (inclusive span ending today), or all-time. Omitting
-        `startDate` always uses all-time (it is not inferred from createdAt).
+        **Row schema:** `soundlink_country_daily` v1.0 — the same schema used
+        in JSONL bulk exports. Rows are idempotent on the primary key
+        `(provider, account_id, report_date, soundlink_id, country_code)`;
+        re-ingesting is safe.
+
+        **Mutability window:** rows for a given `report_date` can be revised
+        for up to 7 days after the date closes due to delayed Spotify playback
+        events. Re-fetch or re-ingest accordingly.
+
+        Rows contain no financial fields: ads for self-serve soundlinks run
+        in your own Meta account, so spend is not visible to Soundlink.
+
+        Maps to the **Countries** tab in the Soundlink Insights UI.
+        Use `/metrics/timeseries` for country-aggregated daily Trends rows.
 
         Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
       tags: [Soundlinks]
@@ -1217,44 +1336,321 @@ paths:
       x-required-scope: soundlinks:read
       parameters:
         - $ref: '#/components/parameters/soundlinkId'
-        - $ref: '#/components/parameters/soundlinkEngagementStartDate'
+        - $ref: '#/components/parameters/soundlinkStartDate'
         - $ref: '#/components/parameters/soundlinkEndDate'
         - $ref: '#/components/parameters/page'
-        - $ref: '#/components/parameters/pageSize100'
+        - $ref: '#/components/parameters/pageSize500'
         - name: sortBy
           in: query
           schema:
             type: string
-            enum: [totalStreams, totalListeners]
-            default: totalStreams
+            enum: [report_date, country_code]
+            default: report_date
         - $ref: '#/components/parameters/sortOrder'
       responses:
         '200':
-          description: Paginated aggregated top tracks
+          description: Paginated per-day country rows (`soundlink_country_daily` schema)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkBreakdownResponse'
+              example:
+                data:
+                  schemaVersion: '1.0'
+                  items:
+                    - provider: soundlink
+                      account_id: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                      schema_version: '1.0'
+                      report_date: '2026-08-01'
+                      report_date_timezone: UTC
+                      exported_at: '2026-08-28T03:00:00Z'
+                      soundlink_id: V1StGXR8_Z5jdHi6B-myT
+                      soundlink_name: Midnight Drive
+                      soundlink_target_type: track
+                      soundlink_target_isrc: DEXW62500259
+                      soundlink_target_spotify_track_id: 11dFghVXANMlKmJXsNCbNl
+                      soundlink_target_playlist_id: null
+                      country_code: US
+                      views: 4821
+                      link_clicks: 890
+                      streams: 203
+                      listeners: 145
+                      new_listeners: 120
+                      returning_listeners: 25
+                      new_listener_streams: 160
+                      returning_listener_streams: 43
+                      followers: 12
+                      streams_per_listener: 1.4
+                      ctr_lp: 0.185
+                  pagination:
+                    page: 1
+                    pageSize: 50
+                    totalCount: 340
+                    totalPages: 7
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/metrics/breakdown/export:
+    get:
+      operationId: exportSoundlinkMetricsBreakdown
+      summary: Soundlink metrics breakdown export (JSONL)
+      description: |
+        Streams the full country-level metrics dataset for a soundlink as
+        **newline-delimited JSON (JSONL)**. Every line is a complete, valid
+        JSON object conforming to the `soundlink_country_daily` v1.0 schema
+        — identical to the rows returned by `GET /metrics/breakdown` but
+        without pagination or an envelope wrapper.
+
+        Designed for data pipeline consumers: load directly into BigQuery,
+        Snowflake, or any JSONL-aware ingest tool without cursor logic.
+
+        **Usage:**
+        ```
+        GET /v1/soundlinks/{soundlinkId}/metrics/breakdown/export
+        Accept: application/x-ndjson
+        ```
+
+        **Date range:** if you omit both dates, defaults to the last **90 days**
+        ending today. Override with `startDate` / `endDate`. **Responses are
+        capped at 90 days** — a wider range returns `400 invalid_query_parameter`.
+        Page longer histories in 90-day slices.
+
+        **Mutability:** rows for a given `report_date` can be revised for up
+        to 7 days after the date closes due to delayed Spotify playback
+        events. Re-fetching and re-ingesting on the primary key is safe
+        (idempotent).
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+      responses:
+        '200':
+          description: |
+            JSONL stream. Each line is a `soundlink_country_daily` v1.0 row.
+            Lines are sorted by `(report_date asc, country_code)`.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: |
+                `attachment; filename="breakdown_{soundlinkId}_{startDate}_{endDate}.jsonl"`
+              example: 'attachment; filename="breakdown_V1StGXR8_Z5jdHi6B-myT_2026-08-01_2026-08-31.jsonl"'
+            X-Row-Count:
+              schema:
+                type: integer
+              description: Total number of rows in the response.
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/SoundlinkCountryDailyRow'
+              example: |
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"track","soundlink_target_isrc":"DEXW62500259","soundlink_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","soundlink_target_playlist_id":null,"country_code":"US","views":4821,"link_clicks":890,"streams":203,"listeners":145,"new_listeners":120,"returning_listeners":25,"new_listener_streams":160,"returning_listener_streams":43,"followers":12,"streams_per_listener":1.4,"ctr_lp":0.185}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"track","soundlink_target_isrc":"DEXW62500259","soundlink_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","soundlink_target_playlist_id":null,"country_code":"DE","views":2103,"link_clicks":31,"streams":87,"listeners":61,"new_listeners":48,"returning_listeners":13,"new_listener_streams":64,"returning_listener_streams":23,"followers":4,"streams_per_listener":1.43,"ctr_lp":0.0147}
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/metrics/engagement:
+    get:
+      operationId: getSoundlinkEngagement
+      summary: Soundlink engagement breakdown
+      description: |
+        Per-day, per-track engagement metrics for a soundlink. One row per
+        `(report_date, soundlink_id, engagement_context, country_code, engaged_spotify_track_id)`.
+        Results are paginated.
+
+        **Row schema:** `soundlink_engagement_daily` v1.0 — the same schema used
+        in JSONL bulk exports. Rows are idempotent on the primary key; re-ingesting
+        is safe.
+
+        **Key difference from `/metrics/breakdown`:** breakdown aggregates
+        views, streams, and listeners by **country** (`soundlink_country_daily`);
+        engagement breaks down **which tracks** listeners played, including
+        catalog spillover and playlist slot performance (`engagement_context`,
+        `engaged_spotify_track_id`).
+
+        **`engagement_context` values:**
+        - `catalog` — same-artist spillover (and direct promoted-track plays)
+          on track soundlinks.
+        - `playlist` — per-track performance inside the promoted playlist on
+          playlist soundlinks.
+
+        **`listeners` is deduplicated within each row only.** Do not sum
+        `listeners` across days to get a soundlink total.
+
+        **Date range:** if you omit both dates, defaults to the last **90 days**
+        ending today. Override with `startDate` / `endDate`. **Responses are
+        capped at 90 days** — a wider range returns `400 invalid_query_parameter`.
+
+        **Mutability window:** rows for a given `report_date` can be revised
+        for up to 7 days after the date closes due to delayed Spotify
+        playback events.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - name: engagementContext
+          in: query
+          schema:
+            type: string
+            enum: [catalog, playlist]
+          description: Filter to a single engagement context. Omit to return both.
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize500'
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [report_date]
+            default: report_date
+        - $ref: '#/components/parameters/sortOrder'
+      responses:
+        '200':
+          description: Paginated engagement rows (`soundlink_engagement_daily` schema)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SoundlinkEngagementResponse'
               example:
                 data:
+                  schemaVersion: '1.0'
                   items:
-                    - trackId: 11dFghVXANMlKmJXsNCbNl
-                      trackName: Midnight Drive
-                      totalStreams: 892
-                      totalListeners: 603
-                      streamsPerListener: 1.48
-                    - trackId: 4cOdK2wGLETKBW3PvgPWqT
-                      trackName: Till The Sunrise
-                      totalStreams: 411
-                      totalListeners: 322
-                      streamsPerListener: 1.28
+                    - provider: soundlink
+                      account_id: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                      schema_version: '1.0'
+                      report_date: '2026-08-01'
+                      report_date_timezone: UTC
+                      exported_at: '2026-08-28T03:00:00Z'
+                      soundlink_id: V1StGXR8_Z5jdHi6B-myT
+                      soundlink_name: Midnight Drive
+                      soundlink_target_type: track
+                      soundlink_target_isrc: DEXW62500259
+                      soundlink_target_spotify_track_id: 11dFghVXANMlKmJXsNCbNl
+                      soundlink_target_playlist_id: null
+                      engagement_context: catalog
+                      country_code: US
+                      engaged_track_isrc: DEXW62500001
+                      engaged_spotify_track_id: 4cOdK2wGLETKBW3PvgPWqT
+                      engaged_track_name: Till The Sunrise
+                      playlist_position: null
+                      new_listeners: 42
+                      returning_listeners: 18
+                      listeners: 60
+                      new_listener_streams: 58
+                      returning_listener_streams: 31
+                      streams: 89
+                      spl: 1.48
                   pagination:
                     page: 1
-                    pageSize: 10
-                    totalCount: 24
+                    pageSize: 50
+                    totalCount: 120
                     totalPages: 3
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/metrics/engagement/export:
+    get:
+      operationId: exportSoundlinkEngagement
+      summary: Soundlink engagement export (JSONL)
+      description: |
+        Streams the full engagement dataset for a soundlink as
+        **newline-delimited JSON (JSONL)**. Every line is a complete, valid
+        JSON object conforming to the `soundlink_engagement_daily` v1.0 schema
+        — identical to the rows returned by `GET /metrics/engagement` but
+        without pagination or an envelope wrapper.
+
+        Designed for data pipeline consumers: load directly into BigQuery,
+        Snowflake, or any JSONL-aware ingest tool without cursor logic.
+
+        **Usage:**
+        ```
+        GET /v1/soundlinks/{soundlinkId}/metrics/engagement/export
+        Accept: application/x-ndjson
+        ```
+
+        **Response body (one JSON object per line, no trailing comma):**
+        ```
+        {"provider":"soundlink","report_date":"2026-08-01","streams":89,...}
+        {"provider":"soundlink","report_date":"2026-08-02","streams":104,...}
+        ```
+
+        **Date range:** if you omit both dates, defaults to the last **90 days**
+        ending today. Override with `startDate` / `endDate`. **Responses are
+        capped at 90 days** — a wider range returns `400 invalid_query_parameter`.
+        Page longer histories in 90-day slices.
+
+        **Mutability:** rows for a given `report_date` can be revised for up to
+        7 days after the date closes. Re-fetching and re-ingesting on the
+        primary key is safe (idempotent).
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - name: engagementContext
+          in: query
+          schema:
+            type: string
+            enum: [catalog, playlist]
+          description: Filter to a single engagement context. Omit to return both.
+      responses:
+        '200':
+          description: |
+            JSONL stream. Each line is a `soundlink_engagement_daily` v1.0 row.
+            Lines are sorted by `(report_date asc, engagement_context, country_code, engaged_spotify_track_id)`.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+              description: |
+                `attachment; filename="engagement_{soundlinkId}_{startDate}_{endDate}.jsonl"`
+              example: 'attachment; filename="engagement_V1StGXR8_Z5jdHi6B-myT_2026-08-01_2026-08-31.jsonl"'
+            X-Row-Count:
+              schema:
+                type: integer
+              description: Total number of rows in the response. Useful for progress tracking when streaming.
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/SoundlinkEngagementDailyRow'
+              example: |
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"track","soundlink_target_isrc":"DEXW62500259","soundlink_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","soundlink_target_playlist_id":null,"engagement_context":"catalog","country_code":"US","engaged_track_isrc":"DEXW62500001","engaged_spotify_track_id":"4cOdK2wGLETKBW3PvgPWqT","engaged_track_name":"Till The Sunrise","playlist_position":null,"new_listeners":42,"returning_listeners":18,"listeners":60,"new_listener_streams":58,"returning_listener_streams":31,"streams":89,"spl":1.48}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"playlist","soundlink_target_isrc":null,"soundlink_target_spotify_track_id":null,"soundlink_target_playlist_id":"37i9dQZF1Epwit2GR54N9P","engagement_context":"playlist","country_code":"DE","engaged_track_isrc":"DEXW62500001","engaged_spotify_track_id":"4cOdK2wGLETKBW3PvgPWqT","engaged_track_name":"Till The Sunrise","playlist_position":14,"new_listeners":19,"returning_listeners":7,"listeners":26,"new_listener_streams":24,"returning_listener_streams":11,"streams":35,"spl":1.35}
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1472,18 +1868,6 @@ components:
         Inclusive start date (`YYYY-MM-DD`) for soundlink overview and
         timeseries. Defaults to the soundlink creation date when omitted.
 
-    soundlinkEngagementStartDate:
-      name: startDate
-      in: query
-      schema:
-        type: string
-        format: date
-      description: |
-        Inclusive start date (`YYYY-MM-DD`) for soundlink engagement
-        (top tracks). Omit for all-time (not createdAt). When set, snaps
-        to Insights windows (yesterday / last 7 days ending today /
-        all-time); other ranges resolve to all-time.
-
     soundlinkEndDate:
       name: endDate
       in: query
@@ -1528,9 +1912,7 @@ components:
             - invalid_api_key
             - api_key_revoked
             - api_key_expired
-            - invalid_token
             - insufficient_scope
-            - access_denied
             - not_found
             - campaign_not_found
             - invalid_query_parameter
@@ -2352,6 +2734,27 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    MetricsEngagementResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [schemaVersion, items, pagination]
+          properties:
+            schemaVersion:
+              type: string
+              description: Version of the `campaign_engagement_daily` row schema. Pin your ingest pipeline to this.
+              example: '1.0'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/EngagementRow'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     # --- Engagement ---
 
     EngagementRow:
@@ -2600,12 +3003,14 @@ components:
 
     SoundlinkMetricsOverview:
       type: object
-      description: Soundlink-level totals for the requested date range.
+      description: |
+        Soundlink-level totals for the requested date range. Additive fields
+        are sums of `api_smart_link_country_daily` country-day rows.
       required: [views, streams, listeners, followers, streams_per_listener]
       properties:
         views:
           type: integer
-          description: Soundlink landing page views in the period.
+          description: Soundlink landing page views in the period (sum of country-day rows).
         link_clicks:
           type: integer
           nullable: true
@@ -2614,26 +3019,13 @@ components:
             clicks to Spotify. Null if not tracked for this soundlink type.
         streams:
           type: integer
-          description: Attributed Spotify streams (sum of daily rows).
+          description: Attributed Spotify streams (sum of country-day rows).
         listeners:
           type: integer
-          description: Unique attributed Spotify listeners in the period.
-        new_listeners:
-          type: integer
-          nullable: true
-          description: Unique listeners whose first play via this soundlink occurred in the period.
-        returning_listeners:
-          type: integer
-          nullable: true
-          description: Unique listeners who played in the period but whose first play was earlier.
-        new_listener_streams:
-          type: integer
-          nullable: true
-          description: Stream count from new listeners in the period.
-        returning_listener_streams:
-          type: integer
-          nullable: true
-          description: Stream count from returning listeners in the period.
+          description: |
+            Sum of country-day `new_listeners` from the mart (first-play
+            attributed listeners). Not period-unique across days/countries,
+            and not equal to summing breakdown `listeners` (new + returning).
         followers:
           type: integer
           description: Attributed Spotify artist follower gains in the period.
@@ -2805,31 +3197,156 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
-    SoundlinkEngagementItem:
+    SoundlinkCountryDailyRow:
       type: object
       description: |
-        One track aggregated over the requested date range (period totals,
-        not daily rows).
-      required: [trackId, trackName, totalStreams, totalListeners, streamsPerListener]
+        One row of the `soundlink_country_daily` v1.0 schema.
+        Primary key: `(provider, account_id, report_date, soundlink_id, country_code)`.
+        Rows are idempotent — re-ingesting on the primary key is safe.
+        Values for a given `report_date` may be revised for up to 7 days after
+        the date closes due to delayed Spotify playback events.
+        Rows contain no financial fields.
+      required:
+        - provider
+        - account_id
+        - schema_version
+        - report_date
+        - report_date_timezone
+        - exported_at
+        - soundlink_id
+        - soundlink_name
+        - soundlink_target_type
+        - country_code
+        - views
+        - streams
+        - listeners
+        - followers
+        - streams_per_listener
       properties:
-        trackId:
+        provider:
           type: string
-          description: Spotify track ID of the engaged track.
-          example: 4cOdK2wGLETKBW3PvgPWqT
-        trackName:
+          enum: [soundlink]
+          description: Always `soundlink`. Identifies the data provider for multi-source warehouses.
+        account_id:
           type: string
-          description: Display name of the engaged track.
-        totalStreams:
+          description: Soundlink organization ID (UUID).
+        schema_version:
+          type: string
+          description: Schema version. Pin your ingest pipeline to this value.
+          example: '1.0'
+        report_date:
+          type: string
+          format: date
+          description: UTC calendar date the metrics belong to (`YYYY-MM-DD`).
+        report_date_timezone:
+          type: string
+          enum: [UTC]
+          description: Always `UTC`.
+        exported_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp when this row was generated. Use for deduplication if the same `report_date` is re-delivered.
+        soundlink_id:
+          type: string
+          description: Unique ID of this soundlink.
+          example: V1StGXR8_Z5jdHi6B-myT
+        soundlink_name:
+          type: string
+          description: Human-readable soundlink name.
+        soundlink_target_type:
+          type: string
+          nullable: true
+          enum: [track, playlist]
+          description: Whether this soundlink promotes a track or playlist. `null` if undetermined.
+        soundlink_target_isrc:
+          type: string
+          nullable: true
+          description: ISRC of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
+        soundlink_target_spotify_track_id:
+          type: string
+          nullable: true
+          description: Spotify track ID of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
+        soundlink_target_playlist_id:
+          type: string
+          nullable: true
+          description: Spotify playlist ID. Populated when `soundlink_target_type = playlist`; otherwise `null`.
+        country_code:
+          type: string
+          description: ISO 3166-1 alpha-2. Derived from the listener's IP at time of engagement. Uppercase.
+        views:
           type: integer
-          minimum: 0
-          description: Total streams of this track in the period.
-        totalListeners:
+          description: Soundlink landing page views in this country on this day.
+        link_clicks:
           type: integer
-          minimum: 0
-          description: Unique listeners of this track in the period.
-        streamsPerListener:
+          nullable: true
+          description: |
+            Clicks on "Continue with Spotify" on the landing page — outbound
+            clicks to Spotify. Null if not tracked for this soundlink type.
+        streams:
+          type: integer
+          description: |
+            Spotify streams attributed to this soundlink in this country on this
+            day: `new_listener_streams + returning_listener_streams`. Observed
+            Spotify-side events, not modelled estimates. Safe to sum within a
+            day; summing across days counts repeat listens.
+        listeners:
+          type: integer
+          description: |
+            Unique Spotify listeners attributed to this soundlink in this
+            country on this day: `new_listeners + returning_listeners`.
+            **Do not sum across days** — the same listener can appear on
+            multiple `report_date` rows.
+        new_listeners:
+          type: integer
+          nullable: true
+          description: Unique listeners whose first play via this soundlink occurred on `report_date` in this country.
+        returning_listeners:
+          type: integer
+          nullable: true
+          description: Unique listeners who played on `report_date` in this country but whose first play was on an earlier date.
+        new_listener_streams:
+          type: integer
+          nullable: true
+          description: Stream count from new listeners on `report_date` in this country.
+        returning_listener_streams:
+          type: integer
+          nullable: true
+          description: Stream count from returning listeners on `report_date` in this country.
+        followers:
+          type: integer
+          description: Spotify artist follower gains attributed to this soundlink in this country on this day.
+        streams_per_listener:
           type: number
-          description: totalStreams / totalListeners. Zero if totalListeners is zero.
+          description: streams / listeners for this row. Zero if listeners is zero.
+        ctr_lp:
+          type: number
+          nullable: true
+          description: |
+            Landing page click-through rate (link_clicks / views). Computed
+            against landing page views, not ad impressions — do not combine
+            with `ctr_linkclick` from `campaign_country_daily`. Null if views
+            is zero or link_clicks is null.
+
+    SoundlinkBreakdownResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [schemaVersion, items, pagination]
+          properties:
+            schemaVersion:
+              type: string
+              description: Version of the `soundlink_country_daily` row schema. Pin your ingest pipeline to this.
+              example: '1.0'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SoundlinkCountryDailyRow'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
 
     SoundlinkEngagementResponse:
       type: object
@@ -2837,16 +3354,162 @@ components:
       properties:
         data:
           type: object
-          required: [items, pagination]
+          required: [schemaVersion, items, pagination]
           properties:
+            schemaVersion:
+              type: string
+              description: Version of the `soundlink_engagement_daily` row schema. Pin your ingest pipeline to this.
+              example: '1.0'
             items:
               type: array
               items:
-                $ref: '#/components/schemas/SoundlinkEngagementItem'
+                $ref: '#/components/schemas/SoundlinkEngagementDailyRow'
             pagination:
               $ref: '#/components/schemas/Pagination'
         meta:
           $ref: '#/components/schemas/Meta'
+
+    SoundlinkEngagementDailyRow:
+      type: object
+      description: |
+        One row of the `soundlink_engagement_daily` v1.0 schema.
+        Primary key: `(provider, account_id, report_date, soundlink_id, engagement_context, country_code, engaged_spotify_track_id)`.
+        Rows are idempotent — re-ingesting on the primary key is safe.
+        Values for a given `report_date` may be revised for up to 7 days after
+        the date closes due to delayed Spotify playback events.
+        No `status` field: soundlinks do not store per-day lifecycle history.
+        No financial fields.
+      required:
+        - provider
+        - account_id
+        - schema_version
+        - report_date
+        - report_date_timezone
+        - exported_at
+        - soundlink_id
+        - soundlink_name
+        - soundlink_target_type
+        - engagement_context
+        - country_code
+        - engaged_spotify_track_id
+        - engaged_track_name
+        - new_listeners
+        - returning_listeners
+        - listeners
+        - new_listener_streams
+        - returning_listener_streams
+        - streams
+        - spl
+      properties:
+        provider:
+          type: string
+          enum: [soundlink]
+          description: Always `soundlink`. Identifies the data provider for multi-source warehouses.
+        account_id:
+          type: string
+          description: Soundlink organization ID (UUID).
+        schema_version:
+          type: string
+          description: Schema version string. Pin your ingest pipeline to this value.
+          example: '1.0'
+        report_date:
+          type: string
+          format: date
+          description: UTC calendar date the metrics belong to (`YYYY-MM-DD`). Rows can change for up to 7 days after close.
+        report_date_timezone:
+          type: string
+          enum: [UTC]
+          description: Always `UTC`.
+        exported_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp when this row was generated. Use for deduplication if the same `report_date` is re-delivered.
+        soundlink_id:
+          type: string
+          description: Unique ID of this soundlink.
+          example: V1StGXR8_Z5jdHi6B-myT
+        soundlink_name:
+          type: string
+          description: Human-readable soundlink name.
+        soundlink_target_type:
+          type: string
+          nullable: true
+          enum: [track, playlist]
+          description: Whether this soundlink promotes a track or playlist. `null` if undetermined.
+        soundlink_target_isrc:
+          type: string
+          nullable: true
+          description: ISRC of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
+        soundlink_target_spotify_track_id:
+          type: string
+          nullable: true
+          description: Spotify track ID of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
+        soundlink_target_playlist_id:
+          type: string
+          nullable: true
+          description: Spotify playlist ID. Populated when `soundlink_target_type = playlist`; otherwise `null`.
+        engagement_context:
+          type: string
+          enum: [catalog, playlist]
+          description: |
+            Which section this row belongs to.
+            `catalog`: plays of the promoted track and same-artist catalog tracks (track soundlinks).
+            `playlist`: per-track performance inside the promoted playlist (playlist soundlinks).
+        country_code:
+          type: string
+          description: ISO 3166-1 alpha-2. Derived from the listener's IP at time of engagement. Uppercase.
+          example: US
+        engaged_track_isrc:
+          type: string
+          nullable: true
+          description: |
+            ISRC of the track that received listens. May differ from `soundlink_target_isrc`
+            for catalog spillover rows. `null` if ISRC could not be resolved.
+        engaged_spotify_track_id:
+          type: string
+          description: Spotify track ID of the engaged track. Part of the primary key.
+          example: 4cOdK2wGLETKBW3PvgPWqT
+        engaged_track_name:
+          type: string
+          description: Display name of the engaged track.
+        playlist_position:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: |
+            1-based slot of the engaged track on the promoted playlist for `report_date` (1 = top).
+            Populated only when `engagement_context = playlist`. Treat `null` as unavailable, not an error.
+        new_listeners:
+          type: integer
+          minimum: 0
+          description: Unique listeners whose first play of this track via this soundlink occurred on `report_date`.
+        returning_listeners:
+          type: integer
+          minimum: 0
+          description: Unique listeners who played this track on `report_date` but whose first play was on an earlier date.
+        listeners:
+          type: integer
+          minimum: 0
+          description: |
+            Total unique listeners on `report_date`: `new_listeners + returning_listeners`.
+            **Do not sum across days** — the same listener can appear on multiple `report_date` rows.
+        new_listener_streams:
+          type: integer
+          minimum: 0
+          description: Stream count from new listeners on `report_date`.
+        returning_listener_streams:
+          type: integer
+          minimum: 0
+          description: Stream count from returning listeners on `report_date`.
+        streams:
+          type: integer
+          minimum: 0
+          description: |
+            Total streams on `report_date`: `new_listener_streams + returning_listener_streams`.
+            Safe to sum within a day; summing across days counts repeat listens.
+        spl:
+          type: number
+          description: Streams per listener (`streams / listeners`). Zero if `listeners` is zero.
 
     # --- Videos ---
 
