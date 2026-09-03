@@ -326,12 +326,12 @@ describe('Soundlinks resource', () => {
 
     expect(response).toMatchObject({
       error: null,
-      data: { views: 4821, streams: 9340 },
+      data: { views: 4821, streams: 9340, listeners: 3980 },
     });
   });
 
-  it('fetches soundlink metrics timeseries', async () => {
-    const response = await soundlink.soundlinks.metricsTimeseries('sl_abc123', {
+  it('lists soundlink breakdown rows', async () => {
+    const response = await soundlink.soundlinks.breakdown.list('sl_abc123', {
       page: 1,
       pageSize: 50,
     });
@@ -340,21 +340,79 @@ describe('Soundlinks resource', () => {
       error: null,
       data: {
         schemaVersion: '1.0',
-        items: [{ soundlink_id: 'sl_abc123', report_date: '2026-08-01' }],
+        items: [
+          { soundlink_id: 'sl_abc123', country_code: 'US', report_date: '2026-08-01' },
+        ],
       },
     });
   });
 
-  it('fetches soundlink engagement top tracks', async () => {
-    const response = await soundlink.soundlinks.engagement('sl_abc123', {
-      sortBy: 'totalStreams',
+  it('streams soundlink breakdown export rows', async () => {
+    const response = await soundlink.soundlinks.breakdown.export('sl_abc123', {
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+
+    expect(response.error).toBeNull();
+    expect(response.data).toBeDefined();
+
+    const rows: unknown[] = [];
+    if (response.data) {
+      for await (const row of response.data) {
+        rows.push(row);
+      }
+    }
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ soundlink_id: 'sl_abc123', country_code: 'US' });
+  });
+
+  it('collects soundlink breakdown export rows', async () => {
+    const response = await soundlink.soundlinks.breakdown.export.collect('sl_abc123');
+
+    expect(response.error).toBeNull();
+    expect(response.data?.rowCount).toBe(1);
+    expect(response.data?.rows).toHaveLength(1);
+  });
+
+  it('lists soundlink engagement rows', async () => {
+    const response = await soundlink.soundlinks.engagement.list('sl_abc123', {
+      engagementContext: 'catalog',
     });
 
     expect(response).toMatchObject({
       error: null,
       data: {
-        items: [{ trackId: '11dFghVXANMlKmJXsNCbNl', totalStreams: 892 }],
+        schemaVersion: '1.0',
+        items: [
+          {
+            soundlink_id: 'sl_abc123',
+            engagement_context: 'catalog',
+            engaged_spotify_track_id: '4cOdK2wGLETKBW3PvgPWqT',
+          },
+        ],
       },
+    });
+  });
+
+  it('streams soundlink engagement export rows', async () => {
+    const response = await soundlink.soundlinks.engagement.export('sl_abc123');
+
+    expect(response.error).toBeNull();
+    expect(response.data).toBeDefined();
+
+    const rows: unknown[] = [];
+    if (response.data) {
+      for await (const row of response.data) {
+        rows.push(row);
+      }
+    }
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      soundlink_id: 'sl_abc123',
+      engagement_context: 'catalog',
+      streams: 89,
     });
   });
 });

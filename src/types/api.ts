@@ -74,11 +74,11 @@ export type SoundlinkSortBy = 'createdAt';
 /** Allowed `sortBy` values for breakdown list requests. */
 export type BreakdownSortBy = 'report_date' | 'spend_total';
 
-/** Allowed `sortBy` values for soundlink timeseries. */
-export type SoundlinkTimeseriesSortBy = 'report_date';
+/** Allowed `sortBy` values for soundlink breakdown list requests. */
+export type SoundlinkBreakdownSortBy = 'report_date' | 'country_code';
 
-/** Allowed `sortBy` values for soundlink engagement (top tracks). */
-export type SoundlinkEngagementSortBy = 'totalStreams' | 'totalListeners';
+/** Allowed `sortBy` values for soundlink engagement list requests. */
+export type SoundlinkEngagementSortBy = 'report_date';
 
 /** Sort direction for list endpoints. */
 export type SortOrder = 'asc' | 'desc';
@@ -512,34 +512,6 @@ export interface DateRangeParams {
   endDate?: string;
 }
 
-/** Query params for {@link SoundlinksResource.metricsTimeseries}. */
-export interface SoundlinkTimeseriesParams extends DateRangeParams {
-  page?: number;
-  /** Default: `50`. Max: **500**. */
-  pageSize?: number;
-  /** Default: `report_date`. */
-  sortBy?: SoundlinkTimeseriesSortBy;
-  /** Default: `asc`. */
-  sortOrder?: SortOrder;
-}
-
-/**
- * Query params for {@link SoundlinksResource.engagement}.
- *
- * `startDate`/`endDate` snap to Insights windows only (yesterday, last 7 days
- * ending today, or all-time). Arbitrary ranges resolve to all-time.
- * Omitting `startDate` always uses all-time (not createdAt).
- */
-export interface SoundlinkEngagementParams extends DateRangeParams {
-  page?: number;
-  /** Default: `10`. Max: **100**. */
-  pageSize?: number;
-  /** Default: `totalStreams`. */
-  sortBy?: SoundlinkEngagementSortBy;
-  /** Default: `desc`. */
-  sortOrder?: SortOrder;
-}
-
 /** Self-serve soundlink summary from {@link SoundlinksResource.list}. */
 export interface SoundlinkSummary {
   soundlinkId: string;
@@ -577,17 +549,13 @@ export interface SoundlinkMetricsOverview {
   link_clicks: number | null;
   streams: number;
   listeners: number;
-  new_listeners: number | null;
-  returning_listeners: number | null;
-  new_listener_streams: number | null;
-  returning_listener_streams: number | null;
   followers: number;
   streams_per_listener: number;
   ctr_lp: number | null;
 }
 
-/** One row of the `soundlink_daily` v1.0 schema. */
-export interface SoundlinkDailyRow {
+/** One row of the `soundlink_country_daily` v1.0 schema. */
+export interface SoundlinkBreakdownRow {
   provider: 'soundlink';
   account_id: string;
   schema_version: string;
@@ -597,10 +565,11 @@ export interface SoundlinkDailyRow {
   exported_at: string;
   soundlink_id: string;
   soundlink_name: string;
-  soundlink_target_type: SoundlinkTargetType | null;
+  soundlink_target_type: 'track' | 'playlist' | null;
   soundlink_target_isrc: string | null;
   soundlink_target_spotify_track_id: string | null;
   soundlink_target_playlist_id: string | null;
+  country_code: string;
   views: number;
   link_clicks: number | null;
   streams: number;
@@ -614,26 +583,75 @@ export interface SoundlinkDailyRow {
   ctr_lp: number | null;
 }
 
-/** Paginated soundlink timeseries payload. */
-export interface SoundlinkTimeseriesData {
+/** Paginated soundlink breakdown list payload. */
+export interface SoundlinkBreakdownListData {
   schemaVersion: string;
-  items: SoundlinkDailyRow[];
+  items: SoundlinkBreakdownRow[];
   pagination: Pagination;
 }
 
-/** One aggregated top track from {@link SoundlinksResource.engagement}. */
-export interface SoundlinkEngagementItem {
-  trackId: string;
-  trackName: string;
-  totalStreams: number;
-  totalListeners: number;
-  streamsPerListener: number;
+/** One row of the `soundlink_engagement_daily` v1.0 schema. */
+export interface SoundlinkEngagementRow {
+  provider: 'soundlink';
+  account_id: string;
+  schema_version: string;
+  report_date: string;
+  report_date_timezone: 'UTC';
+  exported_at: string;
+  soundlink_id: string;
+  soundlink_name: string;
+  soundlink_target_type: 'track' | 'playlist' | null;
+  soundlink_target_isrc: string | null;
+  soundlink_target_spotify_track_id: string | null;
+  soundlink_target_playlist_id: string | null;
+  engagement_context: EngagementContext;
+  country_code: string;
+  engaged_track_isrc: string | null;
+  engaged_spotify_track_id: string;
+  engaged_track_name: string;
+  playlist_position: number | null;
+  new_listeners: number;
+  returning_listeners: number;
+  listeners: number;
+  new_listener_streams: number;
+  returning_listener_streams: number;
+  streams: number;
+  spl: number;
 }
 
-/** Paginated soundlink engagement payload. */
-export interface SoundlinkEngagementData {
-  items: SoundlinkEngagementItem[];
+/** Paginated soundlink engagement list payload. */
+export interface SoundlinkEngagementListData {
+  schemaVersion: string;
+  items: SoundlinkEngagementRow[];
   pagination: Pagination;
+}
+
+/** Query params for {@link SoundlinkBreakdownMetricsResource.list}. */
+export interface SoundlinkBreakdownListParams extends DateRangeParams {
+  page?: number;
+  /** Default: `50`. Max: **500**. */
+  pageSize?: number;
+  /** Default: `report_date`. */
+  sortBy?: SoundlinkBreakdownSortBy;
+  /** Default: `asc`. */
+  sortOrder?: SortOrder;
+}
+
+/**
+ * Query params for {@link SoundlinkEngagementMetricsResource.list}.
+ *
+ * Defaults to the last 90 days ending today; max **90 days** per request.
+ */
+export interface SoundlinkEngagementListParams extends DateRangeParams {
+  page?: number;
+  /** Default: `50`. Max: **500**. */
+  pageSize?: number;
+  /** Filter to a single engagement context. Omit to return both. */
+  engagementContext?: EngagementContext;
+  /** Default: `report_date`. */
+  sortBy?: SoundlinkEngagementSortBy;
+  /** Default: `asc`. */
+  sortOrder?: SortOrder;
 }
 
 /** Query params for {@link BreakdownMetricsResource.list}. */

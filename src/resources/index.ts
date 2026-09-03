@@ -25,14 +25,16 @@ import type {
   IncreaseCampaignBudgetRequest,
   MetricsOverview,
   PingData,
+  SoundlinkBreakdownListData,
+  SoundlinkBreakdownListParams,
+  SoundlinkBreakdownRow,
   SoundlinkDetail,
-  SoundlinkEngagementData,
-  SoundlinkEngagementParams,
+  SoundlinkEngagementListData,
+  SoundlinkEngagementListParams,
+  SoundlinkEngagementRow,
   SoundlinkListData,
   SoundlinkListParams,
   SoundlinkMetricsOverview,
-  SoundlinkTimeseriesData,
-  SoundlinkTimeseriesParams,
   StrategiesCatalogData,
   UpdateCampaignTiersRequest,
 } from '../types/api.js';
@@ -52,35 +54,35 @@ export interface ExportResource<T, P extends DateRangeParams> {
   /**
    * Stream export rows as newline-delimited JSON.
    *
-   * @param campaignId - Soundlink campaign ID.
+   * @param id - Campaign or soundlink ID.
    * @param params - Optional date range (max 90 days per request).
    */
-  (campaignId: string, params?: P): Promise<ApiResponse<JsonlStream<T>>>;
+  (id: string, params?: P): Promise<ApiResponse<JsonlStream<T>>>;
 
   /**
    * Download all export rows into memory.
    *
    * Prefer {@link ExportResource | the stream} for large datasets.
    */
-  collect(campaignId: string, params?: P): Promise<ApiResponse<ExportCollection<T>>>;
+  collect(id: string, params?: P): Promise<ApiResponse<ExportCollection<T>>>;
 }
 
 function createExportResource<T, P extends DateRangeParams>(
   http: HttpClient,
-  buildPath: (campaignId: string) => string,
+  buildPath: (id: string) => string,
   buildQuery: (
     params: P,
   ) => Record<string, string | number | boolean | undefined | null>,
 ): ExportResource<T, P> {
-  const exportFn = ((campaignId: string, params: P = {} as P) => {
+  const exportFn = ((id: string, params: P = {} as P) => {
     return http.getJsonl<T>({
-      path: buildPath(campaignId),
+      path: buildPath(id),
       query: buildQuery(params),
     });
   }) as ExportResource<T, P>;
 
-  exportFn.collect = async (campaignId: string, params: P = {} as P) => {
-    const response = await exportFn(campaignId, params);
+  exportFn.collect = async (id: string, params: P = {} as P) => {
+    const response = await exportFn(id, params);
 
     if (response.error || !response.data) {
       return {
@@ -352,10 +354,21 @@ export class CampaignsResource {
  * await soundlink.soundlinks.list();
  * await soundlink.soundlinks.get(soundlinkId);
  * await soundlink.soundlinks.metricsOverview(soundlinkId);
+ * await soundlink.soundlinks.breakdown.list(soundlinkId);
+ * await soundlink.soundlinks.engagement.export(soundlinkId);
  * ```
  */
 export class SoundlinksResource {
-  constructor(private readonly http: HttpClient) {}
+  /** Per-day country breakdown and JSONL export. */
+  readonly breakdown: SoundlinkBreakdownMetricsResource;
+
+  /** Per-day track engagement and JSONL export. */
+  readonly engagement: SoundlinkEngagementMetricsResource;
+
+  constructor(private readonly http: HttpClient) {
+    this.breakdown = new SoundlinkBreakdownMetricsResource(http);
+    this.engagement = new SoundlinkEngagementMetricsResource(http);
+  }
 
   /**
    * List self-serve soundlinks for the authenticated organization.
@@ -417,22 +430,48 @@ export class SoundlinksResource {
       },
     });
   }
+}
+
+/**
+ * Country-level daily metrics (`soundlink_country_daily` schema).
+ *
+ * Access via `soundlink.soundlinks.breakdown`.
+ */
+export class SoundlinkBreakdownMetricsResource {
+  /**
+   * Stream full breakdown export as JSONL.
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/breakdown/export`.
+   */
+  readonly export: ExportResource<SoundlinkBreakdownRow, BreakdownExportParams>;
+
+  constructor(private readonly http: HttpClient) {
+    this.export = createExportResource<SoundlinkBreakdownRow, BreakdownExportParams>(
+      http,
+      (soundlinkId) =>
+        `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/breakdown/export`,
+      (params) => ({
+        startDate: params.startDate,
+        endDate: params.endDate,
+      }),
+    );
+  }
 
   /**
-   * Per-day metrics for a soundlink (`soundlink_daily` schema).
+   * Paginated per-day, per-country breakdown rows.
    *
-   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/timeseries`.
-   * Max `pageSize` is **500** (default 50). Requires `soundlinks:read`.
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/breakdown`.
+   * Max `pageSize` is **500** (default 50).
    *
    * @param soundlinkId - Soundlink identifier.
    * @param params - Date range, pagination, and sort options.
    */
-  metricsTimeseries(
+  list(
     soundlinkId: string,
-    params: SoundlinkTimeseriesParams = {},
-  ): Promise<ApiResponse<SoundlinkTimeseriesData>> {
-    return this.http.get<SoundlinkTimeseriesData>({
-      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/timeseries`,
+    params: SoundlinkBreakdownListParams = {},
+  ): Promise<ApiResponse<SoundlinkBreakdownListData>> {
+    return this.http.get<SoundlinkBreakdownListData>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/breakdown`,
       query: {
         startDate: params.startDate,
         endDate: params.endDate,
@@ -443,29 +482,53 @@ export class SoundlinksResource {
       },
     });
   }
+}
+
+/**
+ * Per-track engagement metrics (`soundlink_engagement_daily` schema).
+ *
+ * Access via `soundlink.soundlinks.engagement`.
+ */
+export class SoundlinkEngagementMetricsResource {
+  /**
+   * Stream full engagement export as JSONL.
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/engagement/export`.
+   */
+  readonly export: ExportResource<SoundlinkEngagementRow, EngagementExportParams>;
+
+  constructor(private readonly http: HttpClient) {
+    this.export = createExportResource<SoundlinkEngagementRow, EngagementExportParams>(
+      http,
+      (soundlinkId) =>
+        `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/engagement/export`,
+      (params) => ({
+        startDate: params.startDate,
+        endDate: params.endDate,
+        engagementContext: params.engagementContext,
+      }),
+    );
+  }
 
   /**
-   * Top tracks for a soundlink (period totals, not daily rows).
+   * Paginated per-day, per-track engagement rows.
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/engagement`.
-   * Max `pageSize` is **100**. Requires `soundlinks:read`.
-   *
-   * Date ranges snap to Insights windows only: yesterday, last 7 days ending
-   * today, or all-time. Arbitrary ranges resolve to all-time. Omitting
-   * `startDate` always uses all-time (not createdAt).
+   * Max `pageSize` is **500** (default 50).
    *
    * @param soundlinkId - Soundlink identifier.
-   * @param params - Date range, pagination, and sort options.
+   * @param params - Date range, engagement context filter, pagination, and sort.
    */
-  engagement(
+  list(
     soundlinkId: string,
-    params: SoundlinkEngagementParams = {},
-  ): Promise<ApiResponse<SoundlinkEngagementData>> {
-    return this.http.get<SoundlinkEngagementData>({
+    params: SoundlinkEngagementListParams = {},
+  ): Promise<ApiResponse<SoundlinkEngagementListData>> {
+    return this.http.get<SoundlinkEngagementListData>({
       path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/engagement`,
       query: {
         startDate: params.startDate,
         endDate: params.endDate,
+        engagementContext: params.engagementContext,
         page: params.page,
         pageSize: params.pageSize,
         sortBy: params.sortBy,

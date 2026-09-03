@@ -175,16 +175,16 @@ const { data: overview } = await soundlink.soundlinks.metricsOverview('sl_abc123
   endDate: '2026-08-31',
 });
 
-const { data: timeseries } = await soundlink.soundlinks.metricsTimeseries('sl_abc123', {
+const { data: breakdown } = await soundlink.soundlinks.breakdown.list('sl_abc123', {
   page: 1,
   pageSize: 50,
 });
 
-// Date ranges snap to Insights windows (yesterday / last 7 days / all-time).
-// Omitting startDate → all-time (not createdAt).
-const { data: engagement } = await soundlink.soundlinks.engagement('sl_abc123', {
-  sortBy: 'totalStreams',
+const { data: engagement } = await soundlink.soundlinks.engagement.list('sl_abc123', {
+  engagementContext: 'catalog',
 });
+
+// JSONL: soundlinks.breakdown.export / soundlinks.engagement.export (same pattern as Metrics below)
 ```
 
 ## Metrics
