@@ -1,5 +1,16 @@
 # soundlink
 
+## 2.2.0
+
+### Minor Changes
+
+- [#14](https://github.com/Fan-ID/lib/pull/14) [`6c562f8`](https://github.com/Fan-ID/lib/commit/6c562f8c323309b649f3f29438924e2901affd50) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Align self-serve soundlink metrics with the campaign-parity Public API. ([SOU-6696](https://linear.app/getsoundlink/issue/SOU-6696))
+
+  - Add `soundlinks.breakdown.list` / `.export` / `.export.collect` (`soundlink_country_daily`)
+  - Add `soundlinks.engagement.list` / `.export` / `.export.collect` (`soundlink_engagement_daily`)
+  - Remove `soundlinks.metricsTimeseries` and the top-tracks `soundlinks.engagement()` helper
+  - Fix `SoundlinkMetricsOverview` types (no new/returning splits on overview)
+
 ## 2.1.0
 
 ### Minor Changes
