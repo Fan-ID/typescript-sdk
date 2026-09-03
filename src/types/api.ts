@@ -504,6 +504,14 @@ export interface SoundlinkListParams {
   sortOrder?: SortOrder;
 }
 
+/** Inclusive date range filter (`YYYY-MM-DD`). */
+export interface DateRangeParams {
+  /** Inclusive start date. */
+  startDate?: string;
+  /** Inclusive end date. Must not be before `startDate`. */
+  endDate?: string;
+}
+
 /** Self-serve soundlink summary from {@link SoundlinksResource.list}. */
 export interface SoundlinkSummary {
   soundlinkId: string;
@@ -531,19 +539,10 @@ export interface SoundlinkListData {
   pagination: Pagination;
 }
 
-/** Inclusive date range filter (`YYYY-MM-DD`). */
-export interface DateRangeParams {
-  /** Inclusive start date. */
-  startDate?: string;
-  /** Inclusive end date. Must not be before `startDate`. */
-  endDate?: string;
-}
-
 /**
  * Soundlink-level metric totals from {@link SoundlinksResource.metricsOverview}.
  *
  * No financial fields — ads for self-serve soundlinks run in the customer's Meta.
- * New/returning splits are on breakdown and engagement rows, not overview.
  */
 export interface SoundlinkMetricsOverview {
   views: number;
@@ -641,8 +640,7 @@ export interface SoundlinkBreakdownListParams extends DateRangeParams {
 /**
  * Query params for {@link SoundlinkEngagementMetricsResource.list}.
  *
- * Date window defaults to the last 90 days ending today; responses are capped
- * at 90 days per request.
+ * Defaults to the last 90 days ending today; max **90 days** per request.
  */
 export interface SoundlinkEngagementListParams extends DateRangeParams {
   page?: number;

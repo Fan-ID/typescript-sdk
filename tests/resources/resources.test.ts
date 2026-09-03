@@ -367,6 +367,14 @@ describe('Soundlinks resource', () => {
     expect(rows[0]).toMatchObject({ soundlink_id: 'sl_abc123', country_code: 'US' });
   });
 
+  it('collects soundlink breakdown export rows', async () => {
+    const response = await soundlink.soundlinks.breakdown.export.collect('sl_abc123');
+
+    expect(response.error).toBeNull();
+    expect(response.data?.rowCount).toBe(1);
+    expect(response.data?.rows).toHaveLength(1);
+  });
+
   it('lists soundlink engagement rows', async () => {
     const response = await soundlink.soundlinks.engagement.list('sl_abc123', {
       engagementContext: 'catalog',

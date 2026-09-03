@@ -180,17 +180,11 @@ const { data: breakdown } = await soundlink.soundlinks.breakdown.list('sl_abc123
   pageSize: 50,
 });
 
-const { data: stream } = await soundlink.soundlinks.engagement.export('sl_abc123', {
-  startDate: '2026-08-01',
-  endDate: '2026-08-31',
+const { data: engagement } = await soundlink.soundlinks.engagement.list('sl_abc123', {
   engagementContext: 'catalog',
 });
 
-if (stream) {
-  for await (const row of stream) {
-    // upsert on soundlink_engagement_daily primary key
-  }
-}
+// JSONL: soundlinks.breakdown.export / soundlinks.engagement.export (same pattern as Metrics below)
 ```
 
 ## Metrics

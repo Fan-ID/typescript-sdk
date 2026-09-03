@@ -442,7 +442,6 @@ export class SoundlinkBreakdownMetricsResource {
    * Stream full breakdown export as JSONL.
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/breakdown/export`.
-   * Max **90 days** per request.
    */
   readonly export: ExportResource<SoundlinkBreakdownRow, BreakdownExportParams>;
 
@@ -495,7 +494,6 @@ export class SoundlinkEngagementMetricsResource {
    * Stream full engagement export as JSONL.
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/engagement/export`.
-   * Max **90 days** per request.
    */
   readonly export: ExportResource<SoundlinkEngagementRow, EngagementExportParams>;
 
@@ -516,8 +514,7 @@ export class SoundlinkEngagementMetricsResource {
    * Paginated per-day, per-track engagement rows.
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/engagement`.
-   * Max `pageSize` is **500** (default 50). Date window defaults to the last
-   * 90 days ending today; responses are capped at 90 days.
+   * Max `pageSize` is **500** (default 50).
    *
    * @param soundlinkId - Soundlink identifier.
    * @param params - Date range, engagement context filter, pagination, and sort.
