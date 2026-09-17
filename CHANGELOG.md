@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.3.0
+
+### Minor Changes
+
+- [#18](https://github.com/Fan-ID/typescript-sdk/pull/18) [`d8caabc`](https://github.com/Fan-ID/typescript-sdk/commit/d8caabcca24bd23f081d0bc4fe6592e9716ae7fb) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add `soundlinks.create` (`POST /v1/soundlinks`) and `soundlinks.delete` (`DELETE /v1/soundlinks/{id}`). Create requires `soundlinks:write` and `idempotencyKey`. Delete archives the soundlink (`status: archived`) and does not send `Idempotency-Key`.
+
 ## 2.2.0
 
 ### Minor Changes
