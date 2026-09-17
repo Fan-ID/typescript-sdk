@@ -533,6 +533,24 @@ export interface SoundlinkDetail extends SoundlinkSummary {
   tiktokPixelId: string | null;
 }
 
+/** Body for `POST /v1/soundlinks`. Requires `soundlinks:write`. */
+export interface CreateSoundlinkRequest {
+  name: string;
+  /** HTTPS Spotify track or playlist URL. */
+  spotifyUrl: string;
+  /** Default `false`. */
+  autoFollow?: boolean;
+  /** Spotify artist ID for auto-follow on track links. Ignored for playlists. */
+  artistIdFollow?: string;
+  /** Must be sent together with `metaConversionAccessToken`. */
+  metaPixelId?: string;
+  /**
+   * Meta Conversions API token. Write-only: accepted on create, never returned.
+   * Must be sent together with `metaPixelId`.
+   */
+  metaConversionAccessToken?: string;
+}
+
 /** Paginated soundlink list payload. */
 export interface SoundlinkListData {
   items: SoundlinkSummary[];

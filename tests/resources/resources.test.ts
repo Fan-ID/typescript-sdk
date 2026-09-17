@@ -318,6 +318,90 @@ describe('Soundlinks resource', () => {
     });
   });
 
+  it('creates a soundlink with Idempotency-Key', async () => {
+    const response = await soundlink.soundlinks.create(
+      {
+        name: 'Midnight Drive',
+        spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+      },
+      { idempotencyKey: 'create-soundlink-01' },
+    );
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        soundlinkId: 'sl_new123',
+        name: 'Midnight Drive',
+        status: 'active',
+      },
+    });
+  });
+
+  it('returns invalid_request when create omits Idempotency-Key', async () => {
+    const response = await soundlink.soundlinks.create(
+      {
+        name: 'Midnight Drive',
+        spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+      },
+      { idempotencyKey: '' },
+    );
+
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'invalid_request', status: 400 },
+    });
+  });
+
+  it('returns idempotency_key_conflict on soundlink create', async () => {
+    const response = await soundlink.soundlinks.create(
+      {
+        name: 'Midnight Drive',
+        spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+      },
+      { idempotencyKey: 'conflict-key' },
+    );
+
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'idempotency_key_conflict', status: 409 },
+    });
+  });
+
+  it('deletes a soundlink and returns status archived', async () => {
+    const response = await soundlink.soundlinks.delete('sl_abc123');
+
+    expect(response).toMatchObject({
+      error: null,
+      data: { soundlinkId: 'sl_abc123', status: 'archived' },
+    });
+  });
+
+  it('does not send Idempotency-Key on delete', async () => {
+    let capturedKey: string | null | undefined;
+
+    server.use(
+      http.delete(`${BASE_URL}/v1/soundlinks/:soundlinkId`, ({ request }) => {
+        capturedKey = request.headers.get('Idempotency-Key');
+        return HttpResponse.json({
+          data: { soundlinkId: 'sl_abc123', status: 'archived' },
+          meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+        });
+      }),
+    );
+
+    await soundlink.soundlinks.delete('sl_abc123');
+    expect(capturedKey).toBeNull();
+  });
+
+  it('returns not_found on a second delete', async () => {
+    const response = await soundlink.soundlinks.delete('missing');
+
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'not_found', status: 404 },
+    });
+  });
+
   it('fetches soundlink metrics overview', async () => {
     const response = await soundlink.soundlinks.metricsOverview('sl_abc123', {
       startDate: '2026-08-01',

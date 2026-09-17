@@ -1123,6 +1123,79 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+    post:
+      operationId: createSoundlink
+      summary: Create a self-serve soundlink
+      description: |
+        Creates a self-serve soundlink in the organization. This is the Public
+        API equivalent of the in-app create flow. It does not create a wallet
+        campaign and does not appear on `GET /v1/campaigns`.
+
+        Requires the `soundlinks:write` scope.
+
+        `Idempotency-Key` is **required**. Reusing the key with an unchanged
+        body replays the original `201`; a different body returns
+        `409 idempotency_key_conflict`. Keys are honored for 24 hours.
+
+        **Auth:** Accepts API key or OAuth Bearer (`soundlinks:write`).
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:write
+      parameters:
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSoundlinkRequest'
+            examples:
+              track:
+                summary: Track soundlink
+                value:
+                  name: Midnight Drive
+                  spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl'
+                  autoFollow: true
+                  artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
+                  metaPixelId: '1234567890123456'
+                  metaConversionAccessToken: 'EAAB...'
+              playlist:
+                summary: Playlist soundlink
+                value:
+                  name: Late Night Mix
+                  spotifyUrl: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'
+      responses:
+        '201':
+          description: Soundlink created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkDetailResponse'
+              example:
+                data:
+                  soundlinkId: V1StGXR8_Z5jdHi6B-myT
+                  organizationId: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                  name: Midnight Drive
+                  url: https://sndl.ink/soundlink/V1StGXR8_Z5jdHi6B-myT
+                  targetType: track
+                  spotifyUrl: https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
+                  status: active
+                  createdAt: '2026-04-01T10:00:00Z'
+                  autoFollow: true
+                  metaPixelId: '1234567890123456'
+                  tiktokPixelId: null
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
+        '422': { $ref: '#/components/responses/CreateSoundlinkUnprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/soundlinks/{soundlinkId}:
     get:
       operationId: getSoundlink
@@ -1155,6 +1228,53 @@ paths:
                   targetType: track
                   spotifyUrl: https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
                   status: active
+                  createdAt: '2026-04-01T10:00:00Z'
+                  autoFollow: true
+                  metaPixelId: '1234567890123456'
+                  tiktokPixelId: null
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+    delete:
+      operationId: archiveSoundlink
+      summary: Archive a soundlink
+      description: |
+        Archives a self-serve soundlink (`status: archived`). Same as Archive
+        in the app: the public landing page returns 404 after cache expires.
+        List and detail still return the row. Cannot be undone via the Public
+        API.
+
+        Requires `soundlinks:write`. Campaign-linked soundlinks, soundlinks
+        that are not `active`, and ids that do not belong to the org return
+        `404`. Does not require `Idempotency-Key`.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:write
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+      responses:
+        '200':
+          description: Soundlink archived
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkDetailResponse'
+              example:
+                data:
+                  soundlinkId: V1StGXR8_Z5jdHi6B-myT
+                  organizationId: a7ac3173-2f71-4e79-921f-d15d7112dd11
+                  name: Midnight Drive
+                  url: https://sndl.ink/soundlink/V1StGXR8_Z5jdHi6B-myT
+                  targetType: track
+                  spotifyUrl: https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
+                  status: archived
                   createdAt: '2026-04-01T10:00:00Z'
                   autoFollow: true
                   metaPixelId: '1234567890123456'
@@ -2972,6 +3092,33 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    CreateSoundlinkRequest:
+      type: object
+      required: [name, spotifyUrl]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Human-readable soundlink name.
+        spotifyUrl:
+          type: string
+          format: uri
+          description: HTTPS Spotify track or playlist URL.
+          example: https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
+        autoFollow:
+          type: boolean
+          default: false
+        artistIdFollow:
+          type: string
+        metaPixelId:
+          type: string
+        metaConversionAccessToken:
+          type: string
+          writeOnly: true
+          description: |
+            Meta Conversions API access token. Write-only: accepted on create,
+            never returned on GET. Must be sent together with `metaPixelId`.
+
     SoundlinkDetail:
       allOf:
         - $ref: '#/components/schemas/SoundlinkSummary'
@@ -3842,6 +3989,22 @@ components:
                 error:
                   code: invalid_request
                   message: 'tierTargeting is only allowed when strategyType is custom.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    CreateSoundlinkUnprocessable:
+      description: Request body is well-formed but the Spotify URL is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_spotify_url:
+              summary: Malformed URL, unsupported type, or Spotify resource does not exist
+              value:
+                error:
+                  code: invalid_spotify_url
+                  message: 'Spotify track not found.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 

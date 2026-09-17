@@ -40,7 +40,7 @@ export class Soundlink {
   /** List, fetch, and manage campaigns. Read needs `campaigns:read`; writes need `campaigns:write`. */
   readonly campaigns: CampaignsResource;
 
-  /** Self-serve soundlinks (list, detail, metrics). Requires `soundlinks:read` scope. */
+  /** Self-serve soundlinks. Read needs `soundlinks:read`; create/delete need `soundlinks:write`. */
   readonly soundlinks: SoundlinksResource;
 
   /** Campaign metrics, breakdowns, and JSONL exports. Requires `metrics:read` scope. */

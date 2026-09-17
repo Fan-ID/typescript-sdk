@@ -14,6 +14,7 @@ import type {
   CampaignStopData,
   CampaignTiersData,
   CreateCampaignRequest,
+  CreateSoundlinkRequest,
   DateRangeParams,
   DecreaseCampaignBudgetData,
   DecreaseCampaignBudgetRequest,
@@ -344,18 +345,21 @@ export class CampaignsResource {
 }
 
 /**
- * Self-serve soundlinks (`/v1/soundlinks/*`). Requires `soundlinks:read`.
+ * Self-serve soundlinks (`/v1/soundlinks/*`).
  *
- * Only soundlinks that are **not** linked to a campaign. Campaign-backed
- * soundlinks are served by the Campaigns API.
+ * List, get, and metrics require `soundlinks:read`. Create and delete require
+ * `soundlinks:write`. Only soundlinks that are **not** linked to a campaign.
+ * Campaign-backed soundlinks are served by the Campaigns API.
  *
  * @example
  * ```ts
  * await soundlink.soundlinks.list();
  * await soundlink.soundlinks.get(soundlinkId);
- * await soundlink.soundlinks.metricsOverview(soundlinkId);
- * await soundlink.soundlinks.breakdown.list(soundlinkId);
- * await soundlink.soundlinks.engagement.export(soundlinkId);
+ * await soundlink.soundlinks.create(
+ *   { name: 'Midnight Drive', spotifyUrl: 'https://open.spotify.com/track/...' },
+ *   { idempotencyKey: 'create-midnight-drive-01' },
+ * );
+ * await soundlink.soundlinks.delete(soundlinkId);
  * ```
  */
 export class SoundlinksResource {
@@ -404,6 +408,48 @@ export class SoundlinksResource {
    */
   get(soundlinkId: string): Promise<ApiResponse<SoundlinkDetail>> {
     return this.http.get<SoundlinkDetail>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}`,
+    });
+  }
+
+  /**
+   * Create a self-serve soundlink.
+   *
+   * Maps to `POST /v1/soundlinks`. Requires `soundlinks:write` and
+   * `Idempotency-Key`. Does not create a campaign.
+   *
+   * @example
+   * ```ts
+   * const { data, error } = await soundlink.soundlinks.create(
+   *   {
+   *     name: 'Midnight Drive',
+   *     spotifyUrl: 'https://open.spotify.com/track/...',
+   *   },
+   *   { idempotencyKey: 'create-midnight-drive-01' },
+   * );
+   * ```
+   */
+  create(
+    body: CreateSoundlinkRequest,
+    options: IdempotencyOptions,
+  ): Promise<ApiResponse<SoundlinkDetail>> {
+    return this.http.post<SoundlinkDetail>({
+      path: '/soundlinks',
+      body,
+      idempotencyKey: options.idempotencyKey,
+    });
+  }
+
+  /**
+   * Archive a self-serve soundlink (`status: archived`).
+   *
+   * Maps to `DELETE /v1/soundlinks/{soundlinkId}`. Same as Archive in the app.
+   * Requires `soundlinks:write`. No `Idempotency-Key`. A second delete, unknown
+   * id, other org, campaign-linked id, or a soundlink that is not `active`
+   * returns `404 not_found`. List and detail still return the row.
+   */
+  delete(soundlinkId: string): Promise<ApiResponse<SoundlinkDetail>> {
+    return this.http.delete<SoundlinkDetail>({
       path: `/soundlinks/${encodeURIComponent(soundlinkId)}`,
     });
   }
