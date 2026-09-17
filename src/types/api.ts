@@ -529,16 +529,16 @@ export interface SoundlinkSummary {
 /** Full soundlink detail from {@link SoundlinksResource.get}. */
 export interface SoundlinkDetail extends SoundlinkSummary {
   autoFollow: boolean;
+  artistIdFollow: string | null;
   metaPixelId: string | null;
   tiktokPixelId: string | null;
 }
 
-/** Body for `POST /v1/soundlinks`. Requires `soundlinks:write`. */
+/** Body for `POST /v1/soundlinks`. */
 export interface CreateSoundlinkRequest {
   name: string;
   /** HTTPS Spotify track or playlist URL. */
   spotifyUrl: string;
-  /** Default `false`. */
   autoFollow?: boolean;
   /** Spotify artist ID for auto-follow on track links. Ignored for playlists. */
   artistIdFollow?: string;

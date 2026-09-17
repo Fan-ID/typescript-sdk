@@ -360,6 +360,7 @@ export const handlers: HttpHandler[] = [
       name: string;
       spotifyUrl: string;
       autoFollow?: boolean;
+      artistIdFollow?: string;
       metaPixelId?: string;
     };
 
@@ -375,6 +376,7 @@ export const handlers: HttpHandler[] = [
           status: 'active',
           createdAt: '2026-04-01T10:00:00.000Z',
           autoFollow: body.autoFollow ?? false,
+          artistIdFollow: body.artistIdFollow ?? null,
           metaPixelId: body.metaPixelId ?? null,
           tiktokPixelId: null,
         },
@@ -399,6 +401,7 @@ export const handlers: HttpHandler[] = [
       status: 'active',
       createdAt: '2026-04-01T10:00:00.000Z',
       autoFollow: true,
+      artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
       metaPixelId: '1234567890123456',
       tiktokPixelId: null,
     });
@@ -419,6 +422,7 @@ export const handlers: HttpHandler[] = [
       status: 'archived',
       createdAt: '2026-04-01T10:00:00.000Z',
       autoFollow: true,
+      artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
       metaPixelId: '1234567890123456',
       tiktokPixelId: null,
     });

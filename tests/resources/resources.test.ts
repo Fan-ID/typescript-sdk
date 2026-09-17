@@ -303,6 +303,7 @@ describe('Soundlinks resource', () => {
       data: {
         soundlinkId: 'sl_abc123',
         autoFollow: true,
+        artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
         metaPixelId: '1234567890123456',
         tiktokPixelId: null,
       },
@@ -333,6 +334,7 @@ describe('Soundlinks resource', () => {
         soundlinkId: 'sl_new123',
         name: 'Midnight Drive',
         status: 'active',
+        artistIdFollow: null,
       },
     });
   });

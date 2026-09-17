@@ -1184,13 +1184,14 @@ paths:
                   status: active
                   createdAt: '2026-04-01T10:00:00Z'
                   autoFollow: true
+                  artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
-        '400': { $ref: '#/components/responses/BadRequest' }
+        '400': { $ref: '#/components/responses/CreateSoundlinkBadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403': { $ref: '#/components/responses/CreateSoundlinkForbidden' }
         '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
         '422': { $ref: '#/components/responses/CreateSoundlinkUnprocessable' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -1230,6 +1231,7 @@ paths:
                   status: active
                   createdAt: '2026-04-01T10:00:00Z'
                   autoFollow: true
+                  artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                 meta:
@@ -1277,6 +1279,7 @@ paths:
                   status: archived
                   createdAt: '2026-04-01T10:00:00Z'
                   autoFollow: true
+                  artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                 meta:
@@ -3123,13 +3126,19 @@ components:
       allOf:
         - $ref: '#/components/schemas/SoundlinkSummary'
         - type: object
-          required: [autoFollow, metaPixelId, tiktokPixelId]
+          required: [autoFollow, artistIdFollow, metaPixelId, tiktokPixelId]
           properties:
             autoFollow:
               type: boolean
               description: |
                 Whether auto-follow is configured for this soundlink. Whether
                 it takes effect also depends on the organization's plan.
+            artistIdFollow:
+              type: string
+              nullable: true
+              description: |
+                Spotify artist ID configured for auto-follow on track links.
+                Unused for playlists. `null` if not set.
             metaPixelId:
               type: string
               nullable: true
@@ -3989,6 +3998,53 @@ components:
                 error:
                   code: invalid_request
                   message: 'tierTargeting is only allowed when strategyType is custom.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    CreateSoundlinkBadRequest:
+      description: |
+        Missing or malformed request body, or a missing/empty
+        `Idempotency-Key` header.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing_field:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Missing required field: name.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            missing_idempotency_key:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Idempotency-Key header is required and must not be empty.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            pixel_pair:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'metaPixelId and metaConversionAccessToken must both be provided, or both omitted.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    CreateSoundlinkForbidden:
+      description: |
+        Valid credentials but missing the `soundlinks:write` scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            insufficient_scope:
+              value:
+                error:
+                  code: insufficient_scope
+                  message: 'This key does not have the soundlinks:write scope.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 

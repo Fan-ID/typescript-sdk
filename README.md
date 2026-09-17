@@ -167,7 +167,7 @@ const { data, error } = await soundlink.soundlinks.list({
   sortOrder: 'desc',
 });
 
-const { data: created, error: createError } = await soundlink.soundlinks.create(
+const { data: created } = await soundlink.soundlinks.create(
   {
     name: 'Midnight Drive',
     spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',

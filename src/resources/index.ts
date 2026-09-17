@@ -355,11 +355,9 @@ export class CampaignsResource {
  * ```ts
  * await soundlink.soundlinks.list();
  * await soundlink.soundlinks.get(soundlinkId);
- * await soundlink.soundlinks.create(
- *   { name: 'Midnight Drive', spotifyUrl: 'https://open.spotify.com/track/...' },
- *   { idempotencyKey: 'create-midnight-drive-01' },
- * );
+ * await soundlink.soundlinks.create({ name, spotifyUrl }, { idempotencyKey });
  * await soundlink.soundlinks.delete(soundlinkId);
+ * await soundlink.soundlinks.metricsOverview(soundlinkId);
  * ```
  */
 export class SoundlinksResource {
@@ -441,12 +439,10 @@ export class SoundlinksResource {
   }
 
   /**
-   * Archive a self-serve soundlink (`status: archived`).
+   * Archive a self-serve soundlink (`status: archived`). Same as Archive in the app.
    *
-   * Maps to `DELETE /v1/soundlinks/{soundlinkId}`. Same as Archive in the app.
-   * Requires `soundlinks:write`. No `Idempotency-Key`. A second delete, unknown
-   * id, other org, campaign-linked id, or a soundlink that is not `active`
-   * returns `404 not_found`. List and detail still return the row.
+   * Maps to `DELETE /v1/soundlinks/{soundlinkId}`. Requires `soundlinks:write`.
+   * Does not send `Idempotency-Key`. List and detail still return the row.
    */
   delete(soundlinkId: string): Promise<ApiResponse<SoundlinkDetail>> {
     return this.http.delete<SoundlinkDetail>({
