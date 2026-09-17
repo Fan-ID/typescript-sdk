@@ -37,6 +37,7 @@ export type {
   CreateCampaignRequestBase,
   CreateCampaignRequestBuiltIn,
   CreateCampaignRequestCustom,
+  CreateSoundlinkRequest,
   CreativeDirection,
   CustomTier,
   DateRangeParams,

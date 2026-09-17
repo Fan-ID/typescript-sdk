@@ -338,6 +338,54 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
+  http.post(`${BASE_URL}/v1/soundlinks`, async ({ request }) => {
+    const idempotencyKey = request.headers.get('Idempotency-Key');
+    if (!idempotencyKey) {
+      return errorEnvelope(
+        'invalid_request',
+        'Idempotency-Key header is required and must not be empty.',
+        400,
+      );
+    }
+
+    if (idempotencyKey === 'conflict-key') {
+      return errorEnvelope(
+        'idempotency_key_conflict',
+        'This Idempotency-Key was already used with a different request body.',
+        409,
+      );
+    }
+
+    const body = (await request.json()) as {
+      name: string;
+      spotifyUrl: string;
+      autoFollow?: boolean;
+      artistIdFollow?: string;
+      metaPixelId?: string;
+    };
+
+    return HttpResponse.json(
+      {
+        data: {
+          soundlinkId: 'sl_new123',
+          organizationId: 'org_xyz',
+          name: body.name,
+          url: 'https://sndl.ink/soundlink/sl_new123',
+          targetType: 'track',
+          spotifyUrl: body.spotifyUrl,
+          status: 'active',
+          createdAt: '2026-04-01T10:00:00.000Z',
+          autoFollow: body.autoFollow ?? false,
+          artistIdFollow: body.artistIdFollow ?? null,
+          metaPixelId: body.metaPixelId ?? null,
+          tiktokPixelId: null,
+        },
+        meta: { requestId: REQUEST_ID },
+      },
+      { status: 201 },
+    );
+  }),
+
   http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId`, ({ params }) => {
     if (params.soundlinkId === 'missing') {
       return errorEnvelope('not_found', 'Soundlink not found.', 404);
@@ -353,6 +401,28 @@ export const handlers: HttpHandler[] = [
       status: 'active',
       createdAt: '2026-04-01T10:00:00.000Z',
       autoFollow: true,
+      artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
+      metaPixelId: '1234567890123456',
+      tiktokPixelId: null,
+    });
+  }),
+
+  http.delete(`${BASE_URL}/v1/soundlinks/:soundlinkId`, ({ params }) => {
+    if (params.soundlinkId === 'missing') {
+      return errorEnvelope('not_found', 'Soundlink not found.', 404);
+    }
+
+    return successEnvelope({
+      soundlinkId: String(params.soundlinkId),
+      organizationId: 'org_xyz',
+      name: 'Midnight Drive',
+      url: `https://sndl.ink/soundlink/${String(params.soundlinkId)}`,
+      targetType: 'track',
+      spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+      status: 'archived',
+      createdAt: '2026-04-01T10:00:00.000Z',
+      autoFollow: true,
+      artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
       metaPixelId: '1234567890123456',
       tiktokPixelId: null,
     });

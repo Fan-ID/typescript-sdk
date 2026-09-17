@@ -44,7 +44,7 @@ The SDK sends it as `Authorization: Bearer sk_...` on every request.
 
 Your organization is determined from the key. Do not send Firebase ID tokens on the Public API host.
 
-Write methods require the `campaigns:write` scope and an `Idempotency-Key` (passed as `idempotencyKey` on the method options).
+Write methods on campaigns require the `campaigns:write` scope and an `Idempotency-Key` (passed as `idempotencyKey` on the method options). Soundlink create also requires `soundlinks:write` and `idempotencyKey`. Soundlink delete requires `soundlinks:write` and does **not** send `Idempotency-Key`.
 
 ## Response pattern
 
@@ -157,7 +157,7 @@ const { data: created } = await soundlink.campaigns.create(
 
 ## Soundlinks (self-serve)
 
-Requires `soundlinks:read`. Lists only soundlinks **not** linked to a campaign (campaign-backed links use the Campaigns API). Schemas have no spend/fee fields.
+List, get, and metrics require `soundlinks:read`. Create and delete require `soundlinks:write`. Lists only soundlinks **not** linked to a campaign (campaign-backed links use the Campaigns API). Schemas have no spend/fee fields.
 
 ```typescript
 const { data, error } = await soundlink.soundlinks.list({
@@ -167,8 +167,19 @@ const { data, error } = await soundlink.soundlinks.list({
   sortOrder: 'desc',
 });
 
+const { data: created } = await soundlink.soundlinks.create(
+  {
+    name: 'Midnight Drive',
+    spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+  },
+  { idempotencyKey: 'create-midnight-drive-01' },
+);
+
 const { data: detail } = await soundlink.soundlinks.get('sl_abc123');
 // detail.autoFollow, detail.metaPixelId, detail.tiktokPixelId
+
+const { data: archived } = await soundlink.soundlinks.delete('sl_abc123');
+// archived.status === 'archived'
 
 const { data: overview } = await soundlink.soundlinks.metricsOverview('sl_abc123', {
   startDate: '2026-08-01',
