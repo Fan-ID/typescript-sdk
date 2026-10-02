@@ -362,6 +362,7 @@ export const handlers: HttpHandler[] = [
       autoFollow?: boolean;
       artistIdFollow?: string;
       metaPixelId?: string;
+      appleMusicUrl?: string;
     };
 
     return HttpResponse.json(
@@ -379,6 +380,7 @@ export const handlers: HttpHandler[] = [
           artistIdFollow: body.artistIdFollow ?? null,
           metaPixelId: body.metaPixelId ?? null,
           tiktokPixelId: null,
+          appleMusicUrl: body.appleMusicUrl ?? null,
         },
         meta: { requestId: REQUEST_ID },
       },
@@ -404,6 +406,7 @@ export const handlers: HttpHandler[] = [
       artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
       metaPixelId: '1234567890123456',
       tiktokPixelId: null,
+      appleMusicUrl: null,
     });
   }),
 
@@ -425,6 +428,7 @@ export const handlers: HttpHandler[] = [
       artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
       metaPixelId: '1234567890123456',
       tiktokPixelId: null,
+      appleMusicUrl: null,
     });
   }),
 
