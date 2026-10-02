@@ -1187,6 +1187,7 @@ paths:
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
+                  appleMusicUrl: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/CreateSoundlinkBadRequest' }
@@ -1234,6 +1235,7 @@ paths:
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
+                  appleMusicUrl: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -1282,6 +1284,7 @@ paths:
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
+                  appleMusicUrl: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -3121,12 +3124,25 @@ components:
           description: |
             Meta Conversions API access token. Write-only: accepted on create,
             never returned on GET. Must be sent together with `metaPixelId`.
+        appleMusicUrl:
+          type: string
+          format: uri
+          description: |
+            Optional HTTPS Apple Music URL. Accepted shapes: a song
+            (`/song/{slug}/{id}`), a catalog playlist (`pl.`), a library
+            playlist (`pl.u-`), or an album share-sheet link with `?i={songId}`
+            (stored as the canonical song URL). Host must be `music.apple.com`
+            with a two-letter storefront. URL shape is checked only; the
+            Apple catalog is not looked up. Omit to create a Spotify-only
+            soundlink.
+          example: https://music.apple.com/us/song/anti-hero/1645937493
 
     SoundlinkDetail:
       allOf:
         - $ref: '#/components/schemas/SoundlinkSummary'
         - type: object
-          required: [autoFollow, artistIdFollow, metaPixelId, tiktokPixelId]
+          required:
+            [autoFollow, artistIdFollow, metaPixelId, tiktokPixelId, appleMusicUrl]
           properties:
             autoFollow:
               type: boolean
@@ -3147,6 +3163,13 @@ components:
               type: string
               nullable: true
               description: TikTok pixel ID configured on this soundlink. `null` if not set.
+            appleMusicUrl:
+              type: string
+              format: uri
+              nullable: true
+              description: |
+                Apple Music URL stored on this soundlink. `null` if not set.
+                Share-sheet album links are returned as the canonical song URL.
 
     SoundlinkDetailResponse:
       type: object

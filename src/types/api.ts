@@ -532,6 +532,8 @@ export interface SoundlinkDetail extends SoundlinkSummary {
   artistIdFollow: string | null;
   metaPixelId: string | null;
   tiktokPixelId: string | null;
+  /** Stored Apple Music URL, or `null` when unset. */
+  appleMusicUrl: string | null;
 }
 
 /** Body for `POST /v1/soundlinks`. */
@@ -549,6 +551,11 @@ export interface CreateSoundlinkRequest {
    * Must be sent together with `metaPixelId`.
    */
   metaConversionAccessToken?: string;
+  /**
+   * Optional HTTPS Apple Music song or playlist URL. The API checks URL shape
+   * only and stores an album share-sheet link (`?i=`) as the canonical song URL.
+   */
+  appleMusicUrl?: string;
 }
 
 /** Paginated soundlink list payload. */

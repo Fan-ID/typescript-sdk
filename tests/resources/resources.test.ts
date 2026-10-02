@@ -306,6 +306,7 @@ describe('Soundlinks resource', () => {
         artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU',
         metaPixelId: '1234567890123456',
         tiktokPixelId: null,
+        appleMusicUrl: null,
       },
     });
   });
@@ -335,6 +336,27 @@ describe('Soundlinks resource', () => {
         name: 'Midnight Drive',
         status: 'active',
         artistIdFollow: null,
+        appleMusicUrl: null,
+      },
+    });
+  });
+
+  it('sends appleMusicUrl on create and returns it on the detail', async () => {
+    const appleMusicUrl = 'https://music.apple.com/us/song/anti-hero/1645937493';
+    const response = await soundlink.soundlinks.create(
+      {
+        name: 'Midnight Drive',
+        spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+        appleMusicUrl,
+      },
+      { idempotencyKey: 'create-soundlink-apple-01' },
+    );
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        soundlinkId: 'sl_new123',
+        appleMusicUrl,
       },
     });
   });

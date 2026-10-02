@@ -176,7 +176,7 @@ const { data: created } = await soundlink.soundlinks.create(
 );
 
 const { data: detail } = await soundlink.soundlinks.get('sl_abc123');
-// detail.autoFollow, detail.metaPixelId, detail.tiktokPixelId
+// detail.autoFollow, detail.metaPixelId, detail.tiktokPixelId, detail.appleMusicUrl
 
 const { data: archived } = await soundlink.soundlinks.delete('sl_abc123');
 // archived.status === 'archived'
