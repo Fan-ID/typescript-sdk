@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.4.0
+
+### Minor Changes
+
+- [#21](https://github.com/Fan-ID/typescript-sdk/pull/21) [`573a727`](https://github.com/Fan-ID/typescript-sdk/commit/573a72796581c36457e32aafbbc589e1d109e8cf) Thanks [@Logan190101](https://github.com/Logan190101)! - Add optional `appleMusicUrl` to soundlink create and detail.
+
 ## 2.3.0
 
 ### Minor Changes
