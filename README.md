@@ -132,9 +132,18 @@ await soundlink.campaigns.tiers.update(created.campaignId, {
   })),
 });
 
+await soundlink.campaigns.updateAutoRenew(
+  created.campaignId,
+  { autoRenew: false },
+  { idempotencyKey: 'auto-renew-01' },
+);
+
 await soundlink.campaigns.stop(created.campaignId, {
   idempotencyKey: 'stop-01',
 });
+
+const { data: wallet } = await soundlink.wallet.get();
+// wallet.available is balance minus reserved
 ```
 
 Custom strategy create (requires `tierTargeting`):
@@ -176,7 +185,7 @@ const { data: created } = await soundlink.soundlinks.create(
 );
 
 const { data: detail } = await soundlink.soundlinks.get('sl_abc123');
-// detail.autoFollow, detail.metaPixelId, detail.tiktokPixelId, detail.appleMusicUrl
+// detail.autoFollow, detail.appleMusicUrl, detail.youtubeMusicUrl
 
 const { data: archived } = await soundlink.soundlinks.delete('sl_abc123');
 // archived.status === 'archived'
@@ -205,6 +214,9 @@ const { data: overview } = await soundlink.metrics.overview('camp_abc123', {
   startDate: '2026-01-01',
   endDate: '2026-03-31',
 });
+
+const { data: creatives } = await soundlink.metrics.creatives('camp_abc123');
+// lifetime snapshot, grouped by background video. No date range.
 
 const { data: breakdown } = await soundlink.metrics.breakdown.list('camp_abc123', {
   page: 1,
@@ -261,26 +273,27 @@ const soundlink = new Soundlink({
 
 ## Error codes
 
-| Code                       | Typical HTTP |
-| -------------------------- | ------------ |
-| `invalid_api_key`          | 401          |
-| `api_key_revoked`          | 401          |
-| `api_key_expired`          | 401          |
-| `invalid_token`            | 401          |
-| `insufficient_scope`       | 403          |
-| `access_denied`            | 403          |
-| `wallet_not_enabled`       | 403          |
-| `not_found`                | 404          |
-| `campaign_not_found`       | 404          |
-| `invalid_request`          | 400          |
-| `invalid_query_parameter`  | 400          |
-| `invalid_date_range`       | 400          |
-| `page_size_exceeded`       | 400          |
-| `insufficient_credit`      | 402          |
-| `idempotency_key_conflict` | 409          |
-| `tier_update_cooldown`     | 409          |
-| `rate_limit_exceeded`      | 429          |
-| `internal_error`           | 500          |
+| Code                        | Typical HTTP |
+| --------------------------- | ------------ |
+| `invalid_api_key`           | 401          |
+| `api_key_revoked`           | 401          |
+| `api_key_expired`           | 401          |
+| `invalid_token`             | 401          |
+| `insufficient_scope`        | 403          |
+| `access_denied`             | 403          |
+| `wallet_not_enabled`        | 403          |
+| `youtube_music_not_enabled` | 403          |
+| `not_found`                 | 404          |
+| `campaign_not_found`        | 404          |
+| `invalid_request`           | 400          |
+| `invalid_query_parameter`   | 400          |
+| `invalid_date_range`        | 400          |
+| `page_size_exceeded`        | 400          |
+| `insufficient_credit`       | 402          |
+| `idempotency_key_conflict`  | 409          |
+| `tier_update_cooldown`      | 409          |
+| `rate_limit_exceeded`       | 429          |
+| `internal_error`            | 500          |
 
 Include `meta.requestId` (or `error.requestId`) when contacting Soundlink support. On `402 insufficient_credit`, check `error.details` for `available` / `required` wallet amounts.
 
