@@ -436,6 +436,7 @@ describe('Soundlinks resource', () => {
         metaPixelId: '1234567890123456',
         tiktokPixelId: null,
         appleMusicUrl: null,
+        youtubeMusicUrl: null,
       },
     });
   });
@@ -488,6 +489,39 @@ describe('Soundlinks resource', () => {
         appleMusicUrl,
       },
     });
+  });
+
+  it('sends youtubeMusicUrl on create and returns it on the detail', async () => {
+    const youtubeMusicUrl = 'https://music.youtube.com/watch?v=dQw4w9WgXcQ';
+    let body: { youtubeMusicUrl?: string } | undefined;
+
+    server.use(
+      http.post(`${BASE_URL}/v1/soundlinks`, async ({ request }) => {
+        body = (await request.json()) as { youtubeMusicUrl?: string };
+        return HttpResponse.json(
+          {
+            data: {
+              soundlinkId: 'sl_new123',
+              youtubeMusicUrl: body.youtubeMusicUrl ?? null,
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    const response = await soundlink.soundlinks.create(
+      {
+        name: 'Midnight Drive',
+        spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+        youtubeMusicUrl,
+      },
+      { idempotencyKey: 'create-soundlink-youtube-01' },
+    );
+
+    expect(body?.youtubeMusicUrl).toBe(youtubeMusicUrl);
+    expect(response.data?.youtubeMusicUrl).toBe(youtubeMusicUrl);
   });
 
   it('returns invalid_request when create omits Idempotency-Key', async () => {
