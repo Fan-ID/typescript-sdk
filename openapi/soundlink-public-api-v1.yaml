@@ -39,7 +39,9 @@ info:
     | Metrics reads (overview, breakdown, exports) | `metrics:read` | API key (Bearer) or OAuth Bearer |
     | Campaign writes (create, stop, budget, tier updates) | `campaigns:write` | API key (Bearer) or OAuth Bearer |
     | Video import / import status | `videos:write` | API key (Bearer) or OAuth Bearer |
-    | Soundlink reads (list, detail, metrics overview/timeseries/breakdown/engagement, JSONL exports) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
+    | Soundlink reads (list, detail, metrics overview/breakdown/engagement, JSONL exports) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
+    | Soundlink writes (create, archive, test events) | `soundlinks:write` | API key (Bearer) or OAuth Bearer |
+    | Wallet read (`GET /v1/wallet`) | `wallet:read` | API key (Bearer) or OAuth Bearer |
 
     Per-operation scope requirements are also marked with `x-required-scope`
     (except `GET /v1/ping`, which accepts any valid credential with at least
@@ -63,6 +65,8 @@ security:
 tags:
   - name: System
     description: Connectivity and auth verification
+  - name: Wallet
+    description: Organization wallet balance
   - name: Campaigns
     description: Campaign listing, detail, creation, and wallet management (budget, stop, tiers)
   - name: Metrics
@@ -70,7 +74,7 @@ tags:
   - name: Videos
     description: Partner video library import for Full Control campaigns
   - name: Soundlinks
-    description: Soundlink listing, detail, and performance metrics
+    description: Soundlink listing, detail, creation, archive, and performance metrics
 
 paths:
   /v1/ping:
@@ -110,6 +114,45 @@ paths:
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/wallet:
+    get:
+      operationId: getWallet
+      summary: Get organization wallet balance
+      description: |
+        Returns the organization wallet on the API key. Requires `wallet:read`.
+        Existing keys do not have this scope until it is granted.
+
+        `available` is the amount `POST /v1/campaigns` checks before reserving.
+        When create returns `402 insufficient_credit`, `error.details.available`
+        matches this field. `reserved` is the sum of active reservations.
+
+        An organization with no credits row returns zeros and `updatedAt: null`.
+      tags: [Wallet]
+      x-required-scope: wallet:read
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      responses:
+        '200':
+          description: Wallet snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetWalletResponse'
+              example:
+                data:
+                  balance: 500
+                  available: 350
+                  reserved: 150
+                  currency: USD
+                  updatedAt: '2026-04-01T10:00:00Z'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -194,6 +237,12 @@ paths:
                       dailyBudget: 20.0
                       totalBudget: 140.0
                       campaignDuration: 7
+                      artistId: 4gzpq5DPGxSnKTe4SA8HAU
+                      artistName: Coldplay
+                      trackId: 3AJwUDP919kvQ9QcozQPxg
+                      playlistId: null
+                      trackName: Yellow
+                      campaignUrl: https://getsoundlink.com/orgs/org_xyz/insights/V1StGXR8_Z5jdHi6B-myT
                       createdAt: '2026-04-01T10:00:00Z'
                       updatedAt: '2026-04-08T12:00:00Z'
                   pagination:
@@ -343,6 +392,12 @@ paths:
                   totalBudget: 140.0
                   campaignDuration: 7
                   strategyType: custom
+                  artistId: 4gzpq5DPGxSnKTe4SA8HAU
+                  artistName: Coldplay
+                  trackId: 3AJwUDP919kvQ9QcozQPxg
+                  playlistId: null
+                  trackName: Yellow
+                  campaignUrl: https://getsoundlink.com/orgs/org_xyz/insights/V1StGXR8_Z5jdHi6B-myT
                   createdAt: '2026-04-01T10:00:00Z'
                   updatedAt: '2026-04-08T12:00:00Z'
                 meta:
@@ -363,9 +418,17 @@ paths:
 
         **Wallet campaigns only** (`generation: 3`).
 
-        Stopping is idempotent at the campaign level: a second stop on an
-        already-stopped campaign succeeds without double-refunding. The
-        `Idempotency-Key` header is also **required** so retries of the same
+        **Statuses that accept stop** and return `stopped`: `active`,
+        `inactive`, `restarting`, `restart_failed`, `renew_failed`, and
+        `renew_awaiting_charge`.
+
+        **Already terminal:** `stopped` and `ended` succeed without changing
+        status. The response `status` stays `stopped` or `ended`. A second
+        stop does not double-refund.
+
+        **Retry later (`400 invalid_request`):** `creating` and `renewing`.
+
+        The `Idempotency-Key` header is **required** so retries of the same
         request replay the original response without repeating side effects.
 
         **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
@@ -388,6 +451,56 @@ paths:
                 data:
                   campaignId: campaign-uuid
                   status: stopped
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/auto-renew:
+    put:
+      operationId: updateCampaignAutoRenew
+      summary: Toggle wallet campaign auto-renew
+      description: |
+        Sets auto-renew for a wallet-funded campaign. Requires the
+        `campaigns:write` scope and an `Idempotency-Key` header.
+
+        **Wallet campaigns only** (`generation: 3`). Non-wallet campaigns
+        return `400`. Allowed when the campaign status is `active` or
+        `renew_failed`. A matching stored value is a no-op success.
+
+        **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
+      tags: [Campaigns]
+      x-required-scope: campaigns:write
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/idempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignAutoRenewRequest'
+            example:
+              autoRenew: true
+      responses:
+        '200':
+          description: Auto-renew updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateCampaignAutoRenewResponse'
+              example:
+                data:
+                  campaignId: campaign-uuid
+                  autoRenew: true
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -487,8 +600,10 @@ paths:
         is applied asynchronously after acceptance (`accepted: true`).
 
         Domain rules (also returned as `invalid_request` when violated):
-        - `targetDailyBudget` must be at least `$10`/day and lower than the
-          current daily budget
+        - `targetDailyBudget` must be at least the campaign's enabled-ad-set
+          minimum gross (`minLowerDailyBudgetGrossCurrent`, or the max of
+          current and next when `mode` is `current_and_renewals`) and lower
+          than the current daily budget
         - more than 3 days must remain in the current cycle
 
         **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
@@ -697,6 +812,75 @@ paths:
                   cpl: 0.028
                   cpf: 0.43
                   streams_per_listener: 1.94
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/creatives:
+    get:
+      operationId: getCampaignCreativeMetrics
+      summary: Campaign creative metrics
+      description: |
+        Lifetime creative performance for one campaign, grouped by background
+        video. Each child is one ad creative. This is a
+        snapshot, not a date range. `startDate` and `endDate` are rejected.
+
+        Spend is omitted until media spend and fees can be split. Ratios use
+        the same lifetime basis as the Creatives tab.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+      responses:
+        '200':
+          description: Creative groups for the campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreativeMetricsResponse'
+              example:
+                data:
+                  creatives:
+                    - video_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                      caption: Late night version
+                      listeners: 400
+                      followers: 80
+                      link_clicks: 280
+                      cpl: 0.25
+                      cpf: 1.25
+                      cpc_linkclick: 0.357
+                      frequency: 1.8
+                      children:
+                        - caption: Late night version
+                          language: en
+                          spotify_track_id: 11dFghVXANMlKmJXsNCbNl
+                          listeners: 200
+                          followers: 40
+                          link_clicks: 120
+                          cpl: 0.3
+                          cpf: 1.5
+                          cpc_linkclick: 0.5
+                          frequency: 2
+                        - caption: Daytime version
+                          language: en
+                          spotify_track_id: 11dFghVXANMlKmJXsNCbNl
+                          listeners: 200
+                          followers: 40
+                          link_clicks: 160
+                          cpl: 0.2
+                          cpf: 1
+                          cpc_linkclick: 0.25
+                          frequency: 1.5
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1188,6 +1372,7 @@ paths:
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
+                  youtubeMusicUrl: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/CreateSoundlinkBadRequest' }
@@ -1236,6 +1421,7 @@ paths:
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
+                  youtubeMusicUrl: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -1243,15 +1429,13 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
-
     delete:
       operationId: archiveSoundlink
       summary: Archive a soundlink
       description: |
         Archives a self-serve soundlink (`status: archived`). Same as Archive
-        in the app: the public landing page returns 404 after cache expires.
-        List and detail still return the row. Cannot be undone via the Public
-        API.
+        in the app: the public page stops resolving, and this cannot be undone
+        via the Public API.
 
         Requires `soundlinks:write`. Campaign-linked soundlinks, soundlinks
         that are not `active`, and ids that do not belong to the org return
@@ -1285,8 +1469,57 @@ paths:
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
+                  youtubeMusicUrl: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/test-events:
+    post:
+      operationId: sendSoundlinkTestEvents
+      summary: Send a test conversion event for a soundlink
+      description: |
+        Sends the same test conversion event as the in-app "send test event"
+        action. Pixels and tokens are read from the soundlink. This request
+        has no body.
+
+        When the soundlink has a Meta pixel, a live Meta Conversions API event
+        named `Soundlink Stream` is sent to that pixel. When it has a TikTok
+        pixel, a live TikTok `ViewContent` event is sent as well. These are
+        not sandbox events: they appear in the ad platform's events manager.
+
+        Requires `soundlinks:write`. Unknown ids, another organization's
+        soundlink, and campaign-linked soundlinks return `404`. Archived
+        self-serve soundlinks are allowed. A soundlink with neither pixel
+        returns `400`. Does not require `Idempotency-Key`; each call sends a
+        new event.
+
+        **Auth:** Accepts API key or OAuth Bearer (`soundlinks:write`).
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:write
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+      responses:
+        '200':
+          description: Test event sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendTestEventResponse'
+              example:
+                data:
+                  soundlinkId: V1StGXR8_Z5jdHi6B-myT
+                  status: sent
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1302,9 +1535,8 @@ paths:
         clicks, listeners, streams, followers, and derived ratios. Totals are
         sums of country-day mart rows (`api_smart_link_country_daily`);
         `listeners` is the sum of daily country `new_listeners` (not
-        period-unique). No per-day rows — use `/metrics/timeseries` for those,
-        or `/metrics/breakdown` for country-day rows (including new/returning
-        splits).
+        period-unique). No per-day rows — use `/metrics/breakdown` for
+        country-day rows (including new/returning splits).
 
         Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
       tags: [Soundlinks]
@@ -1341,95 +1573,6 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /v1/soundlinks/{soundlinkId}/metrics/timeseries:
-    get:
-      operationId: getSoundlinkMetricsTimeseries
-      summary: Soundlink metrics timeseries
-      description: |
-        Per-day metrics for a soundlink. One row per `report_date`. Results
-        are paginated.
-
-        **Row schema:** `soundlink_daily` v1.0. Rows are idempotent on the
-        primary key `(provider, account_id, report_date, soundlink_id)`;
-        re-ingesting is safe.
-
-        **Mutability window:** rows for a given `report_date` can be revised
-        for up to 7 days after the date closes due to delayed Spotify playback
-        events. Re-fetch or re-ingest accordingly.
-
-        Rows are aggregated across countries (no `country_code`) and
-        contain no financial fields. For country-day rows use
-        `/metrics/breakdown` (and `/metrics/breakdown/export`).
-
-        Maps to the **Trends** tab in the Soundlink Insights UI.
-
-        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
-      tags: [Soundlinks]
-      security:
-        - apiKeyBearerAuth: []
-        - oauthBearer: []
-      x-required-scope: soundlinks:read
-      parameters:
-        - $ref: '#/components/parameters/soundlinkId'
-        - $ref: '#/components/parameters/soundlinkStartDate'
-        - $ref: '#/components/parameters/soundlinkEndDate'
-        - $ref: '#/components/parameters/page'
-        - $ref: '#/components/parameters/pageSize500'
-        - name: sortBy
-          in: query
-          schema:
-            type: string
-            enum: [report_date]
-            default: report_date
-        - $ref: '#/components/parameters/sortOrder'
-      responses:
-        '200':
-          description: Paginated per-day rows (`soundlink_daily` schema)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SoundlinkTimeseriesResponse'
-              example:
-                data:
-                  schemaVersion: '1.0'
-                  items:
-                    - provider: soundlink
-                      account_id: a7ac3173-2f71-4e79-921f-d15d7112dd11
-                      schema_version: '1.0'
-                      report_date: '2026-08-01'
-                      report_date_timezone: UTC
-                      exported_at: '2026-08-28T03:00:00Z'
-                      soundlink_id: V1StGXR8_Z5jdHi6B-myT
-                      soundlink_name: Midnight Drive
-                      soundlink_target_type: track
-                      soundlink_target_isrc: DEXW62500259
-                      soundlink_target_spotify_track_id: 11dFghVXANMlKmJXsNCbNl
-                      soundlink_target_playlist_id: null
-                      views: 4821
-                      link_clicks: 890
-                      streams: 203
-                      listeners: 145
-                      new_listeners: 120
-                      returning_listeners: 25
-                      new_listener_streams: 160
-                      returning_listener_streams: 43
-                      followers: 12
-                      streams_per_listener: 1.4
-                      ctr_lp: 0.185
-                  pagination:
-                    page: 1
-                    pageSize: 50
-                    totalCount: 90
-                    totalPages: 2
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
   /v1/soundlinks/{soundlinkId}/metrics/breakdown:
     get:
       operationId: getSoundlinkMetricsBreakdown
@@ -1452,7 +1595,6 @@ paths:
         in your own Meta account, so spend is not visible to Soundlink.
 
         Maps to the **Countries** tab in the Soundlink Insights UI.
-        Use `/metrics/timeseries` for country-aggregated daily Trends rows.
 
         Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
       tags: [Soundlinks]
@@ -1787,10 +1929,14 @@ paths:
   /v1/videos/import:
     post:
       operationId: importVideo
-      summary: Import video(s) from public HTTPS MP4 URL(s)
+      summary: Import video(s) from public HTTPS MP4 or QuickTime URL(s)
       description: |
         Accepts a single `url` or a `videos` array (1–5 items). Creates one upload
         session, enqueues async download/staging, and returns `202` with `sessionId`.
+        URLs may be MP4 (`video/mp4`) or QuickTime (`.mov` / `video/quicktime`).
+        Unsupported types return `invalid_video_content_type`.
+        QuickTime imports stay `processing` while they transcode to MP4, then
+        follow the same ingest path as native MP4.
 
         Requires the `videos:write` scope. Subject to a stricter per-credential rate
         limit than generic public API routes (default 20 imports per hour per API key
@@ -1821,7 +1967,7 @@ paths:
                 value:
                   videos:
                     - url: 'https://cdn.example.com/a.mp4'
-                    - url: 'https://cdn.example.com/b.mp4'
+                    - url: 'https://cdn.example.com/b.mov'
       responses:
         '200':
           description: Duplicate video already in the organization's library (sync legacy path only)
@@ -1916,7 +2062,7 @@ components:
         maxLength: 255
       description: |
         A unique string identifying this request, used to safely retry write
-        operations (create, stop, budget increase/decrease) without repeating
+        operations (campaign create/stop/budget, soundlink create) without repeating
         side effects. Required on every request that references this parameter.
         Reusing this key with an unchanged request body replays the original
         response; reusing it with a different body returns
@@ -1966,7 +2112,11 @@ components:
       schema:
         type: string
         format: date
-      description: Inclusive start date (`YYYY-MM-DD`). Defaults to campaign start date.
+      description: |
+        Inclusive start date (`YYYY-MM-DD`). When omitted, the default depends
+        on the endpoint: campaign overview and paginated breakdown use the
+        campaign start date; engagement and JSONL export endpoints use the
+        last 90 days ending today (see each operation).
 
     endDate:
       name: endDate
@@ -1992,7 +2142,7 @@ components:
         format: date
       description: |
         Inclusive start date (`YYYY-MM-DD`) for soundlink overview and
-        timeseries. Defaults to the soundlink creation date when omitted.
+        breakdown. Defaults to the soundlink creation date when omitted.
 
     soundlinkEndDate:
       name: endDate
@@ -2013,6 +2163,33 @@ components:
           type: string
           format: uuid
           description: Server-generated request ID. Include when contacting support.
+
+    WalletData:
+      type: object
+      required: [balance, available, reserved, currency, updatedAt]
+      properties:
+        balance:
+          type: number
+        available:
+          type: number
+        reserved:
+          type: number
+        currency:
+          type: string
+          enum: [USD]
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    GetWalletResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/WalletData'
+        meta:
+          $ref: '#/components/schemas/Meta'
 
     Pagination:
       type: object
@@ -2086,7 +2263,19 @@ components:
 
     CampaignStatus:
       type: string
-      enum: [creating, active, paused, stopped, completed, failed, ended]
+      enum:
+        [
+          creating,
+          active,
+          inactive,
+          ended,
+          renewing,
+          restarting,
+          restart_failed,
+          renew_awaiting_charge,
+          renew_failed,
+          stopped,
+        ]
 
     CampaignSummary:
       type: object
@@ -2100,6 +2289,12 @@ components:
           totalBudget,
           campaignDuration,
           generation,
+          artistId,
+          artistName,
+          trackId,
+          playlistId,
+          trackName,
+          campaignUrl,
           createdAt,
           updatedAt,
         ]
@@ -2130,6 +2325,48 @@ components:
             legacy; `2` = Soundlink managed; `3` = wallet. Public API write
             operations (budget changes, stop, tier updates) are supported for
             generation `3` only.
+        artistId:
+          type: string
+          nullable: true
+          description: |
+            Follow-attribution Spotify artist ID (`artist_id_follow`).
+            This is the artist campaign follows are credited to, not the
+            track's credit list (collabs/features are omitted). Use this
+            to group campaigns for one artist. `null` when unset.
+        artistName:
+          type: string
+          nullable: true
+          description: |
+            Cached display name for `artistId` only — not derived from the
+            track's artists. `null` when unknown or unset.
+        trackId:
+          type: string
+          nullable: true
+          description: |
+            Promoted Spotify track ID, parsed from the smart link URL.
+            `null` for playlist campaigns or when the URL is not a track.
+            Stable join key for the song; same grain as
+            `campaign_target_spotify_track_id` on metrics breakdown.
+        playlistId:
+          type: string
+          nullable: true
+          description: |
+            Promoted Spotify playlist ID, parsed from the smart link URL.
+            `null` for track campaigns or when the URL is not a playlist.
+            Same grain as `campaign_target_playlist_id` on metrics breakdown.
+        trackName:
+          type: string
+          nullable: true
+          description: |
+            Promoted track title. `null` for playlist campaigns or when unknown.
+        campaignUrl:
+          type: string
+          format: uri
+          description: |
+            Logged-in campaign insights URL in the Soundlink product
+            (`/orgs/{organizationId}/insights/{smartLinkId}`). Uses the smart
+            link id, not the campaign id. Requires a Soundlink account in this
+            organization. This is not a public share link.
         createdAt:
           type: string
           format: date-time
@@ -2147,6 +2384,11 @@ components:
               description: |
                 Growth strategy (e.g. `custom`, `maximum_growth`, `market_discovery`).
                 Set at campaign creation.
+            autoRenew:
+              type: boolean
+              description: |
+                Whether this wallet campaign renews at the end of each cycle.
+                `false` when auto-renew is off or the campaign has no stored value.
 
     CampaignListResponse:
       type: object
@@ -2402,6 +2644,13 @@ components:
             cloned from. Records lineage only — it does not copy settings from
             the source; all other create fields must still be provided. Unknown
             or other-organization IDs return `400 invalid_request`.
+        autoRenew:
+          type: boolean
+          default: false
+          description: >-
+            When true, the wallet campaign renews at the end of each cycle if
+            credit remains. When false or omitted, auto-renew stays off. A
+            renewal can cost more than create because of ad fees.
 
     CreateCampaignRequestWithoutTiers:
       allOf:
@@ -2448,12 +2697,15 @@ components:
 
     CampaignCreateData:
       type: object
-      required: [campaignId, status]
+      required: [campaignId, status, autoRenew]
       properties:
         campaignId:
           type: string
         status:
           $ref: '#/components/schemas/CampaignStatus'
+        autoRenew:
+          type: boolean
+          description: Stored auto-renew flag for this wallet campaign.
 
     CreateCampaignResponse:
       type: object
@@ -2472,7 +2724,10 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/CampaignStatus'
-          description: Campaign status after stop (typically `stopped`).
+          description: |
+            Campaign status after stop. `stopped` when stop applied or the
+            campaign was already stopped. `ended` when the campaign had
+            already ended.
 
     StopCampaignResponse:
       type: object
@@ -2480,6 +2735,31 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/CampaignStopData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    UpdateCampaignAutoRenewRequest:
+      type: object
+      required: [autoRenew]
+      properties:
+        autoRenew:
+          type: boolean
+
+    CampaignAutoRenewData:
+      type: object
+      required: [campaignId, autoRenew]
+      properties:
+        campaignId:
+          type: string
+        autoRenew:
+          type: boolean
+
+    UpdateCampaignAutoRenewResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignAutoRenewData'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -2579,10 +2859,12 @@ components:
       properties:
         targetDailyBudget:
           type: number
-          minimum: 10
+          minimum: 0
+          exclusiveMinimum: true
           description: |
-            New daily budget in USD (gross). Must be at least `$10`/day and
-            lower than the campaign's current daily budget.
+            New daily budget in USD (gross). Must be at least the campaign's
+            enabled-ad-set minimum gross and lower than the campaign's current
+            daily budget.
         mode:
           $ref: '#/components/schemas/BudgetDecreaseMode'
 
@@ -2692,6 +2974,119 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    CreativeMetricsChild:
+      type: object
+      required:
+        - caption
+        - language
+        - spotify_track_id
+        - listeners
+        - followers
+        - link_clicks
+        - cpl
+        - cpf
+        - cpc_linkclick
+        - frequency
+      properties:
+        caption:
+          type: string
+          nullable: true
+        language:
+          type: string
+          nullable: true
+          description: Render language. Null when the render has no language.
+        spotify_track_id:
+          type: string
+          description: Spotify track id stored on the render. Not a lookup.
+        listeners:
+          type: integer
+          nullable: true
+          description: Lifetime listeners. Null when the variant has no performance row.
+        followers:
+          type: integer
+          nullable: true
+        link_clicks:
+          type: integer
+          nullable: true
+        cpl:
+          type: number
+          nullable: true
+        cpf:
+          type: number
+          nullable: true
+        cpc_linkclick:
+          type: number
+          nullable: true
+        frequency:
+          type: number
+          nullable: true
+
+    CreativeMetricsGroup:
+      type: object
+      required:
+        - video_id
+        - caption
+        - listeners
+        - followers
+        - link_clicks
+        - cpl
+        - cpf
+        - cpc_linkclick
+        - frequency
+        - children
+      properties:
+        video_id:
+          type: string
+          description: Background video id. Groups with no video id are omitted.
+        caption:
+          type: string
+          nullable: true
+          description: Caption of the highest-spend child.
+        listeners:
+          type: integer
+          nullable: true
+        followers:
+          type: integer
+          nullable: true
+        link_clicks:
+          type: integer
+          nullable: true
+        cpl:
+          type: number
+          nullable: true
+        cpf:
+          type: number
+          nullable: true
+        cpc_linkclick:
+          type: number
+          nullable: true
+        frequency:
+          type: number
+          nullable: true
+        children:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/CreativeMetricsChild'
+
+    CreativeMetrics:
+      type: object
+      required: [creatives]
+      properties:
+        creatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreativeMetricsGroup'
+
+    CreativeMetricsResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CreativeMetrics'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     BreakdownRow:
       type: object
       description: |
@@ -2784,7 +3179,7 @@ components:
         link_clicks:
           type: integer
           nullable: true
-          description: Clicks on "Continue with Spotify" on the Soundlink landing page. Use `cpc_linkclick` / `ctr_linkclick` for outbound CPC/CTR.
+          description: CTA clicks across all DSPs on the Soundlink landing page. Use `cpc_linkclick` / `ctr_linkclick` for outbound CPC/CTR.
         streams:
           type: integer
           description: Spotify streams attributed to this campaign in this country on this day (7-day click-through window). Observed events, not modelled estimates.
@@ -3109,15 +3504,32 @@ components:
         spotifyUrl:
           type: string
           format: uri
-          description: HTTPS Spotify track or playlist URL.
+          description: |
+            HTTPS Spotify track or playlist URL. Album, artist, and URI
+            (`spotify:track:...`) forms are rejected. An optional `intl-xx`
+            path segment is accepted. Query strings are stripped before
+            lookup. The resource must currently exist on Spotify.
           example: https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl
         autoFollow:
           type: boolean
           default: false
+          description: |
+            When true, fans who connect Spotify from the landing page are
+            asked to follow the track artist (`artistIdFollow`, or the
+            track's primary artist when omitted), or the playlist itself
+            when `spotifyUrl` is a playlist. Defaults to false.
         artistIdFollow:
           type: string
+          description: |
+            Spotify artist ID used for auto-follow on track links.
+            Optional. Persisted even when `autoFollow` is false. For
+            multi-artist tracks, pass the artist that should be followed.
+            Ignored when `spotifyUrl` is a playlist.
         metaPixelId:
           type: string
+          description: |
+            Meta pixel ID. Must be sent together with
+            `metaConversionAccessToken`. Omit both to skip Meta tracking.
         metaConversionAccessToken:
           type: string
           writeOnly: true
@@ -3136,19 +3548,33 @@ components:
             Apple catalog is not looked up. Omit to create a Spotify-only
             soundlink.
           example: https://music.apple.com/us/song/anti-hero/1645937493
+        youtubeMusicUrl:
+          type: string
+          format: uri
+          description: |
+            Optional HTTPS YouTube Music URL. Accepted shapes: a song
+            (`music.youtube.com/watch?v=…`, `youtube.com/watch?v=…`, or
+            `youtu.be/…`) or a playlist (`…/playlist?list=…`). Shorts,
+            live, channel, and browse links are rejected. A video or
+            playlist that does not exist on YouTube returns
+            `400 invalid_request`. Omit to leave YouTube Music unset.
+          example: https://music.youtube.com/watch?v=dQw4w9WgXcQ
 
     SoundlinkDetail:
       allOf:
         - $ref: '#/components/schemas/SoundlinkSummary'
         - type: object
           required:
-            [autoFollow, artistIdFollow, metaPixelId, tiktokPixelId, appleMusicUrl]
+            - autoFollow
+            - artistIdFollow
+            - metaPixelId
+            - tiktokPixelId
+            - appleMusicUrl
+            - youtubeMusicUrl
           properties:
             autoFollow:
               type: boolean
-              description: |
-                Whether auto-follow is configured for this soundlink. Whether
-                it takes effect also depends on the organization's plan.
+              description: Whether auto-follow is enabled on this soundlink.
             artistIdFollow:
               type: string
               nullable: true
@@ -3170,6 +3596,14 @@ components:
               description: |
                 Apple Music URL stored on this soundlink. `null` if not set.
                 Share-sheet album links are returned as the canonical song URL.
+            youtubeMusicUrl:
+              type: string
+              format: uri
+              nullable: true
+              description: |
+                YouTube Music URL stored on this soundlink. `null` if not set.
+                Input hosts such as `youtu.be` are returned as the canonical
+                `music.youtube.com` song or playlist URL.
 
     SoundlinkDetailResponse:
       type: object
@@ -3177,6 +3611,24 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/SoundlinkDetail'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SendTestEventResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [soundlinkId, status]
+          properties:
+            soundlinkId:
+              type: string
+              description: Soundlink that received the test event.
+            status:
+              type: string
+              enum: [sent]
+              description: Present when the stored pixel test event was sent.
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -3194,8 +3646,8 @@ components:
           type: integer
           nullable: true
           description: |
-            Clicks on "Continue with Spotify" on the landing page — outbound
-            clicks to Spotify. Null if not tracked for this soundlink type.
+            CTA clicks across all DSPs on the landing page. Null if not tracked
+            for this soundlink type.
         streams:
           type: integer
           description: Attributed Spotify streams (sum of country-day rows).
@@ -3226,153 +3678,6 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/SoundlinkMetricsOverview'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    SoundlinkDailyRow:
-      type: object
-      description: |
-        One row of the `soundlink_daily` v1.0 schema.
-        Primary key: `(provider, account_id, report_date, soundlink_id)`.
-        Rows are idempotent — re-ingesting on the primary key is safe.
-        Values for a given `report_date` may be revised for up to 7 days after
-        the date closes due to delayed Spotify playback events.
-        Rows are aggregated across countries (no `country_code` in v1.0) and
-        contain no financial fields.
-      required:
-        - provider
-        - account_id
-        - schema_version
-        - report_date
-        - report_date_timezone
-        - exported_at
-        - soundlink_id
-        - soundlink_name
-        - soundlink_target_type
-        - views
-        - streams
-        - listeners
-        - followers
-        - streams_per_listener
-      properties:
-        provider:
-          type: string
-          enum: [soundlink]
-          description: Always `soundlink`. Identifies the data provider for multi-source warehouses.
-        account_id:
-          type: string
-          description: Soundlink organization ID (UUID).
-        schema_version:
-          type: string
-          description: Schema version. Pin your ingest pipeline to this value.
-          example: '1.0'
-        report_date:
-          type: string
-          format: date
-          description: UTC calendar date the metrics belong to (`YYYY-MM-DD`).
-        report_date_timezone:
-          type: string
-          enum: [UTC]
-          description: Always `UTC`.
-        exported_at:
-          type: string
-          format: date-time
-          description: ISO 8601 UTC timestamp when this row was generated. Use for deduplication if the same `report_date` is re-delivered.
-        soundlink_id:
-          type: string
-          description: Unique ID of this soundlink.
-          example: V1StGXR8_Z5jdHi6B-myT
-        soundlink_name:
-          type: string
-          description: Human-readable soundlink name.
-        soundlink_target_type:
-          type: string
-          nullable: true
-          enum: [track, playlist]
-          description: Whether this soundlink promotes a track or playlist. `null` if undetermined.
-        soundlink_target_isrc:
-          type: string
-          nullable: true
-          description: ISRC of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
-        soundlink_target_spotify_track_id:
-          type: string
-          nullable: true
-          description: Spotify track ID of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
-        soundlink_target_playlist_id:
-          type: string
-          nullable: true
-          description: Spotify playlist ID. Populated when `soundlink_target_type = playlist`; otherwise `null`.
-        views:
-          type: integer
-          description: Soundlink landing page views on this day.
-        link_clicks:
-          type: integer
-          nullable: true
-          description: |
-            Clicks on "Continue with Spotify" on the landing page — outbound
-            clicks to Spotify. Null if not tracked for this soundlink type.
-        streams:
-          type: integer
-          description: |
-            Spotify streams attributed to this soundlink on this day:
-            `new_listener_streams + returning_listener_streams`. Observed
-            Spotify-side events, not modelled estimates. Safe to sum within a
-            day; summing across days counts repeat listens.
-        listeners:
-          type: integer
-          description: |
-            Unique Spotify listeners attributed to this soundlink on this day:
-            `new_listeners + returning_listeners`. **Do not sum across days** —
-            the same listener can appear on multiple `report_date` rows.
-        new_listeners:
-          type: integer
-          nullable: true
-          description: Unique listeners whose first play via this soundlink occurred on `report_date`.
-        returning_listeners:
-          type: integer
-          nullable: true
-          description: Unique listeners who played on `report_date` but whose first play was on an earlier date.
-        new_listener_streams:
-          type: integer
-          nullable: true
-          description: Stream count from new listeners on `report_date`.
-        returning_listener_streams:
-          type: integer
-          nullable: true
-          description: Stream count from returning listeners on `report_date`.
-        followers:
-          type: integer
-          description: Spotify artist follower gains attributed to this soundlink on this day.
-        streams_per_listener:
-          type: number
-          description: streams / listeners for this row. Zero if listeners is zero.
-        ctr_lp:
-          type: number
-          nullable: true
-          description: |
-            Landing page click-through rate (link_clicks / views). Computed
-            against landing page views, not ad impressions — do not combine
-            with `ctr_linkclick` from `campaign_country_daily`. Null if views
-            is zero or link_clicks is null.
-
-    SoundlinkTimeseriesResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: object
-          required: [schemaVersion, items, pagination]
-          properties:
-            schemaVersion:
-              type: string
-              description: Version of the `soundlink_daily` row schema. Pin your ingest pipeline to this.
-              example: '1.0'
-            items:
-              type: array
-              items:
-                $ref: '#/components/schemas/SoundlinkDailyRow'
-            pagination:
-              $ref: '#/components/schemas/Pagination'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -3459,8 +3764,8 @@ components:
           type: integer
           nullable: true
           description: |
-            Clicks on "Continue with Spotify" on the landing page — outbound
-            clicks to Spotify. Null if not tracked for this soundlink type.
+            CTA clicks across all DSPs on the landing page. Null if not tracked
+            for this soundlink type.
         streams:
           type: integer
           description: |
@@ -3700,7 +4005,7 @@ components:
         url:
           type: string
           format: uri
-          description: Public HTTPS URL to an MP4 file (max 50 MB). Mutually exclusive with `videos`.
+          description: Public HTTPS URL to an MP4 or QuickTime (.mov) file (max 50 MB). Mutually exclusive with `videos`.
         videos:
           type: array
           minItems: 1
@@ -3713,7 +4018,7 @@ components:
               url:
                 type: string
                 format: uri
-                description: Public HTTPS URL to an MP4 file (max 50 MB).
+                description: Public HTTPS URL to an MP4 or QuickTime (.mov) file (max 50 MB).
 
     VideoImportStatus:
       type: string
@@ -3950,6 +4255,68 @@ components:
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
+    CreateSoundlinkBadRequest:
+      description: |
+        Missing or malformed request body, or a missing/empty
+        `Idempotency-Key` header.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            missing_field:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Missing required field: name.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            missing_idempotency_key:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Idempotency-Key header is required and must not be empty.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            pixel_pair:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'metaPixelId and metaConversionAccessToken must both be provided, or both omitted.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    CreateSoundlinkForbidden:
+      description: |
+        Valid credentials but missing the `soundlinks:write` scope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            insufficient_scope:
+              value:
+                error:
+                  code: insufficient_scope
+                  message: 'This key does not have the soundlinks:write scope.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+    CreateSoundlinkUnprocessable:
+      description: Request body is well-formed but the Spotify URL is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_spotify_url:
+              summary: Malformed URL, unsupported type, or Spotify resource does not exist
+              value:
+                error:
+                  code: invalid_spotify_url
+                  message: 'Spotify track not found.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
     InsufficientCredit:
       description: Wallet balance is too low to cover `dailyBudget * durationDays`
       content:
@@ -4021,69 +4388,6 @@ components:
                 error:
                   code: invalid_request
                   message: 'tierTargeting is only allowed when strategyType is custom.'
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
-
-    CreateSoundlinkBadRequest:
-      description: |
-        Missing or malformed request body, or a missing/empty
-        `Idempotency-Key` header.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            missing_field:
-              value:
-                error:
-                  code: invalid_request
-                  message: 'Missing required field: name.'
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
-            missing_idempotency_key:
-              value:
-                error:
-                  code: invalid_request
-                  message: 'Idempotency-Key header is required and must not be empty.'
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
-            pixel_pair:
-              value:
-                error:
-                  code: invalid_request
-                  message: 'metaPixelId and metaConversionAccessToken must both be provided, or both omitted.'
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
-
-    CreateSoundlinkForbidden:
-      description: |
-        Valid credentials but missing the `soundlinks:write` scope.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            insufficient_scope:
-              value:
-                error:
-                  code: insufficient_scope
-                  message: 'This key does not have the soundlinks:write scope.'
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
-
-    CreateSoundlinkUnprocessable:
-      description: Request body is well-formed but the Spotify URL is invalid.
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-          examples:
-            invalid_spotify_url:
-              summary: Malformed URL, unsupported type, or Spotify resource does not exist
-              value:
-                error:
-                  code: invalid_spotify_url
-                  message: 'Spotify track not found.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 

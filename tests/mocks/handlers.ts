@@ -64,6 +64,12 @@ export const handlers: HttpHandler[] = [
           totalBudget: 140,
           campaignDuration: 7,
           generation: 3,
+          artistId: null,
+          artistName: null,
+          trackId: '11dFghVXANMlKmJXsNCbNl',
+          playlistId: null,
+          trackName: 'Anti-Hero',
+          campaignUrl: 'https://getsoundlink.com/orgs/org_xyz/insights/smartlink-1',
           createdAt: '2026-04-01T10:00:00.000Z',
           updatedAt: '2026-04-08T12:00:00.000Z',
         },
@@ -77,7 +83,7 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
-  http.post(`${BASE_URL}/v1/campaigns`, ({ request }) => {
+  http.post(`${BASE_URL}/v1/campaigns`, async ({ request }) => {
     const idempotencyKey = request.headers.get('Idempotency-Key');
     if (!idempotencyKey) {
       return errorEnvelope(
@@ -95,9 +101,12 @@ export const handlers: HttpHandler[] = [
       );
     }
 
+    const body = (await request.json()) as { autoRenew?: boolean };
+
     return successEnvelope({
       campaignId: 'camp_new123',
       status: 'creating',
+      autoRenew: body.autoRenew ?? false,
     });
   }),
 
@@ -115,7 +124,14 @@ export const handlers: HttpHandler[] = [
       totalBudget: 140,
       campaignDuration: 7,
       generation: 3,
+      artistId: null,
+      artistName: null,
+      trackId: '11dFghVXANMlKmJXsNCbNl',
+      playlistId: null,
+      trackName: 'Anti-Hero',
+      campaignUrl: 'https://getsoundlink.com/orgs/org_xyz/insights/smartlink-1',
       strategyType: 'custom',
+      autoRenew: false,
       createdAt: '2026-04-01T10:00:00.000Z',
       updatedAt: '2026-04-08T12:00:00.000Z',
     });
@@ -363,6 +379,7 @@ export const handlers: HttpHandler[] = [
       artistIdFollow?: string;
       metaPixelId?: string;
       appleMusicUrl?: string;
+      youtubeMusicUrl?: string;
     };
 
     return HttpResponse.json(
@@ -381,6 +398,7 @@ export const handlers: HttpHandler[] = [
           metaPixelId: body.metaPixelId ?? null,
           tiktokPixelId: null,
           appleMusicUrl: body.appleMusicUrl ?? null,
+          youtubeMusicUrl: body.youtubeMusicUrl ?? null,
         },
         meta: { requestId: REQUEST_ID },
       },
@@ -407,6 +425,7 @@ export const handlers: HttpHandler[] = [
       metaPixelId: '1234567890123456',
       tiktokPixelId: null,
       appleMusicUrl: null,
+      youtubeMusicUrl: null,
     });
   }),
 
@@ -429,6 +448,7 @@ export const handlers: HttpHandler[] = [
       metaPixelId: '1234567890123456',
       tiktokPixelId: null,
       appleMusicUrl: null,
+      youtubeMusicUrl: null,
     });
   }),
 

@@ -21,6 +21,7 @@ export type PublicApiErrorCode =
   | 'invalid_tier_status'
   | 'tier_update_cooldown'
   | 'wallet_not_enabled'
+  | 'youtube_music_not_enabled'
   | 'insufficient_credit'
   | 'idempotency_key_conflict'
   | 'rate_limit_exceeded'
@@ -29,21 +30,18 @@ export type PublicApiErrorCode =
   | 'video_import_session_not_found'
   | 'internal_error';
 
-/**
- * Campaign lifecycle status.
- *
- * Includes OpenAPI values plus `inactive` (observed on wallet campaigns in
- * production; may be aligned in a later OpenAPI revision).
- */
+/** Campaign lifecycle status returned by the Public API. */
 export type CampaignStatus =
   | 'creating'
   | 'active'
-  | 'paused'
-  | 'stopped'
-  | 'completed'
-  | 'failed'
+  | 'inactive'
   | 'ended'
-  | 'inactive';
+  | 'renewing'
+  | 'restarting'
+  | 'restart_failed'
+  | 'renew_awaiting_charge'
+  | 'renew_failed'
+  | 'stopped';
 
 /** Ad platform used by the campaign. */
 export type SocialPlatform = 'meta';
@@ -193,6 +191,18 @@ export interface CampaignSummary {
   campaignDuration: number;
   /** Resource generation — writable Public API methods require `3`. */
   generation: CampaignGeneration;
+  /** Follow-attribution Spotify artist ID. `null` when unset. */
+  artistId: string | null;
+  /** Display name for `artistId`. `null` when unknown or unset. */
+  artistName: string | null;
+  /** Promoted Spotify track ID. `null` for playlist campaigns. */
+  trackId: string | null;
+  /** Promoted Spotify playlist ID. `null` for track campaigns. */
+  playlistId: string | null;
+  /** Promoted track title. `null` for playlist campaigns or when unknown. */
+  trackName: string | null;
+  /** Logged-in campaign insights URL. Not a public share link. */
+  campaignUrl: string;
   /** ISO 8601 creation timestamp. */
   createdAt: string;
   /** ISO 8601 last update timestamp. */
@@ -203,6 +213,11 @@ export interface CampaignSummary {
 export interface CampaignDetail extends CampaignSummary {
   /** Growth strategy set at creation (e.g. `custom`, `maximum_growth`). */
   strategyType?: StrategyType;
+  /**
+   * Whether this wallet campaign renews at the end of each cycle.
+   * `false` when auto-renew is off or the campaign has no stored value.
+   */
+  autoRenew: boolean;
 }
 
 /** Paginated campaign list payload. */
@@ -245,6 +260,11 @@ export interface CreateCampaignRequestBase {
   };
   /** Lineage only — does not copy settings from the source campaign. */
   clonedFromCampaignId?: string;
+  /**
+   * When true, the wallet campaign renews at the end of each cycle if credit
+   * remains. When false or omitted, auto-renew stays off.
+   */
+  autoRenew?: boolean;
 }
 
 export interface DoItForMeCreativeDirection {
@@ -293,6 +313,59 @@ export type CreateCampaignRequest =
 export interface CampaignCreateData {
   campaignId: string;
   status: CampaignStatus;
+  /** Stored auto-renew flag for this wallet campaign. */
+  autoRenew: boolean;
+}
+
+export interface UpdateCampaignAutoRenewRequest {
+  autoRenew: boolean;
+}
+
+export interface CampaignAutoRenewData {
+  campaignId: string;
+  autoRenew: boolean;
+}
+
+/** Payload from `GET /v1/wallet`. */
+export interface WalletData {
+  balance: number;
+  available: number;
+  reserved: number;
+  currency: 'USD';
+  /** ISO 8601. `null` when the organization has no credits row. */
+  updatedAt: string | null;
+}
+
+/** One variant under a creative group (`GET .../metrics/creatives`). */
+export interface CreativeMetricsChild {
+  caption: string | null;
+  language: string | null;
+  spotify_track_id: string;
+  listeners: number | null;
+  followers: number | null;
+  link_clicks: number | null;
+  cpl: number | null;
+  cpf: number | null;
+  cpc_linkclick: number | null;
+  frequency: number | null;
+}
+
+/** Background-video group from `GET .../metrics/creatives`. */
+export interface CreativeMetricsGroup {
+  video_id: string;
+  caption: string | null;
+  listeners: number | null;
+  followers: number | null;
+  link_clicks: number | null;
+  cpl: number | null;
+  cpf: number | null;
+  cpc_linkclick: number | null;
+  frequency: number | null;
+  children: CreativeMetricsChild[];
+}
+
+export interface CreativeMetrics {
+  creatives: CreativeMetricsGroup[];
 }
 
 /** Success payload from campaign stop. */
@@ -534,6 +607,8 @@ export interface SoundlinkDetail extends SoundlinkSummary {
   tiktokPixelId: string | null;
   /** Stored Apple Music URL, or `null` when unset. */
   appleMusicUrl: string | null;
+  /** Stored YouTube Music URL, or `null` when unset. */
+  youtubeMusicUrl: string | null;
 }
 
 /** Body for `POST /v1/soundlinks`. */
@@ -556,6 +631,11 @@ export interface CreateSoundlinkRequest {
    * only and stores an album share-sheet link (`?i=`) as the canonical song URL.
    */
   appleMusicUrl?: string;
+  /**
+   * Optional HTTPS YouTube Music song or playlist URL. A missing video or
+   * playlist returns `400 invalid_request`.
+   */
+  youtubeMusicUrl?: string;
 }
 
 /** Paginated soundlink list payload. */
