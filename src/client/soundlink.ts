@@ -5,6 +5,7 @@ import {
   PingResource,
   SoundlinksResource,
   StrategiesResource,
+  WalletResource,
 } from '../resources/index.js';
 import type { SoundlinkOptions } from '../types/api.js';
 
@@ -34,6 +35,9 @@ export class Soundlink {
   /** Verify connectivity and authentication. Maps to `GET /v1/ping`. */
   readonly ping: PingResource['ping'];
 
+  /** Organization wallet snapshot. Requires `wallet:read` scope. */
+  readonly wallet: WalletResource;
+
   /** Growth strategy catalog. Requires `campaigns:read` scope. */
   readonly strategies: StrategiesResource;
 
@@ -56,6 +60,7 @@ export class Soundlink {
     const pingResource = new PingResource(http);
 
     this.ping = pingResource.ping.bind(pingResource);
+    this.wallet = new WalletResource(http);
     this.strategies = new StrategiesResource(http);
     this.campaigns = new CampaignsResource(http);
     this.soundlinks = new SoundlinksResource(http);

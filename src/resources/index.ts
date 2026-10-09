@@ -37,7 +37,11 @@ import type {
   SoundlinkListParams,
   SoundlinkMetricsOverview,
   StrategiesCatalogData,
+  UpdateCampaignAutoRenewRequest,
   UpdateCampaignTiersRequest,
+  WalletData,
+  CampaignAutoRenewData,
+  CreativeMetrics,
 } from '../types/api.js';
 
 /**
@@ -123,6 +127,25 @@ export class PingResource {
    */
   ping(): Promise<ApiResponse<PingData>> {
     return this.http.get<PingData>({ path: '/ping' });
+  }
+}
+
+/** Organization wallet (`GET /v1/wallet`). Requires `wallet:read`. */
+export class WalletResource {
+  constructor(private readonly http: HttpClient) {}
+
+  /**
+   * Wallet snapshot for the organization on the API key.
+   *
+   * Maps to `GET /v1/wallet`. `available` is balance minus active reservations.
+   *
+   * @example
+   * ```ts
+   * const { data } = await soundlink.wallet.get();
+   * ```
+   */
+  get(): Promise<ApiResponse<WalletData>> {
+    return this.http.get<WalletData>({ path: '/wallet' });
   }
 }
 
@@ -302,6 +325,24 @@ export class CampaignsResource {
   ): Promise<ApiResponse<DecreaseCampaignBudgetData>> {
     return this.http.post<DecreaseCampaignBudgetData>({
       path: `/campaigns/${encodeURIComponent(campaignId)}/budget/decrease`,
+      body,
+      idempotencyKey: options.idempotencyKey,
+    });
+  }
+
+  /**
+   * Set auto-renew for a wallet campaign.
+   *
+   * Maps to `PUT /v1/campaigns/{campaignId}/auto-renew`. Requires `campaigns:write`
+   * and `Idempotency-Key`. Wallet campaigns only (`generation: 3`).
+   */
+  updateAutoRenew(
+    campaignId: string,
+    body: UpdateCampaignAutoRenewRequest,
+    options: IdempotencyOptions,
+  ): Promise<ApiResponse<CampaignAutoRenewData>> {
+    return this.http.put<CampaignAutoRenewData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/auto-renew`,
       body,
       idempotencyKey: options.idempotencyKey,
     });
@@ -629,6 +670,18 @@ export class MetricsResource {
         startDate: params.startDate,
         endDate: params.endDate,
       },
+    });
+  }
+
+  /**
+   * Lifetime creative performance, grouped by background video.
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/metrics/creatives`.
+   * Snapshot only — do not send a date range.
+   */
+  creatives(campaignId: string): Promise<ApiResponse<CreativeMetrics>> {
+    return this.http.get<CreativeMetrics>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/creatives`,
     });
   }
 }

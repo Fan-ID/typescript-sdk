@@ -4,6 +4,29 @@ import { Soundlink } from '../../src/index.js';
 import { BASE_URL, TEST_API_KEY } from '../mocks/handlers.js';
 import { server } from '../mocks/server.js';
 
+describe('Wallet resource', () => {
+  let soundlink: Soundlink;
+
+  beforeEach(() => {
+    soundlink = new Soundlink({ apiKey: TEST_API_KEY, baseUrl: BASE_URL });
+  });
+
+  it('gets the organization wallet snapshot', async () => {
+    const response = await soundlink.wallet.get();
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        balance: 500,
+        available: 420,
+        reserved: 80,
+        currency: 'USD',
+        updatedAt: '2026-04-01T10:00:00.000Z',
+      },
+    });
+  });
+});
+
 describe('Strategies resource', () => {
   let soundlink: Soundlink;
 
@@ -84,7 +107,53 @@ describe('Campaigns resource', () => {
 
     expect(response).toMatchObject({
       error: null,
-      data: { campaignId: 'camp_new123', status: 'creating' },
+      data: { campaignId: 'camp_new123', status: 'creating', autoRenew: false },
+    });
+  });
+
+  it('sends autoRenew on create when set', async () => {
+    let body: { autoRenew?: boolean } | undefined;
+
+    server.use(
+      http.post(`${BASE_URL}/v1/campaigns`, async ({ request }) => {
+        body = (await request.json()) as { autoRenew?: boolean };
+        return HttpResponse.json({
+          data: {
+            campaignId: 'camp_new123',
+            status: 'creating',
+            autoRenew: body.autoRenew ?? false,
+          },
+          meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+        });
+      }),
+    );
+
+    const response = await soundlink.campaigns.create(
+      {
+        spotifyUrl: 'https://open.spotify.com/track/6habFhsOp2NvndAvgiJ01P',
+        dailyBudget: 20,
+        durationDays: 7,
+        genre: 'Pop',
+        strategyType: 'maximum_growth',
+        autoRenew: true,
+      },
+      { idempotencyKey: 'create-autorenew-01' },
+    );
+
+    expect(body?.autoRenew).toBe(true);
+    expect(response.data?.autoRenew).toBe(true);
+  });
+
+  it('updates auto-renew with Idempotency-Key', async () => {
+    const response = await soundlink.campaigns.updateAutoRenew(
+      'camp_abc123',
+      { autoRenew: true },
+      { idempotencyKey: 'auto-renew-01' },
+    );
+
+    expect(response).toMatchObject({
+      error: null,
+      data: { campaignId: 'camp_abc123', autoRenew: true },
     });
   });
 
@@ -224,6 +293,66 @@ describe('Metrics resource', () => {
     expect(response).toMatchObject({
       error: null,
       data: { listeners: 100 },
+    });
+  });
+
+  it('fetches creative metrics without a date range', async () => {
+    let requestUrl = '';
+
+    server.use(
+      http.get(
+        `${BASE_URL}/v1/campaigns/:campaignId/metrics/creatives`,
+        ({ request }) => {
+          requestUrl = request.url;
+          return HttpResponse.json({
+            data: {
+              creatives: [
+                {
+                  video_id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+                  caption: 'Late night version',
+                  listeners: 400,
+                  followers: 80,
+                  link_clicks: 280,
+                  cpl: 0.25,
+                  cpf: 1.25,
+                  cpc_linkclick: 0.357,
+                  frequency: 1.8,
+                  children: [
+                    {
+                      caption: 'Late night version',
+                      language: 'en',
+                      spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+                      listeners: 200,
+                      followers: 40,
+                      link_clicks: 120,
+                      cpl: 0.3,
+                      cpf: 1.5,
+                      cpc_linkclick: 0.5,
+                      frequency: 2,
+                    },
+                  ],
+                },
+              ],
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          });
+        },
+      ),
+    );
+
+    const response = await soundlink.metrics.creatives('camp_abc123');
+
+    expect(new URL(requestUrl).search).toBe('');
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        creatives: [
+          {
+            video_id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+            children: [{ spotify_track_id: '11dFghVXANMlKmJXsNCbNl' }],
+          },
+        ],
+      },
     });
   });
 

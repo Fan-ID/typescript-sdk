@@ -37,6 +37,16 @@ export const handlers: HttpHandler[] = [
     return successEnvelope({ status: 'ok' });
   }),
 
+  http.get(`${BASE_URL}/v1/wallet`, () => {
+    return successEnvelope({
+      balance: 500,
+      available: 420,
+      reserved: 80,
+      currency: 'USD',
+      updatedAt: '2026-04-01T10:00:00.000Z',
+    });
+  }),
+
   http.get(`${BASE_URL}/v1/strategies`, () => {
     return successEnvelope({
       strategies: [
@@ -137,6 +147,27 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
+  http.put(
+    `${BASE_URL}/v1/campaigns/:campaignId/auto-renew`,
+    async ({ request, params }) => {
+      const idempotencyKey = request.headers.get('Idempotency-Key');
+      if (!idempotencyKey) {
+        return errorEnvelope(
+          'invalid_request',
+          'Idempotency-Key header is required and must not be empty.',
+          400,
+        );
+      }
+
+      const body = (await request.json()) as { autoRenew: boolean };
+
+      return successEnvelope({
+        campaignId: String(params.campaignId),
+        autoRenew: body.autoRenew,
+      });
+    },
+  ),
+
   http.post(`${BASE_URL}/v1/campaigns/:campaignId/stop`, ({ request, params }) => {
     const idempotencyKey = request.headers.get('Idempotency-Key');
     if (!idempotencyKey) {
@@ -231,6 +262,47 @@ export const handlers: HttpHandler[] = [
         isEnabled: true,
         allocationPercent: item.newAllocationPercent,
       })),
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/creatives`, ({ request }) => {
+    const url = new URL(request.url);
+    if (url.searchParams.has('startDate') || url.searchParams.has('endDate')) {
+      return errorEnvelope(
+        'invalid_query_parameter',
+        'Date range is not supported.',
+        400,
+      );
+    }
+
+    return successEnvelope({
+      creatives: [
+        {
+          video_id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+          caption: 'Late night version',
+          listeners: 400,
+          followers: 80,
+          link_clicks: 280,
+          cpl: 0.25,
+          cpf: 1.25,
+          cpc_linkclick: 0.357,
+          frequency: 1.8,
+          children: [
+            {
+              caption: 'Late night version',
+              language: 'en',
+              spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+              listeners: 200,
+              followers: 40,
+              link_clicks: 120,
+              cpl: 0.3,
+              cpf: 1.5,
+              cpc_linkclick: 0.5,
+              frequency: 2,
+            },
+          ],
+        },
+      ],
     });
   }),
 
