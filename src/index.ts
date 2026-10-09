@@ -22,6 +22,7 @@ export type {
   BudgetDecreaseMode,
   BudgetIncreaseMode,
   BuiltInStrategyType,
+  CampaignAutoRenewData,
   CampaignCreateData,
   CampaignDetail,
   CampaignGeneration,
@@ -39,6 +40,9 @@ export type {
   CreateCampaignRequestCustom,
   CreateSoundlinkRequest,
   CreativeDirection,
+  CreativeMetrics,
+  CreativeMetricsChild,
+  CreativeMetricsGroup,
   CustomTier,
   DateRangeParams,
   DecreaseCampaignBudgetData,
@@ -83,7 +87,9 @@ export type {
   StrategyType,
   TierStatusUpdateItem,
   TierTargeting,
+  UpdateCampaignAutoRenewRequest,
   UpdateCampaignTiersRequest,
+  WalletData,
 } from './types/api.js';
 
 export type { ExportResource } from './resources/index.js';
