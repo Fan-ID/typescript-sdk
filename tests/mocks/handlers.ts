@@ -265,16 +265,7 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
-  http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/creatives`, ({ request }) => {
-    const url = new URL(request.url);
-    if (url.searchParams.has('startDate') || url.searchParams.has('endDate')) {
-      return errorEnvelope(
-        'invalid_query_parameter',
-        'Date range is not supported.',
-        400,
-      );
-    }
-
+  http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/creatives`, () => {
     return successEnvelope({
       creatives: [
         {
