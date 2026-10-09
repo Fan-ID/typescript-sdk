@@ -273,27 +273,26 @@ const soundlink = new Soundlink({
 
 ## Error codes
 
-| Code                        | Typical HTTP |
-| --------------------------- | ------------ |
-| `invalid_api_key`           | 401          |
-| `api_key_revoked`           | 401          |
-| `api_key_expired`           | 401          |
-| `invalid_token`             | 401          |
-| `insufficient_scope`        | 403          |
-| `access_denied`             | 403          |
-| `wallet_not_enabled`        | 403          |
-| `youtube_music_not_enabled` | 403          |
-| `not_found`                 | 404          |
-| `campaign_not_found`        | 404          |
-| `invalid_request`           | 400          |
-| `invalid_query_parameter`   | 400          |
-| `invalid_date_range`        | 400          |
-| `page_size_exceeded`        | 400          |
-| `insufficient_credit`       | 402          |
-| `idempotency_key_conflict`  | 409          |
-| `tier_update_cooldown`      | 409          |
-| `rate_limit_exceeded`       | 429          |
-| `internal_error`            | 500          |
+| Code                       | Typical HTTP |
+| -------------------------- | ------------ |
+| `invalid_api_key`          | 401          |
+| `api_key_revoked`          | 401          |
+| `api_key_expired`          | 401          |
+| `invalid_token`            | 401          |
+| `insufficient_scope`       | 403          |
+| `access_denied`            | 403          |
+| `wallet_not_enabled`       | 403          |
+| `not_found`                | 404          |
+| `campaign_not_found`       | 404          |
+| `invalid_request`          | 400          |
+| `invalid_query_parameter`  | 400          |
+| `invalid_date_range`       | 400          |
+| `page_size_exceeded`       | 400          |
+| `insufficient_credit`      | 402          |
+| `idempotency_key_conflict` | 409          |
+| `tier_update_cooldown`     | 409          |
+| `rate_limit_exceeded`      | 429          |
+| `internal_error`           | 500          |
 
 Include `meta.requestId` (or `error.requestId`) when contacting Soundlink support. On `402 insufficient_credit`, check `error.details` for `available` / `required` wallet amounts.
 

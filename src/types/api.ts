@@ -21,7 +21,6 @@ export type PublicApiErrorCode =
   | 'invalid_tier_status'
   | 'tier_update_cooldown'
   | 'wallet_not_enabled'
-  | 'youtube_music_not_enabled'
   | 'insufficient_credit'
   | 'idempotency_key_conflict'
   | 'rate_limit_exceeded'
