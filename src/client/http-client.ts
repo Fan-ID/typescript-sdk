@@ -136,6 +136,22 @@ export class HttpClient {
     });
   }
 
+  async put<T>({
+    path,
+    body,
+    query,
+    headers,
+    idempotencyKey,
+  }: HttpMutationOptions): Promise<ApiResponse<T>> {
+    return this.mutateJson<T>('PUT', {
+      path,
+      body,
+      query,
+      headers,
+      idempotencyKey,
+    });
+  }
+
   async delete<T>({
     path,
     body,
@@ -200,7 +216,7 @@ export class HttpClient {
   }
 
   private mutateJson<T>(
-    method: 'POST' | 'PATCH' | 'DELETE',
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
     { path, body, query, headers, idempotencyKey }: HttpMutationOptions,
   ): Promise<ApiResponse<T>> {
     const url = joinUrl(

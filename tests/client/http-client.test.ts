@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
-import { Soundlink } from '../../src/index.js';
+import { HttpClient, Soundlink } from '../../src/index.js';
 import { BASE_URL, TEST_API_KEY, errorEnvelope } from '../mocks/handlers.js';
 import { server } from '../mocks/server.js';
 
@@ -85,5 +85,45 @@ describe('HttpClient errors and retries', () => {
     expect(data?.status).toBe('stopped');
     expect(attempts).toBe(2);
     expect(keys).toEqual(['stop-retry-01', 'stop-retry-01']);
+  });
+
+  it('retries PUT writes on 5xx with the same Idempotency-Key', async () => {
+    let attempts = 0;
+    const keys: Array<string | null> = [];
+
+    server.use(
+      http.put(`${BASE_URL}/v1/campaigns/:campaignId/auto-renew`, ({ request }) => {
+        attempts += 1;
+        keys.push(request.headers.get('Idempotency-Key'));
+        if (attempts === 1) {
+          return errorEnvelope('internal_error', 'Temporary failure.', 503);
+        }
+
+        return HttpResponse.json({
+          data: { campaignId: 'camp_abc123', autoRenew: true },
+          meta: { requestId: 'retry-put' },
+        });
+      }),
+    );
+
+    const client = new HttpClient({
+      apiKey: TEST_API_KEY,
+      baseUrl: BASE_URL,
+      maxRetries: 2,
+    });
+
+    const { data, error } = await client.put<{
+      campaignId: string;
+      autoRenew: boolean;
+    }>({
+      path: '/campaigns/camp_abc123/auto-renew',
+      body: { autoRenew: true },
+      idempotencyKey: 'auto-renew-retry-01',
+    });
+
+    expect(error).toBeNull();
+    expect(data?.autoRenew).toBe(true);
+    expect(attempts).toBe(2);
+    expect(keys).toEqual(['auto-renew-retry-01', 'auto-renew-retry-01']);
   });
 });
