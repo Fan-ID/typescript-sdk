@@ -441,6 +441,26 @@ describe('Soundlinks resource', () => {
     });
   });
 
+  it('returns youtubeMusicUrl from soundlink detail', async () => {
+    const youtubeMusicUrl = 'https://music.youtube.com/watch?v=dQw4w9WgXcQ';
+
+    server.use(
+      http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId`, () =>
+        HttpResponse.json({
+          data: {
+            soundlinkId: 'sl_abc123',
+            youtubeMusicUrl,
+          },
+          meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+        }),
+      ),
+    );
+
+    const response = await soundlink.soundlinks.get('sl_abc123');
+
+    expect(response.data?.youtubeMusicUrl).toBe(youtubeMusicUrl);
+  });
+
   it('returns not_found for a missing soundlink', async () => {
     const response = await soundlink.soundlinks.get('missing');
 
