@@ -86,6 +86,10 @@ const { data, error } = await soundlink.campaigns.list({
 const { data: campaign } = await soundlink.campaigns.get('camp_abc123');
 // campaign.generation === 3 → wallet (writable)
 
+const { data: activity } = await soundlink.campaigns.activity('camp_abc123', {
+  startDate: '2026-03-01',
+});
+
 // Async iterator across all pages
 for await (const item of soundlink.campaigns.listAll({ pageSize: 100 })) {
   console.log(item.campaignId, item.generation);
@@ -217,6 +221,11 @@ const { data: overview } = await soundlink.metrics.overview('camp_abc123', {
 
 const { data: creatives } = await soundlink.metrics.creatives('camp_abc123');
 // lifetime snapshot, grouped by background video. No date range.
+
+const { data: creativeDaily } = await soundlink.metrics.creativeDaily('camp_abc123', {
+  startDate: '2026-03-01',
+  endDate: '2026-03-31',
+});
 
 const { data: breakdown } = await soundlink.metrics.breakdown.list('camp_abc123', {
   page: 1,

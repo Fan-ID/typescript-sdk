@@ -83,6 +83,48 @@ describe('Campaigns resource', () => {
     });
   });
 
+  it('pages campaign activity and omits startDate when unset', async () => {
+    let requestUrl = '';
+
+    server.use(
+      http.get(`${BASE_URL}/v1/campaigns/:campaignId/activity`, ({ request }) => {
+        requestUrl = request.url;
+        return HttpResponse.json({
+          data: {
+            items: [
+              {
+                event_type: 'BUDGET_TOPUP',
+                timestamp: '2026-03-01T12:00:00.000Z',
+                summary: 'Budget increased',
+              },
+            ],
+            pagination: { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
+          },
+          meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+        });
+      }),
+    );
+
+    const response = await soundlink.campaigns.activity('camp_abc123');
+
+    expect(new URL(requestUrl).search).toBe('');
+    expect(response).toMatchObject({
+      error: null,
+      data: { items: [{ event_type: 'BUDGET_TOPUP' }] },
+    });
+
+    await soundlink.campaigns.activity('camp_abc123', {
+      startDate: '2026-03-01T00:00:00Z',
+      page: 2,
+      pageSize: 20,
+    });
+
+    const params = new URL(requestUrl).searchParams;
+    expect(params.get('startDate')).toBe('2026-03-01T00:00:00Z');
+    expect(params.get('page')).toBe('2');
+    expect(params.get('pageSize')).toBe('20');
+  });
+
   it('iterates all campaigns via listAll', async () => {
     const items: Array<{ campaignId: string }> = [];
     for await (const campaign of soundlink.campaigns.listAll({ pageSize: 10 })) {
@@ -322,6 +364,8 @@ describe('Metrics resource', () => {
                       caption: 'Late night version',
                       language: 'en',
                       spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+                      timestamp_start_ms: 45000,
+                      timestamp_end_ms: 60000,
                       listeners: 200,
                       followers: 40,
                       link_clicks: 120,
@@ -354,6 +398,51 @@ describe('Metrics resource', () => {
         ],
       },
     });
+  });
+
+  it('fetches creative daily rows for a date range', async () => {
+    let requestUrl = '';
+
+    server.use(
+      http.get(
+        `${BASE_URL}/v1/campaigns/:campaignId/metrics/creative-daily`,
+        ({ request }) => {
+          requestUrl = request.url;
+          return HttpResponse.json({
+            data: {
+              items: [
+                {
+                  date: '2026-03-01',
+                  meta_ad_creative_id: '1234567890',
+                  spend_media: 40,
+                  impressions: 400,
+                  followers: 4,
+                  cpf: 10,
+                },
+              ],
+              pagination: { page: 1, pageSize: 50, totalCount: 1, totalPages: 1 },
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          });
+        },
+      ),
+    );
+
+    const ranged = await soundlink.metrics.creativeDaily('camp_abc123', {
+      startDate: '2026-03-01',
+      endDate: '2026-03-31',
+    });
+
+    const params = new URL(requestUrl).searchParams;
+    expect(params.get('startDate')).toBe('2026-03-01');
+    expect(params.get('endDate')).toBe('2026-03-31');
+    expect(ranged).toMatchObject({
+      error: null,
+      data: { items: [{ meta_ad_creative_id: '1234567890', cpf: 10 }] },
+    });
+
+    await soundlink.metrics.creativeDaily('camp_abc123');
+    expect(new URL(requestUrl).search).toBe('');
   });
 
   it('lists breakdown metrics', async () => {

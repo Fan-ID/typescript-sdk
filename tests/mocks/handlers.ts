@@ -283,6 +283,8 @@ export const handlers: HttpHandler[] = [
               caption: 'Late night version',
               language: 'en',
               spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+              timestamp_start_ms: 45000,
+              timestamp_end_ms: 60000,
               listeners: 200,
               followers: 40,
               link_clicks: 120,
