@@ -340,6 +340,10 @@ export interface CreativeMetricsChild {
   caption: string | null;
   language: string | null;
   spotify_track_id: string;
+  /** Audio cut start in ms. `null` when the cut is not a ready sound. */
+  timestamp_start_ms: number | null;
+  /** Audio cut end in ms. `null` when the cut is not a ready sound. */
+  timestamp_end_ms: number | null;
   listeners: number | null;
   followers: number | null;
   link_clicks: number | null;
@@ -365,6 +369,60 @@ export interface CreativeMetricsGroup {
 
 export interface CreativeMetrics {
   creatives: CreativeMetricsGroup[];
+}
+
+/** One event from `GET /v1/campaigns/{campaignId}/activity`. */
+export interface CampaignActivityItem {
+  event_type: string;
+  /** ISO 8601 timestamp. */
+  timestamp: string;
+  summary: string;
+}
+
+/** Page from `campaigns.activity`. */
+export interface CampaignActivityData {
+  items: CampaignActivityItem[];
+  pagination: Pagination;
+}
+
+/** Query for {@link CampaignsResource.activity}. */
+export interface CampaignActivityParams {
+  /**
+   * Events at or after this moment. `YYYY-MM-DD` starts at 00:00:00Z.
+   * An ISO-8601 timestamp uses that instant. Omit for the full history.
+   */
+  startDate?: string;
+  /** Page number (1-indexed). Default: `1`. */
+  page?: number;
+  /** Items per page. Default: `20`. Max: **100**. */
+  pageSize?: number;
+}
+
+/** One row from `GET .../metrics/creative-daily`. */
+export interface CreativeDailyRow {
+  /** UTC calendar date (`YYYY-MM-DD`). */
+  date: string;
+  meta_ad_creative_id: string;
+  /** Meta media spend. Fees are not included. */
+  spend_media: number;
+  impressions: number;
+  followers: number;
+  /** `spend_media / followers` for this row. `null` when followers is zero. */
+  cpf: number | null;
+}
+
+/** Page from `metrics.creativeDaily`. */
+export interface CreativeDailyData {
+  items: CreativeDailyRow[];
+  pagination: Pagination;
+}
+
+/** Query for {@link MetricsResource.creativeDaily}. */
+export interface CreativeDailyParams extends DateRangeParams {
+  /** Page number (1-indexed). Default: `1`. */
+  page?: number;
+  /** Rows per page. Default: `50`. Max: **500**. */
+  pageSize?: number;
 }
 
 /** Success payload from campaign stop. */

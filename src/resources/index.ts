@@ -7,6 +7,8 @@ import type {
   BreakdownListData,
   BreakdownListParams,
   BreakdownRow,
+  CampaignActivityData,
+  CampaignActivityParams,
   CampaignAutoRenewData,
   CampaignCreateData,
   CampaignDetail,
@@ -16,6 +18,8 @@ import type {
   CampaignTiersData,
   CreateCampaignRequest,
   CreateSoundlinkRequest,
+  CreativeDailyData,
+  CreativeDailyParams,
   CreativeMetrics,
   DateRangeParams,
   DecreaseCampaignBudgetData,
@@ -245,6 +249,26 @@ export class CampaignsResource {
   get(campaignId: string): Promise<ApiResponse<CampaignDetail>> {
     return this.http.get<CampaignDetail>({
       path: `/campaigns/${encodeURIComponent(campaignId)}`,
+    });
+  }
+
+  /**
+   * Page of creative adds, budget changes, and other campaign events.
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/activity`. Requires `campaigns:read`.
+   * Omit `startDate` for the full history. Max `pageSize` is **100**.
+   */
+  activity(
+    campaignId: string,
+    params: CampaignActivityParams = {},
+  ): Promise<ApiResponse<CampaignActivityData>> {
+    return this.http.get<CampaignActivityData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/activity`,
+      query: {
+        startDate: params.startDate,
+        page: params.page,
+        pageSize: params.pageSize,
+      },
     });
   }
 
@@ -682,6 +706,28 @@ export class MetricsResource {
   creatives(campaignId: string): Promise<ApiResponse<CreativeMetrics>> {
     return this.http.get<CreativeMetrics>({
       path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/creatives`,
+    });
+  }
+
+  /**
+   * One row per day and Meta ad creative.
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/metrics/creative-daily`.
+   * Requires `metrics:read`. Omit both dates for every day that has rows.
+   * Max `pageSize` is **500**.
+   */
+  creativeDaily(
+    campaignId: string,
+    params: CreativeDailyParams = {},
+  ): Promise<ApiResponse<CreativeDailyData>> {
+    return this.http.get<CreativeDailyData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/creative-daily`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: params.page,
+        pageSize: params.pageSize,
+      },
     });
   }
 }
