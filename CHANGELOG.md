@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.5.0
+
+### Minor Changes
+
+- [#27](https://github.com/Fan-ID/typescript-sdk/pull/27) [`7cf85a7`](https://github.com/Fan-ID/typescript-sdk/commit/7cf85a7277a6d1a070de8a872249ca365a12a079) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add `campaigns.activity` (`GET /v1/campaigns/{id}/activity`) and `metrics.creativeDaily` (`GET /v1/campaigns/{id}/metrics/creative-daily`). Creative variants include `timestamp_start_ms` and `timestamp_end_ms`.
+
 ## 2.4.0
 
 ### Minor Changes
