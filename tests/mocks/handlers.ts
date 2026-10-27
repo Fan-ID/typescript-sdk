@@ -142,6 +142,7 @@ export const handlers: HttpHandler[] = [
       campaignUrl: 'https://getsoundlink.com/orgs/org_xyz/insights/smartlink-1',
       strategyType: 'custom',
       autoRenew: false,
+      nextRenewalAt: null,
       createdAt: '2026-04-01T10:00:00.000Z',
       updatedAt: '2026-04-08T12:00:00.000Z',
     });
@@ -244,6 +245,7 @@ export const handlers: HttpHandler[] = [
           tierName: 'Core',
           isEnabled: true,
           allocationPercent: 100,
+          learningStatus: null,
         },
       ],
     });
@@ -252,6 +254,7 @@ export const handlers: HttpHandler[] = [
   http.patch(`${BASE_URL}/v1/campaigns/:campaignId/tiers`, async ({ request }) => {
     const body = (await request.json()) as {
       items: Array<{ targetingTierId: number; newAllocationPercent: number }>;
+      acknowledgeLearningWarning?: boolean;
     };
 
     return successEnvelope({
@@ -261,6 +264,7 @@ export const handlers: HttpHandler[] = [
         tierName: `Tier ${String(item.targetingTierId)}`,
         isEnabled: true,
         allocationPercent: item.newAllocationPercent,
+        learningStatus: body.acknowledgeLearningWarning ? 'LEARNING' : null,
       })),
     });
   }),
@@ -302,6 +306,7 @@ export const handlers: HttpHandler[] = [
   http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/overview`, () => {
     return successEnvelope({
       listeners: 100,
+      total_listeners: 180,
       streams: 200,
       followers: 10,
       impressions: null,
@@ -313,18 +318,18 @@ export const handlers: HttpHandler[] = [
       currency: 'USD',
       cpl: 0.5,
       cpf: 5,
-      streams_per_listener: 2,
+      streams_per_listener: 1.111,
     });
   }),
 
   http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/breakdown`, () => {
     return successEnvelope({
-      schemaVersion: '1.0',
+      schemaVersion: '1.1',
       items: [
         {
           provider: 'soundlink',
           account_id: 'org_xyz',
-          schema_version: '1.0',
+          schema_version: '1.1',
           report_date: '2026-04-01',
           report_date_timezone: 'UTC',
           exported_at: '2026-05-20T03:00:00.000Z',
@@ -340,8 +345,11 @@ export const handlers: HttpHandler[] = [
           link_clicks: null,
           streams: 203,
           listeners: 145,
+          new_listeners: 145,
+          returning_listeners: 40,
+          total_listeners: 185,
           followers: 12,
-          streams_per_listener: 1.4,
+          streams_per_listener: 1.097,
           spend_media: 42.5,
           spend_total: 42.5,
           fees: 0,
@@ -445,6 +453,7 @@ export const handlers: HttpHandler[] = [
       metaPixelId?: string;
       appleMusicUrl?: string;
       youtubeMusicUrl?: string;
+      attributionEnabled?: boolean;
     };
 
     return HttpResponse.json(
@@ -464,6 +473,7 @@ export const handlers: HttpHandler[] = [
           tiktokPixelId: null,
           appleMusicUrl: body.appleMusicUrl ?? null,
           youtubeMusicUrl: body.youtubeMusicUrl ?? null,
+          attributionEnabled: body.attributionEnabled ?? true,
         },
         meta: { requestId: REQUEST_ID },
       },
@@ -491,6 +501,7 @@ export const handlers: HttpHandler[] = [
       tiktokPixelId: null,
       appleMusicUrl: null,
       youtubeMusicUrl: null,
+      attributionEnabled: true,
     });
   }),
 
@@ -514,6 +525,7 @@ export const handlers: HttpHandler[] = [
       tiktokPixelId: null,
       appleMusicUrl: null,
       youtubeMusicUrl: null,
+      attributionEnabled: true,
     });
   }),
 

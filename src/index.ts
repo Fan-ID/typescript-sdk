@@ -91,6 +91,7 @@ export type {
   StrategiesCatalogData,
   StrategyCatalogItem,
   StrategyType,
+  TierLearningStatus,
   TierStatusUpdateItem,
   TierTargeting,
   UpdateCampaignAutoRenewRequest,

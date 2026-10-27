@@ -37,9 +37,13 @@ info:
     | `GET /v1/ping` | any granted Public API scope | API key (Bearer) or OAuth Bearer |
     | Campaign reads (`GET /v1/strategies`, `GET /v1/campaigns`, campaign detail, tiers) | `campaigns:read` | API key (Bearer) or OAuth Bearer |
     | Metrics reads (overview, breakdown, exports) | `metrics:read` | API key (Bearer) or OAuth Bearer |
+    | Campaign listening insights + campaign cohort retention (**Label / Enterprise / committed / self-serve**) | `metrics:read` | API key (Bearer) or OAuth Bearer |
     | Campaign writes (create, stop, budget, tier updates) | `campaigns:write` | API key (Bearer) or OAuth Bearer |
+    | Pixel reads (`GET /v1/pixels`) | `pixels:read` | API key (Bearer) or OAuth Bearer |
+    | Pixel writes (save pixel, test events) | `pixels:write` | API key (Bearer) or OAuth Bearer |
     | Video import / import status | `videos:write` | API key (Bearer) or OAuth Bearer |
     | Soundlink reads (list, detail, metrics overview/breakdown/engagement, JSONL exports) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
+    | Soundlink listening insights + soundlink cohort retention (**Label / Enterprise / committed / self-serve**) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
     | Soundlink writes (create, archive, test events) | `soundlinks:write` | API key (Bearer) or OAuth Bearer |
     | Wallet read (`GET /v1/wallet`) | `wallet:read` | API key (Bearer) or OAuth Bearer |
 
@@ -67,6 +71,8 @@ tags:
     description: Connectivity and auth verification
   - name: Wallet
     description: Organization wallet balance
+  - name: Pixels
+    description: Organization ad pixels that receive a copy of Soundlink conversion events
   - name: Campaigns
     description: Campaign listing, detail, creation, and wallet management (budget, stop, tiers)
   - name: Metrics
@@ -153,6 +159,164 @@ paths:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/pixels:
+    get:
+      operationId: listPixels
+      summary: List the organization's pixels
+      description: |
+        Returns the Meta pixels configured for the organization. Access tokens
+        are never returned. Today each entry has `platform: meta`.
+
+        Requires `pixels:read`. Organizations without custom pixels enabled
+        get `403 custom_pixel_not_enabled`.
+      tags: [Pixels]
+      x-required-scope: pixels:read
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+
+      responses:
+        '200':
+          description: Pixels for the organization
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixelListResponse'
+              example:
+                data:
+                  pixels:
+                    - id: '1234567890123456'
+                      platform: meta
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PixelForbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/pixels/{pixelId}:
+    put:
+      operationId: updatePixel
+      summary: Save an organization pixel
+      description: |
+        Saves the Conversions API access token for `pixelId`. The same call
+        creates the pixel or rotates its token, and both return `200`:
+
+        - No Meta pixel yet: the pixel is saved.
+        - `pixelId` matches a Meta pixel the organization already has: its
+          access token is replaced.
+        - A different Meta pixel for the same organization: the new pixel is
+          saved alongside existing ones.
+        - The pixel is configured by another organization: `409
+          meta_pixel_conflict`.
+        - The access token is already used with another pixel: `400
+          invalid_request`.
+        - `platform` other than `meta`: `400 invalid_request`.
+
+        The response never includes the access token. Use
+        `POST /v1/pixels/{pixelId}/test-events` to check the pixel and token.
+
+        Requires `pixels:write`. Organizations without custom pixels enabled
+        get `403 custom_pixel_not_enabled`. Does not require `Idempotency-Key`;
+        repeating the same request is safe.
+
+        **Auth:** Accepts API key or OAuth Bearer (`pixels:write`).
+      tags: [Pixels]
+      x-required-scope: pixels:write
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+
+      parameters:
+        - name: pixelId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Pixel id on the ad platform.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePixelRequest'
+            example:
+              platform: meta
+              accessToken: 'EAAB...'
+      responses:
+        '200':
+          description: Pixel saved or token rotated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdatePixelResponse'
+              example:
+                data:
+                  id: '1234567890123456'
+                  platform: meta
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/UpdatePixelBadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PixelForbidden' }
+        '409': { $ref: '#/components/responses/PixelConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/pixels/{pixelId}/test-events:
+    post:
+      operationId: sendPixelTestEvents
+      summary: Send a test conversion event to a pixel
+      description: |
+        Sends a live Meta Conversions API event named `Soundlink Stream` to
+        `pixelId` with its stored access token. This is not a sandbox event:
+        it appears in the pixel's Events Manager as a regular event. This
+        request has no body.
+
+        Returns `404 not_found` when the pixel is not configured for the
+        organization. Returns `400 invalid_request` when Meta rejects the
+        event because the pixel id or access token is wrong. Does not require
+        `Idempotency-Key`; each call sends a new event.
+
+        Requires `pixels:write`. Organizations without custom pixels enabled
+        get `403 custom_pixel_not_enabled`.
+
+        **Auth:** Accepts API key or OAuth Bearer (`pixels:write`).
+      tags: [Pixels]
+      x-required-scope: pixels:write
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+
+      parameters:
+        - name: pixelId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Pixel id on the ad platform.
+      responses:
+        '200':
+          description: Test event sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PixelTestEventResponse'
+              example:
+                data:
+                  status: sent
+                  pixelId: '1234567890123456'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/PixelTestEventBadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PixelForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -654,8 +818,9 @@ paths:
       summary: Get campaign tier allocation
       description: |
         Returns the current geographic tier allocation for a wallet campaign:
-        which tiers are enabled, their budget share, and when tiers were last
-        updated (`lastUpdate`). Use this before `PATCH` to build a valid request.
+        which tiers are enabled, their budget share, learning status
+        (`learningStatus`), and when tiers were last updated (`lastUpdate`).
+        Use this before `PATCH` to build a valid request.
 
         **Wallet campaigns only** (`generation: 3`).
 
@@ -682,10 +847,12 @@ paths:
                       tierName: US
                       isEnabled: true
                       allocationPercent: 60
+                      learningStatus: LEARNING
                     - tierId: 2
                       tierName: UK
                       isEnabled: false
                       allocationPercent: 40
+                      learningStatus: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -709,8 +876,13 @@ paths:
         - `newAllocationPercent` values must sum to **100**
         - At least one tier must have `isEnabled: true`
 
-        **Cooldown:** after a successful update, further tier changes are
-        blocked for **72 hours** (`409 tier_update_cooldown`).
+        **Learning:** within 72 hours of the latest tier or country targeting
+        update, a change is rejected with `409 learning_edit_ack_required`
+        when a tier that is active before the update has `learningStatus`
+        `LEARNING` or `FAIL`. Retry with `acknowledgeLearningWarning: true`
+        to continue. `SUCCESS`, `null`, and updates outside that window do
+        not require acknowledgement. A request that matches the current tier
+        state is accepted without writing.
 
         **Auth:** Accepts API key or OAuth Bearer (`campaigns:write`).
       tags: [Campaigns]
@@ -734,6 +906,7 @@ paths:
                 - targetingTierId: 2
                   isEnabled: true
                   newAllocationPercent: 30
+              acknowledgeLearningWarning: true
       responses:
         '200':
           description: Updated tier allocation
@@ -765,7 +938,83 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/TierUpdateCooldown' }
+        '409': { $ref: '#/components/responses/LearningEditAckRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/activity:
+    get:
+      operationId: getCampaignActivity
+      summary: List campaign activity
+      description: |
+        Returns a page of creative adds, budget changes, tier updates, country
+        updates, playlist redirect heals, and auto-renew changes for one campaign.
+
+        Each item is an event type, a timestamp, and a short summary. The list
+        does not include campaign creation or pausing an old creative. Fee amounts,
+        Stripe ids, and internal file URIs are omitted.
+
+        `startDate` keeps events at or after that moment. A calendar date starts
+        at 00:00:00Z. Omit it to page through the full history. Any waiting rule,
+        such as 72 hours after a change, is applied by the caller.
+
+        Requires the `campaigns:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Campaigns]
+      x-required-scope: campaigns:read
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - name: startDate
+          in: query
+          schema:
+            type: string
+          description: |
+            Return events at or after this moment. `YYYY-MM-DD` starts at
+            00:00:00Z. An ISO-8601 timestamp uses that instant.
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (1-indexed).
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Items per page (max 100).
+      responses:
+        '200':
+          description: Campaign activity page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignActivityResponse'
+              example:
+                data:
+                  items:
+                    - event_type: CAMPAIGN_AD_CREATIVES_ADDED
+                      timestamp: '2026-03-02T15:04:05.000Z'
+                      summary: Creatives added (2)
+                    - event_type: BUDGET_TOPUP
+                      timestamp: '2026-03-01T12:00:00.000Z'
+                      summary: Budget increased
+                  pagination:
+                    page: 1
+                    pageSize: 20
+                    totalCount: 2
+                    totalPages: 1
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -774,8 +1023,9 @@ paths:
       operationId: getCampaignMetricsOverview
       summary: Campaign metrics overview
       description: |
-        Campaign-level totals for a date range: spend, conversions, listeners,
-        streams, followers, and derived ratios. No per-day rows — use
+        Campaign-level totals for a date range: spend, listeners (new),
+        `total_listeners` (distinct), streams, followers, and derived ratios.
+        `streams_per_listener` uses `total_listeners`. No per-day rows — use
         `/metrics/breakdown` for those.
 
         Suitable for dashboards and quick syncs.
@@ -800,6 +1050,7 @@ paths:
               example:
                 data:
                   listeners: 4821
+                  total_listeners: 5100
                   streams: 9340
                   followers: 312
                   impressions: 48210
@@ -811,7 +1062,7 @@ paths:
                   currency: USD
                   cpl: 0.028
                   cpf: 0.43
-                  streams_per_listener: 1.94
+                  streams_per_listener: 1.83
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -827,8 +1078,11 @@ paths:
       summary: Campaign creative metrics
       description: |
         Lifetime creative performance for one campaign, grouped by background
-        video. Each child is one ad creative. This is a
-        snapshot, not a date range. `startDate` and `endDate` are rejected.
+        video. Each child is one ad creative. `timestamp_start_ms` and
+        `timestamp_end_ms` are the audio cut in milliseconds when that cut is
+        a ready sound for this organization. Otherwise both are null. Two cuts
+        of the same track stay separate. This is a snapshot, not a date range.
+        `startDate` and `endDate` are rejected.
 
         Spend is omitted until media spend and fees can be split. Ratios use
         the same lifetime basis as the Creatives tab.
@@ -864,6 +1118,8 @@ paths:
                         - caption: Late night version
                           language: en
                           spotify_track_id: 11dFghVXANMlKmJXsNCbNl
+                          timestamp_start_ms: 45000
+                          timestamp_end_ms: 60000
                           listeners: 200
                           followers: 40
                           link_clicks: 120
@@ -874,6 +1130,8 @@ paths:
                         - caption: Daytime version
                           language: en
                           spotify_track_id: 11dFghVXANMlKmJXsNCbNl
+                          timestamp_start_ms: 0
+                          timestamp_end_ms: 15000
                           listeners: 200
                           followers: 40
                           link_clicks: 160
@@ -881,6 +1139,82 @@ paths:
                           cpf: 1
                           cpc_linkclick: 0.25
                           frequency: 1.5
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/creative-daily:
+    get:
+      operationId: getCampaignCreativeDailyMetrics
+      summary: Campaign creative daily metrics
+      description: |
+        Daily creative performance for one campaign. One row per day and
+        current Meta ad creative. `spend_media` is Meta media spend. `cpf` is
+        `spend_media / followers` for that row, and null when followers is zero.
+        For a longer window, divide the summed spend by the summed followers.
+        Do not average the daily `cpf` values.
+
+        The grain is the Meta ad creative, not the background-video groups from
+        the lifetime creatives endpoint. That endpoint still rejects dates.
+
+        `startDate` and `endDate` are optional and inclusive. Omit both to
+        return every day that has rows. Results are ordered by date, then
+        creative id, and paginated.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Inclusive start date (`YYYY-MM-DD`). Omit to include every day from the first row.
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Inclusive end date (`YYYY-MM-DD`). Omit to include every day through the latest row.
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/pageSize500'
+      responses:
+        '200':
+          description: Daily creative rows for the campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreativeDailyMetricsResponse'
+              example:
+                data:
+                  items:
+                    - date: '2026-03-01'
+                      meta_ad_creative_id: '1234567890'
+                      spend_media: 40
+                      impressions: 400
+                      followers: 4
+                      cpf: 10
+                    - date: '2026-03-02'
+                      meta_ad_creative_id: '1234567890'
+                      spend_media: 10.5
+                      impressions: 100
+                      followers: 0
+                      cpf: null
+                  pagination:
+                    page: 1
+                    pageSize: 50
+                    totalCount: 2
+                    totalPages: 1
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -932,18 +1266,18 @@ paths:
         - $ref: '#/components/parameters/sortOrder'
       responses:
         '200':
-          description: Paginated per-day country rows (`campaign_country_daily` schema)
+          description: Paginated per-day country rows (`campaign_country_daily` schema v1.1)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MetricsBreakdownResponse'
               example:
                 data:
-                  schemaVersion: '1.0'
+                  schemaVersion: '1.1'
                   items:
                     - provider: soundlink
                       account_id: a7ac3173-2f71-4e79-921f-d15d7112dd11
-                      schema_version: '1.0'
+                      schema_version: '1.1'
                       report_date: '2026-04-01'
                       report_date_timezone: UTC
                       exported_at: '2026-05-20T03:00:00Z'
@@ -959,8 +1293,11 @@ paths:
                       link_clicks: 89
                       streams: 203
                       listeners: 145
+                      new_listeners: 145
+                      returning_listeners: 40
+                      total_listeners: 185
                       followers: 12
-                      streams_per_listener: 1.4
+                      streams_per_listener: 1.1
                       spend_media: 42.50
                       spend_total: 53.13
                       fees: 10.63
@@ -1048,8 +1385,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/BreakdownRow'
               example: |
-                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","campaign_target_playlist_id":null,"country_code":"US","impressions":4821,"ad_clicks":112,"link_clicks":89,"streams":203,"listeners":145,"followers":12,"streams_per_listener":1.4,"spend_media":42.50,"spend_total":53.13,"fees":10.63,"currency":"USD","currency_account":"USD","cpl":0.293,"cpf":3.542,"cpc_linkclick":0.478,"ctr_linkclick":0.0185,"ctr_adclick":0.0232,"cost_per_result":3.542,"result_type":"follow"}
-                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","campaign_target_playlist_id":null,"country_code":"DE","impressions":2103,"ad_clicks":48,"link_clicks":31,"streams":87,"listeners":61,"followers":4,"streams_per_listener":1.43,"spend_media":18.20,"spend_total":22.75,"fees":4.55,"currency":"USD","currency_account":"USD","cpl":0.298,"cpf":4.55,"cpc_linkclick":0.587,"ctr_linkclick":0.0148,"ctr_adclick":0.0228,"cost_per_result":4.55,"result_type":"follow"}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.1","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","campaign_target_playlist_id":null,"country_code":"US","impressions":4821,"ad_clicks":112,"link_clicks":89,"streams":203,"listeners":145,"new_listeners":145,"returning_listeners":40,"total_listeners":185,"followers":12,"streams_per_listener":1.1,"spend_media":42.50,"spend_total":53.13,"fees":10.63,"currency":"USD","currency_account":"USD","cpl":0.293,"cpf":3.542,"cpc_linkclick":0.478,"ctr_linkclick":0.0185,"ctr_adclick":0.0232,"cost_per_result":3.542,"result_type":"follow"}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.1","report_date":"2026-04-01","report_date_timezone":"UTC","exported_at":"2026-05-20T03:00:00Z","campaign_id":"f1e28d31-c358-4284-9bef-00a2334625fd","campaign_name":"Sleep Playlist","campaign_target_type":"track","campaign_target_isrc":"DEXW62500259","campaign_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","campaign_target_playlist_id":null,"country_code":"DE","impressions":2103,"ad_clicks":48,"link_clicks":31,"streams":87,"listeners":61,"new_listeners":61,"returning_listeners":12,"total_listeners":73,"followers":4,"streams_per_listener":1.19,"spend_media":18.20,"spend_total":22.75,"fees":4.55,"currency":"USD","currency_account":"USD","cpl":0.298,"cpf":4.55,"cpc_linkclick":0.587,"ctr_linkclick":0.0148,"ctr_adclick":0.0228,"cost_per_result":4.55,"result_type":"follow"}
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1248,6 +1585,122 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/campaigns/{campaignId}/metrics/retention:
+    get:
+      operationId: getCampaignRetention
+      summary: Campaign cohort retention
+      description: |
+        Cohort retention for a campaign's linked soundlink: one row per cohort date
+        that has first plays (dates with no first plays have no row), where the
+        cohort date is the UTC date listeners first played via the campaign soundlink.
+        A listener's cohort date is their earliest first play across all countries.
+        Conforms to the `soundlink_cohort_retention_daily` v1.0 schema (same row
+        shape as `GET /v1/soundlinks/{soundlinkId}/metrics/retention`). All rows
+        are returned in `data.items` (one per cohort date), so there is no
+        pagination.
+
+        The campaign's `smart_link_id` is resolved from `dim_campaigns_current`
+        before the retention query runs.
+
+        **Retention definitions:**
+        - `returned_on_day_N`: listeners from the cohort who played again on exactly day N
+          after their first play.
+        - `retention_by_day_N`: share of the cohort (`cohort_size`) who played again on any
+          day from 1 to N (end-day, cumulative). Each listener is counted once, so the
+          by-day rate never decreases within a row.
+        - A day-N value is `null` until day N has passed for that cohort date.
+
+        **Known limitation:** end-day rates are cumulative per listener, so whether
+        day-3 returners also returned on day 2 is not recoverable from the end-day
+        columns. Use the exact-day `returned_on_day_N` columns for day-by-day behaviour.
+
+        `soundlink_target_isrc` is currently always `null`.
+
+        **Date range:** `startDate` / `endDate` filter the cohort date (both inclusive).
+        If you omit both, a recent window ending today is used. A range that is too wide
+        returns `400 invalid_query_parameter`.
+
+        **Plan requirement:** Label, Enterprise, committed, and self-serve plans.
+        Organizations on a lower plan receive `403 premium_plan_required`.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
+        A campaign outside the organization returns `404 campaign_not_found`.
+        An owned campaign with no linked soundlink in `dim_campaigns_current`
+        returns `404 not_found` (`Campaign soundlink not found.`).
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      x-premium-plan-level-min: 3
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+      responses:
+        '200':
+          description: Cohort retention rows (`soundlink_cohort_retention_daily` schema), sorted by `cohort_date` ascending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkCohortRetentionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/listening-insights/{insight}:
+    get:
+      operationId: getCampaignListeningInsight
+      summary: Campaign listening insights
+      description: |
+        What listeners who connected through this campaign went on to play.
+        The date window comes from the listening graph (`nodes_smart_link`).
+        `startDate` and `endDate` are not accepted. Extra query parameters are ignored.
+
+        This request often takes 30–50 seconds. Use a client timeout of at least 120 seconds.
+        If the API Gateway deadline elapses, the response is `504`. That body is the gateway error, not the Public API envelope.
+
+        - `other-artists` — other artists these listeners streamed, excluding attributed tracks and campaign artists. Top 30.
+        - `catalog-dig-in` — playlist reach and catalog follow-through per artist. Track campaigns may return `artists: []`.
+        - `stream-split` — `track` campaigns return attributed contexts such as `promoted` and `artist_catalog`. `playlist` campaigns return `playlist` then `artist_catalog`. A context is omitted when listeners and streams are both 0. Any other campaign type returns `200` with `contexts: []`.
+
+        **Plan requirement:** Label, Enterprise, committed, and self-serve plans.
+        Organizations on a lower plan receive `403 premium_plan_required`.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
+        A campaign outside the organization returns `404 campaign_not_found`.
+        An owned campaign with no listening-graph row returns `404 not_in_listening_graph`
+        (`Soundlink not available in listening graph`).
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      x-premium-plan-level-min: 3
+      x-recommended-timeout-seconds: 120
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/listeningInsight'
+      responses:
+        '200':
+          description: Listening insight for the campaign soundlink window. The `data.insight` value matches the path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListeningInsightsResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '504':
+          description: |
+            The API Gateway deadline of 120 seconds elapsed. The body is the gateway error, not the Public API envelope (`data` or `error`, plus `meta`).
+
   /v1/soundlinks:
     get:
       operationId: listSoundlinks
@@ -1315,7 +1768,8 @@ paths:
         API equivalent of the in-app create flow. It does not create a wallet
         campaign and does not appear on `GET /v1/campaigns`.
 
-        Requires the `soundlinks:write` scope.
+        Requires the `soundlinks:write` scope and a self-serve plan on the
+        organization; otherwise returns `403 soundlink_plan_required`.
 
         `Idempotency-Key` is **required**. Reusing the key with an unchanged
         body replays the original `201`; a different body returns
@@ -1343,6 +1797,7 @@ paths:
                   spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl'
                   autoFollow: true
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
+                  attributionEnabled: true
                   metaPixelId: '1234567890123456'
                   metaConversionAccessToken: 'EAAB...'
               playlist:
@@ -1369,6 +1824,7 @@ paths:
                   createdAt: '2026-04-01T10:00:00Z'
                   autoFollow: true
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
+                  attributionEnabled: true
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
@@ -1418,6 +1874,7 @@ paths:
                   createdAt: '2026-04-01T10:00:00Z'
                   autoFollow: true
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
+                  attributionEnabled: true
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
@@ -1466,6 +1923,7 @@ paths:
                   createdAt: '2026-04-01T10:00:00Z'
                   autoFollow: true
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
+                  attributionEnabled: true
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
@@ -1926,6 +2384,117 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/soundlinks/{soundlinkId}/metrics/retention:
+    get:
+      operationId: getSoundlinkRetention
+      summary: Soundlink cohort retention
+      description: |
+        Cohort retention for a soundlink: one row per cohort date that has first
+        plays (dates with no first plays have no row), where the cohort date is
+        the UTC date listeners first played via the soundlink. A listener's
+        cohort date is their earliest first play across all countries.
+        Conforms to the `soundlink_cohort_retention_daily` v1.0 schema. All rows
+        are returned in `data.items` (one per cohort date), so there is no
+        pagination.
+
+        **Retention definitions:**
+        - `returned_on_day_N`: listeners from the cohort who played again on exactly day N
+          after their first play.
+        - `retention_by_day_N`: share of the cohort (`cohort_size`) who played again on any
+          day from 1 to N (end-day, cumulative). Each listener is counted once, so the
+          by-day rate never decreases within a row.
+        - A day-N value is `null` until day N has passed for that cohort date.
+
+        **Known limitation:** end-day rates are cumulative per listener, so whether
+        day-3 returners also returned on day 2 is not recoverable from the end-day
+        columns. Use the exact-day `returned_on_day_N` columns for day-by-day behaviour.
+
+        `soundlink_target_isrc` is currently always `null`.
+
+        **Date range:** `startDate` / `endDate` filter the cohort date (both inclusive).
+        If you omit both, a recent window ending today is used. A range that is too wide
+        returns `400 invalid_query_parameter`.
+
+        **Plan requirement:** Label, Enterprise, committed, and self-serve plans.
+        Organizations on a lower plan receive `403 premium_plan_required`.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      x-premium-plan-level-min: 3
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+      responses:
+        '200':
+          description: Cohort retention rows (`soundlink_cohort_retention_daily` schema), sorted by `cohort_date` ascending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SoundlinkCohortRetentionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/listening-insights/{insight}:
+    get:
+      operationId: getSoundlinkListeningInsight
+      summary: Soundlink listening insights
+      description: |
+        What listeners who connected through this soundlink went on to play.
+        The date window comes from the listening graph (`nodes_smart_link`).
+        `startDate` and `endDate` are not accepted. Extra query parameters are ignored.
+
+        This request often takes 30–50 seconds. Use a client timeout of at least 120 seconds.
+        If the API Gateway deadline elapses, the response is `504`. That body is the gateway error, not the Public API envelope.
+
+        - `other-artists` — other artists these listeners streamed, excluding attributed tracks and campaign artists. Top 30.
+        - `catalog-dig-in` — playlist reach and catalog follow-through per artist. Track soundlinks may return `artists: []`.
+        - `stream-split` — `track` soundlinks return attributed contexts such as `promoted` and `artist_catalog`. `playlist` soundlinks return `playlist` then `artist_catalog`. A context is omitted when listeners and streams are both 0. Any other campaign type returns `200` with `contexts: []`.
+
+        **Plan requirement:** Label, Enterprise, committed, and self-serve plans.
+        Organizations on a lower plan receive `403 premium_plan_required`.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+        A soundlink created for a campaign is allowed here when the organization owns it,
+        even though `GET /v1/soundlinks/{soundlinkId}` does not return campaign soundlinks.
+        An unknown soundlink, or one owned by another organization, returns `404 not_found`.
+        An owned soundlink with no listening-graph row returns `404 not_in_listening_graph`
+        (`Soundlink not available in listening graph`).
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      x-premium-plan-level-min: 3
+      x-recommended-timeout-seconds: 120
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/listeningInsight'
+      responses:
+        '200':
+          description: Listening insight for the soundlink window. The `data.insight` value matches the path.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListeningInsightsResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+        '504':
+          description: |
+            The API Gateway deadline of 120 seconds elapsed. The body is the gateway error, not the Public API envelope (`data` or `error`, plus `meta`).
+
   /v1/videos/import:
     post:
       operationId: importVideo
@@ -2051,6 +2620,18 @@ components:
       schema:
         type: string
       description: Campaign identifier (UUID)
+
+    listeningInsight:
+      name: insight
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [other-artists, catalog-dig-in, stream-split]
+      description: |
+        `other-artists` — what else these listeners stream.
+        `catalog-dig-in` — playlist artists and catalog follow-through.
+        `stream-split` — promoted, playlist, and artist-catalog split.
 
     idempotencyKey:
       name: Idempotency-Key
@@ -2191,6 +2772,74 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    # --- Pixels ---
+
+    PixelPlatform:
+      type: string
+      enum: [meta]
+      description: Ad platform for the pixel. Only `meta` is supported today.
+
+    Pixel:
+      type: object
+      required: [id, platform]
+      properties:
+        id:
+          type: string
+        platform:
+          $ref: '#/components/schemas/PixelPlatform'
+
+    PixelListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [pixels]
+          properties:
+            pixels:
+              type: array
+              items:
+                $ref: '#/components/schemas/Pixel'
+              description: Pixels configured for the organization. Empty when none is saved.
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    UpdatePixelRequest:
+      type: object
+      required: [platform, accessToken]
+      properties:
+        platform:
+          $ref: '#/components/schemas/PixelPlatform'
+        accessToken:
+          type: string
+          minLength: 1
+          description: Conversions API access token. Stored and never returned.
+
+    UpdatePixelResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/Pixel'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    PixelTestEventResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [status, pixelId]
+          properties:
+            status:
+              type: string
+              enum: [sent]
+            pixelId:
+              type: string
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     Pagination:
       type: object
       required: [page, pageSize, totalCount, totalPages]
@@ -2204,6 +2853,145 @@ components:
         totalPages:
           type: integer
 
+    ListeningInsightWindow:
+      type: object
+      required: [startDate, endDate]
+      properties:
+        startDate:
+          type: string
+          format: date
+          example: '2026-07-30'
+        endDate:
+          type: string
+          format: date
+          example: '2026-09-29'
+
+    OtherArtistsListeningInsight:
+      type: object
+      required: [soundlinkId, campaignId, insight, window, artists]
+      properties:
+        soundlinkId:
+          type: string
+        campaignId:
+          type: string
+          nullable: true
+        insight:
+          type: string
+          enum: [other-artists]
+        window:
+          $ref: '#/components/schemas/ListeningInsightWindow'
+        artists:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            required: [artist, listeners, streams]
+            properties:
+              artist:
+                type: string
+                description: Lowercased, trimmed artist name.
+              listeners:
+                type: number
+              streams:
+                type: number
+
+    CatalogDigInListeningInsight:
+      type: object
+      required: [soundlinkId, campaignId, insight, window, artists]
+      properties:
+        soundlinkId:
+          type: string
+        campaignId:
+          type: string
+          nullable: true
+        insight:
+          type: string
+          enum: [catalog-dig-in]
+        window:
+          $ref: '#/components/schemas/ListeningInsightWindow'
+        artists:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            required:
+              - artist
+              - playlistListeners
+              - playlistStreams
+              - catalogListeners
+              - catalogStreams
+              - catalogTracks
+              - catalogListenerRate
+            properties:
+              artist:
+                type: string
+              playlistListeners:
+                type: number
+              playlistStreams:
+                type: number
+              catalogListeners:
+                type: number
+              catalogStreams:
+                type: number
+              catalogTracks:
+                type: number
+              catalogListenerRate:
+                type: number
+                nullable: true
+                description: catalogListeners / playlistListeners. Null when playlistListeners is 0.
+
+    StreamSplitContext:
+      type: object
+      required: [engagementContext, listeners, streams, tracks]
+      properties:
+        engagementContext:
+          type: string
+          description: '`promoted`, `playlist`, or `artist_catalog`.'
+        listeners:
+          type: number
+        streams:
+          type: number
+        tracks:
+          type: number
+
+    StreamSplitListeningInsight:
+      type: object
+      required: [soundlinkId, campaignId, insight, window, contexts]
+      properties:
+        soundlinkId:
+          type: string
+        campaignId:
+          type: string
+          nullable: true
+        insight:
+          type: string
+          enum: [stream-split]
+        window:
+          $ref: '#/components/schemas/ListeningInsightWindow'
+        contexts:
+          type: array
+          description: Empty when the graph `campaign_type` is neither `track` nor `playlist`. The response is still `200`.
+          items:
+            $ref: '#/components/schemas/StreamSplitContext'
+
+    ListeningInsightsResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          oneOf:
+            - $ref: '#/components/schemas/OtherArtistsListeningInsight'
+            - $ref: '#/components/schemas/CatalogDigInListeningInsight'
+            - $ref: '#/components/schemas/StreamSplitListeningInsight'
+          discriminator:
+            propertyName: insight
+            mapping:
+              other-artists: '#/components/schemas/OtherArtistsListeningInsight'
+              catalog-dig-in: '#/components/schemas/CatalogDigInListeningInsight'
+              stream-split: '#/components/schemas/StreamSplitListeningInsight'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     Error:
       type: object
       required: [code, message]
@@ -2213,10 +3001,13 @@ components:
           description: Stable snake_case error code.
           enum:
             - invalid_api_key
+            - invalid_token
             - api_key_revoked
             - api_key_expired
+            - access_denied
             - insufficient_scope
             - not_found
+            - not_in_listening_graph
             - campaign_not_found
             - invalid_query_parameter
             - invalid_date_range
@@ -2229,8 +3020,14 @@ components:
             - invalid_spotify_url
             - invalid_tier_budget_allocation
             - invalid_tier_status
-            - tier_update_cooldown
+            - learning_edit_ack_required
             - wallet_not_enabled
+            - premium_plan_required
+            - youtube_music_not_enabled
+            - attribution_not_enabled
+            - soundlink_plan_required
+            - custom_pixel_not_enabled
+            - meta_pixel_conflict
             - insufficient_credit
             - idempotency_key_conflict
             - rate_limit_exceeded
@@ -2389,6 +3186,14 @@ components:
               description: |
                 Whether this wallet campaign renews at the end of each cycle.
                 `false` when auto-renew is off or the campaign has no stored value.
+            nextRenewalAt:
+              type: string
+              format: date-time
+              nullable: true
+              description: |
+                When the current wallet cycle ends and the campaign renews.
+                `null` unless the campaign is wallet-funded, auto-renew is on,
+                and a cycle end is stored.
 
     CampaignListResponse:
       type: object
@@ -2418,7 +3223,7 @@ components:
 
     CampaignTier:
       type: object
-      required: [tierId, tierName, isEnabled, allocationPercent]
+      required: [tierId, tierName, isEnabled, allocationPercent, learningStatus]
       properties:
         tierId:
           type: integer
@@ -2434,6 +3239,13 @@ components:
           minimum: 0
           maximum: 100
           description: Share of campaign budget allocated to this tier.
+        learningStatus:
+          type: string
+          nullable: true
+          enum: [LEARNING, FAIL, SUCCESS]
+          description: |
+            Stored ad set learning status for this tier. `null` means no status
+            is stored and does not require acknowledgement before a tier edit.
 
     CampaignTiersData:
       type: object
@@ -2457,6 +3269,41 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/CampaignTiersData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignActivityItem:
+      type: object
+      required: [event_type, timestamp, summary]
+      properties:
+        event_type:
+          type: string
+          description: Activity event type.
+        timestamp:
+          type: string
+          format: date-time
+          description: When the event was recorded.
+        summary:
+          type: string
+          description: Short description. Omits fees, payment ids, and file URIs.
+
+    CampaignActivityData:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignActivityItem'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CampaignActivityResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignActivityData'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -2486,6 +3333,11 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/TierStatusUpdateItem'
+        acknowledgeLearningWarning:
+          type: boolean
+          description: |
+            Set to true to continue a tier edit while ad sets are still learning.
+            Omit or false to leave the warning unacknowledged.
 
     Genre:
       type: string
@@ -2905,12 +3757,15 @@ components:
     MetricsOverview:
       type: object
       description: |
-        Campaign-level totals aggregated across all countries for the requested
-        date range. Field names align with the `campaign_country_daily` row
-        schema — values here are the sum of country rows.
+        Campaign-level totals for the requested date range. Spend, streams,
+        followers, delivery, and `listeners` come from summing
+        `campaign_country_daily` rows. `total_listeners` is distinct listeners
+        in the window (same definition as the dashboard), so it is not the sum
+        of daily `total_listeners` from breakdown rows.
       required:
         [
           listeners,
+          total_listeners,
           streams,
           followers,
           spend_media,
@@ -2924,7 +3779,14 @@ components:
       properties:
         listeners:
           type: integer
-          description: Unique attributed Spotify listeners (sum of country rows).
+          description: |
+            Attributed new Spotify listeners in the window (dashboard Super
+            Listeners). Same basis as `cpl`. Sum of country-day `listeners`.
+        total_listeners:
+          type: integer
+          description: |
+            Distinct listeners in the window (new + returning). Same basis as
+            dashboard S/L. Not equal to the sum of breakdown `total_listeners`.
         streams:
           type: integer
           description: Attributed Spotify streams (sum of country rows).
@@ -2957,13 +3819,15 @@ components:
           description: Currency for spend fields. Currently always `USD`.
         cpl:
           type: number
-          description: Cost per listener (spend_media / listeners).
+          description: Cost per new listener (spend_media / listeners).
         cpf:
           type: number
           description: Cost per follower (spend_media / followers).
         streams_per_listener:
           type: number
-          description: streams / listeners. Zero if listeners is zero.
+          description: |
+            streams / total_listeners. Matches dashboard S/L. Zero if
+            total_listeners is zero.
 
     MetricsOverviewResponse:
       type: object
@@ -2980,6 +3844,8 @@ components:
         - caption
         - language
         - spotify_track_id
+        - timestamp_start_ms
+        - timestamp_end_ms
         - listeners
         - followers
         - link_clicks
@@ -2998,6 +3864,18 @@ components:
         spotify_track_id:
           type: string
           description: Spotify track id stored on the render. Not a lookup.
+        timestamp_start_ms:
+          type: integer
+          nullable: true
+          description: |
+            Start of the audio cut in milliseconds from the beginning of the
+            track. Null when the cut is not a ready sound for this organization.
+        timestamp_end_ms:
+          type: integer
+          nullable: true
+          description: |
+            End of the audio cut in milliseconds. Null when the cut is not a
+            ready sound for this organization.
         listeners:
           type: integer
           nullable: true
@@ -3087,10 +3965,61 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    CreativeDailyMetricsRow:
+      type: object
+      required:
+        - date
+        - meta_ad_creative_id
+        - spend_media
+        - impressions
+        - followers
+        - cpf
+      properties:
+        date:
+          type: string
+          format: date
+          description: UTC calendar date (`YYYY-MM-DD`).
+        meta_ad_creative_id:
+          type: string
+          description: Current Meta ad creative. Ads that share this id are summed for the day.
+        spend_media:
+          type: number
+          description: Meta media spend for the day. Fees are not included.
+        impressions:
+          type: number
+          description: Meta impressions for the day.
+        followers:
+          type: number
+          description: Follows attributed for the day.
+        cpf:
+          type: number
+          nullable: true
+          description: Cost per follower (`spend_media / followers`) for this row. Null when followers is zero.
+
+    CreativeDailyMetrics:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreativeDailyMetricsRow'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CreativeDailyMetricsResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/CreativeDailyMetrics'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     BreakdownRow:
       type: object
       description: |
-        One row of the `campaign_country_daily` v1.0 schema.
+        One row of the `campaign_country_daily` v1.1 schema.
         Primary key: `(provider, account_id, report_date, campaign_id, country_code)`.
         Rows are idempotent — re-ingesting on the primary key is safe.
         Values for a given `report_date` may be revised for up to 7 days after
@@ -3108,6 +4037,9 @@ components:
         - country_code
         - streams
         - listeners
+        - new_listeners
+        - returning_listeners
+        - total_listeners
         - followers
         - streams_per_listener
         - spend_media
@@ -3128,8 +4060,8 @@ components:
           description: Soundlink organization ID (UUID).
         schema_version:
           type: string
-          description: Schema version. Pin your ingest pipeline to this value.
-          example: '1.0'
+          description: Schema version. Pin your ingest pipeline to this value. `1.1` adds listener splits.
+          example: '1.1'
         report_date:
           type: string
           format: date
@@ -3185,13 +4117,28 @@ components:
           description: Spotify streams attributed to this campaign in this country on this day (7-day click-through window). Observed events, not modelled estimates.
         listeners:
           type: integer
-          description: Unique Spotify listeners attributed to this campaign in this country on this day (7-day click-through window). Summing country rows gives the correct campaign-level total.
+          description: |
+            Attributed new Spotify listeners for this country-day (same as
+            `new_listeners`). Basis for `cpl`.
+        new_listeners:
+          type: integer
+          description: Alias of `listeners` (attributed new).
+        returning_listeners:
+          type: integer
+          description: |
+            Returning Spotify listeners for this country-day. Meta known-tier
+            conversion rows are `0`.
+        total_listeners:
+          type: integer
+          description: new_listeners + returning_listeners for this row.
         followers:
           type: integer
           description: Spotify artist follower gains attributed to this campaign in this country on this day (7-day click-through window).
         streams_per_listener:
           type: number
-          description: streams / listeners for this row. Zero if listeners is zero.
+          description: |
+            streams / total_listeners for this row. Zero if total_listeners is
+            zero.
         spend_media:
           type: number
           description: Amount billed to Meta for ad delivery in this country on this day. Excludes Soundlink service fees. In `currency`.
@@ -3209,7 +4156,7 @@ components:
           description: Account billing currency. Currently always `USD`. Will differ from `currency` once EUR delivery is available.
         cpl:
           type: number
-          description: Cost per listener (spend_media / listeners). Zero if listeners is zero.
+          description: Cost per new listener (spend_media / listeners). Zero if listeners is zero.
         cpf:
           type: number
           description: Cost per follower (spend_media / followers). Zero if followers is zero.
@@ -3544,9 +4491,11 @@ components:
             (`/song/{slug}/{id}`), a catalog playlist (`pl.`), a library
             playlist (`pl.u-`), or an album share-sheet link with `?i={songId}`
             (stored as the canonical song URL). Host must be `music.apple.com`
-            with a two-letter storefront. URL shape is checked only; the
-            Apple catalog is not looked up. Omit to create a Spotify-only
-            soundlink.
+            with a two-letter storefront. Songs and catalog playlists are
+            verified in that storefront; missing content returns
+            `400 invalid_request`.
+            Provider outages or rate limits warn and allow create. Library
+            playlists are format-checked only. Omit to leave Apple Music unset.
           example: https://music.apple.com/us/song/anti-hero/1645937493
         youtubeMusicUrl:
           type: string
@@ -3557,8 +4506,17 @@ components:
             `youtu.be/…`) or a playlist (`…/playlist?list=…`). Shorts,
             live, channel, and browse links are rejected. A video or
             playlist that does not exist on YouTube returns
-            `400 invalid_request`. Omit to leave YouTube Music unset.
+            `400 invalid_request`. Quota, auth, or upstream failures warn and
+            allow create. Omit to leave YouTube Music unset.
           example: https://music.youtube.com/watch?v=dQw4w9WgXcQ
+        attributionEnabled:
+          type: boolean
+          default: true
+          description: |
+            When false, the landing page skips Spotify login and only tracks
+            the landing-page click. Omit or send true to keep attribution.
+            Sending false requires the organization to be allowed to turn
+            attribution off, and cannot be combined with `autoFollow: true`.
 
     SoundlinkDetail:
       allOf:
@@ -3571,6 +4529,7 @@ components:
             - tiktokPixelId
             - appleMusicUrl
             - youtubeMusicUrl
+            - attributionEnabled
           properties:
             autoFollow:
               type: boolean
@@ -3604,6 +4563,11 @@ components:
                 YouTube Music URL stored on this soundlink. `null` if not set.
                 Input hosts such as `youtu.be` are returned as the canonical
                 `music.youtube.com` song or playlist URL.
+            attributionEnabled:
+              type: boolean
+              description: |
+                Whether this soundlink keeps Spotify attribution. `false`
+                means the landing page skips login and only tracks the click.
 
     SoundlinkDetailResponse:
       type: object
@@ -3995,6 +4959,188 @@ components:
           type: number
           description: Streams per listener (`streams / listeners`). Zero if `listeners` is zero.
 
+    SoundlinkCohortRetentionResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [schemaVersion, items]
+          properties:
+            schemaVersion:
+              type: string
+              description: Version of the `soundlink_cohort_retention_daily` row schema. Pin your ingest pipeline to this.
+              example: '1.0'
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/SoundlinkCohortRetentionDailyRow'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SoundlinkCohortRetentionDailyRow:
+      type: object
+      description: |
+        One row of the `soundlink_cohort_retention_daily` v1.0 schema.
+        Primary key: `(provider, account_id, cohort_date, soundlink_id)`.
+        Rows are idempotent. Re-ingesting on the primary key is safe.
+        A day-N value is final once day N has passed for the cohort date.
+        Until then it is `null`.
+      required:
+        - provider
+        - account_id
+        - schema_version
+        - cohort_date
+        - cohort_date_timezone
+        - exported_at
+        - soundlink_id
+        - soundlink_name
+        - soundlink_target_type
+        - cohort_size
+        - returned_on_day_1
+        - retention_by_day_1
+        - returned_on_day_2
+        - retention_by_day_2
+        - returned_on_day_3
+        - retention_by_day_3
+        - returned_on_day_4
+        - retention_by_day_4
+        - returned_on_day_5
+        - retention_by_day_5
+        - returned_on_day_6
+        - retention_by_day_6
+        - returned_on_day_7
+        - retention_by_day_7
+      properties:
+        provider:
+          type: string
+          enum: [soundlink]
+          description: Always `soundlink`. Identifies the data provider for multi-source warehouses.
+        account_id:
+          type: string
+          description: Soundlink organization ID (UUID).
+        schema_version:
+          type: string
+          description: Schema version string. Pin your ingest pipeline to this value.
+          example: '1.0'
+        cohort_date:
+          type: string
+          format: date
+          description: UTC calendar date (`YYYY-MM-DD`) on which this cohort's listeners first played via the soundlink.
+        cohort_date_timezone:
+          type: string
+          enum: [UTC]
+          description: Always `UTC`.
+        exported_at:
+          type: string
+          format: date-time
+          description: ISO 8601 UTC timestamp when this row was generated.
+        soundlink_id:
+          type: string
+          description: Unique ID of this soundlink.
+          example: V1StGXR8_Z5jdHi6B-myT
+        soundlink_name:
+          type: string
+          description: Human-readable soundlink name.
+        soundlink_target_type:
+          type: string
+          nullable: true
+          enum: [track, playlist]
+          description: Whether this soundlink promotes a track or playlist. `null` if undetermined.
+        soundlink_target_isrc:
+          type: string
+          nullable: true
+          description: ISRC of the promoted track. Currently always `null`.
+        soundlink_target_spotify_track_id:
+          type: string
+          nullable: true
+          description: Spotify track ID of the promoted track. Populated when `soundlink_target_type = track`; otherwise `null`.
+        soundlink_target_playlist_id:
+          type: string
+          nullable: true
+          description: Spotify playlist ID. Populated when `soundlink_target_type = playlist`; otherwise `null`.
+        cohort_size:
+          type: integer
+          minimum: 0
+          description: Unique listeners whose first play via this soundlink was on `cohort_date`.
+        returned_on_day_1:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Cohort listeners who played again on exactly day 1 after their first play. `null` until day 1 has passed.
+        retention_by_day_1:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Share of `cohort_size` who played again on any day from 1 to 1 (end-day, cumulative), rounded to 4 decimals. `null` until day 1 has passed.
+        returned_on_day_2:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Cohort listeners who played again on exactly day 2 after their first play. `null` until day 2 has passed.
+        retention_by_day_2:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Share of `cohort_size` who played again on any day from 1 to 2 (end-day, cumulative), rounded to 4 decimals. `null` until day 2 has passed.
+        returned_on_day_3:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Cohort listeners who played again on exactly day 3 after their first play. `null` until day 3 has passed.
+        retention_by_day_3:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Share of `cohort_size` who played again on any day from 1 to 3 (end-day, cumulative), rounded to 4 decimals. `null` until day 3 has passed.
+        returned_on_day_4:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Cohort listeners who played again on exactly day 4 after their first play. `null` until day 4 has passed.
+        retention_by_day_4:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Share of `cohort_size` who played again on any day from 1 to 4 (end-day, cumulative), rounded to 4 decimals. `null` until day 4 has passed.
+        returned_on_day_5:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Cohort listeners who played again on exactly day 5 after their first play. `null` until day 5 has passed.
+        retention_by_day_5:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Share of `cohort_size` who played again on any day from 1 to 5 (end-day, cumulative), rounded to 4 decimals. `null` until day 5 has passed.
+        returned_on_day_6:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Cohort listeners who played again on exactly day 6 after their first play. `null` until day 6 has passed.
+        retention_by_day_6:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Share of `cohort_size` who played again on any day from 1 to 6 (end-day, cumulative), rounded to 4 decimals. `null` until day 6 has passed.
+        returned_on_day_7:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Cohort listeners who played again on exactly day 7 after their first play. `null` until day 7 has passed.
+        retention_by_day_7:
+          type: number
+          nullable: true
+          minimum: 0
+          maximum: 1
+          description: Share of `cohort_size` who played again on any day from 1 to 7 (end-day, cumulative), rounded to 4 decimals. `null` until day 7 has passed.
+
     # --- Videos ---
 
     VideoImportRequest:
@@ -4231,6 +5377,31 @@ components:
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
+    PremiumAnalyticsForbidden:
+      description: |
+        Authenticated with a valid scope, but the organization's subscription
+        is not on a Label, Enterprise, committed, or self-serve plan.
+        Applies to listening insights and cohort retention endpoints.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            premium_plan_required:
+              value:
+                error:
+                  code: premium_plan_required
+                  message: 'Listening insights and cohort retention require a Label, Enterprise, committed, or self-serve plan.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            insufficient_scope:
+              value:
+                error:
+                  code: insufficient_scope
+                  message: 'This token does not have the metrics:read scope.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
     CreateCampaignForbidden:
       description: |
         Valid key but missing the `campaigns:write` scope, or the calling
@@ -4288,7 +5459,9 @@ components:
 
     CreateSoundlinkForbidden:
       description: |
-        Valid credentials but missing the `soundlinks:write` scope.
+        Valid credentials but missing the `soundlinks:write` scope, the
+        organization has no self-serve plan, or the organization is not allowed
+        to create a soundlink with attribution off.
       content:
         application/json:
           schema:
@@ -4299,6 +5472,20 @@ components:
                 error:
                   code: insufficient_scope
                   message: 'This key does not have the soundlinks:write scope.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            soundlink_plan_required:
+              value:
+                error:
+                  code: soundlink_plan_required
+                  message: 'Creating a Soundlink requires a self-serve plan.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            attribution_not_enabled:
+              value:
+                error:
+                  code: attribution_not_enabled
+                  message: 'This organization cannot create a soundlink with attribution off.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
     CreateSoundlinkUnprocessable:
@@ -4314,6 +5501,86 @@ components:
                 error:
                   code: invalid_spotify_url
                   message: 'Spotify track not found.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    PixelForbidden:
+      description: |
+        Valid credentials but missing the required scope, or custom pixels
+        are not enabled for the organization.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            insufficient_scope:
+              value:
+                error:
+                  code: insufficient_scope
+                  message: 'This key does not have the campaigns:write scope.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            custom_pixel_not_enabled:
+              value:
+                error:
+                  code: custom_pixel_not_enabled
+                  message: 'This organization does not have a custom Meta pixel enabled.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    UpdatePixelBadRequest:
+      description: |
+        Missing or malformed request body, unsupported platform, or the
+        access token is already used with another pixel.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalid_body:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Invalid request body at accessToken: Required.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            access_token_in_use:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Access token is already in use with another pixel ID'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    PixelConflict:
+      description: |
+        The pixel is configured by another organization.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            pixel_owned_by_another_organization:
+              value:
+                error:
+                  code: meta_pixel_conflict
+                  message: "This pixel can't be used with this account. Check the pixel ID and access token, or contact support."
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    PixelTestEventBadRequest:
+      description: |
+        Meta rejected the event because the pixel id or access token is wrong.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            meta_rejected:
+              value:
+                error:
+                  code: invalid_request
+                  message: 'Meta rejected the test event for pixel 1234567890123456. Check the pixel id and access token.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
@@ -4415,18 +5682,20 @@ components:
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 
-    TierUpdateCooldown:
+    LearningEditAckRequired:
       description: |
-        Campaign tiers were updated in the last 72 hours. Wait for the cooldown
-        to end before updating again.
+        Ad sets for one or more active tiers are still learning. Send the same
+        request with `acknowledgeLearningWarning: true` to continue.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
           example:
             error:
-              code: tier_update_cooldown
-              message: 'Campaign tiers were updated in the last 72 hours. Wait for the cooldown to end before updating again.'
+              code: learning_edit_ack_required
+              message: 'Ad sets are still learning. Acknowledge the warning to continue.'
+              details:
+                tierIds: [1, 2]
             meta:
               requestId: 550e8400-e29b-41d4-a716-446655440000
 
