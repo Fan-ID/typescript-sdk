@@ -502,7 +502,7 @@ export interface UpdateCampaignTiersRequest {
 
 /** Campaign-level metric totals from {@link MetricsResource.overview}. */
 export interface MetricsOverview {
-  /** Attributed new listeners (same definition as dashboard Super Listeners / CPL). */
+  /** Attributed new listeners (CPL denominator). */
   listeners: number;
   /**
    * Distinct new + returning listeners in the selected window.
@@ -521,7 +521,7 @@ export interface MetricsOverview {
   /** Soundlink service fee (USD). */
   fees: number;
   currency: string;
-  /** Cost per listener (`spend` / `listeners`). */
+  /** Cost per listener. */
   cpl: number;
   /** Cost per follower. */
   cpf: number;
@@ -549,16 +549,14 @@ export interface BreakdownRow {
   ad_clicks: number | null;
   link_clicks: number | null;
   streams: number;
-  /** Attributed new listeners (unchanged from schema 1.0). */
+  /** Attributed new listeners. */
   listeners: number;
-  /** Alias of `listeners` (schema 1.1). */
+  /** Alias of `listeners`. */
   new_listeners: number;
-  /** Returning listeners for this day/country. */
   returning_listeners: number;
   /** `new_listeners` + `returning_listeners`. Do not sum across days. */
   total_listeners: number;
   followers: number;
-  /** Streams / `total_listeners` for this row. */
   streams_per_listener: number;
   spend_media: number;
   spend_total: number;
