@@ -150,6 +150,19 @@ const { data: wallet } = await soundlink.wallet.get();
 // wallet.available is balance minus reserved
 ```
 
+### Pixels (`pixels:read` / `pixels:write`)
+
+```typescript
+const { data: pixels } = await soundlink.pixels.list();
+
+await soundlink.pixels.update('1234567890123456', {
+  platform: 'meta',
+  accessToken: process.env.META_CAPI_TOKEN!,
+});
+
+await soundlink.pixels.sendTestEvent('1234567890123456');
+```
+
 Custom strategy create (requires `tierTargeting`):
 
 ```typescript
