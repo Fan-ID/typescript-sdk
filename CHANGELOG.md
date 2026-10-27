@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.6.0
+
+### Minor Changes
+
+- [#33](https://github.com/Fan-ID/typescript-sdk/pull/33) [`a251c84`](https://github.com/Fan-ID/typescript-sdk/commit/a251c8444945bdfce96876b1682299d58a59cf29) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add `pixels.list`, `pixels.update`, and `pixels.sendTestEvent` for `/v1/pixels` (SOU-7393). Requires `pixels:read` / `pixels:write`.
+
 ## 2.5.0
 
 ### Minor Changes
