@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.7.0
+
+### Minor Changes
+
+- [#35](https://github.com/Fan-ID/typescript-sdk/pull/35) [`996c60f`](https://github.com/Fan-ID/typescript-sdk/commit/996c60ff063ee181398c3b70535fd07093420fd3) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add cohort retention (`metrics.retention`, `soundlinks.retention`) and listening insights (`campaigns.listeningInsights`, `soundlinks.listeningInsights`) for premium Public API endpoints (SOU-7393). Insights use a 120s per-request timeout.
+
 ## 2.6.0
 
 ### Minor Changes
