@@ -69,9 +69,6 @@ export const handlers: HttpHandler[] = [
       platform: string;
       accessToken: string;
     };
-    if (!body.accessToken) {
-      return errorEnvelope('invalid_request', 'accessToken is required.', 400);
-    }
     return successEnvelope({
       id: String(params.pixelId),
       platform: body.platform,
@@ -79,9 +76,6 @@ export const handlers: HttpHandler[] = [
   }),
 
   http.post(`${BASE_URL}/v1/pixels/:pixelId/test-events`, ({ params }) => {
-    if (params.pixelId === 'missing') {
-      return errorEnvelope('not_found', 'Pixel not found.', 404);
-    }
     return successEnvelope({
       status: 'sent',
       pixelId: String(params.pixelId),

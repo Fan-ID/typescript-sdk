@@ -98,7 +98,7 @@ for await (const item of soundlink.campaigns.listAll({ pageSize: 100 })) {
 
 ### Create, budget, tiers, stop (wallet / `generation: 3`)
 
-````typescript
+```typescript
 const { data: strategies } = await soundlink.strategies.list();
 
 const { data: created, error: createError } = await soundlink.campaigns.create(
@@ -148,10 +148,11 @@ await soundlink.campaigns.stop(created.campaignId, {
 
 const { data: wallet } = await soundlink.wallet.get();
 // wallet.available is balance minus reserved
+```
 
 ### Pixels (`pixels:read` / `pixels:write`)
 
-```ts
+```typescript
 const { data: pixels } = await soundlink.pixels.list();
 
 await soundlink.pixels.update('1234567890123456', {
@@ -160,9 +161,7 @@ await soundlink.pixels.update('1234567890123456', {
 });
 
 await soundlink.pixels.sendTestEvent('1234567890123456');
-````
-
-````
+```
 
 Custom strategy create (requires `tierTargeting`):
 
@@ -180,7 +179,7 @@ const { data: created } = await soundlink.campaigns.create(
   },
   { idempotencyKey: 'create-custom-01' },
 );
-````
+```
 
 ## Soundlinks (self-serve)
 
