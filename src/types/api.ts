@@ -208,6 +208,9 @@ export interface CampaignSummary {
   updatedAt: string;
 }
 
+/** Meta ad set learning status on a campaign tier. */
+export type TierLearningStatus = 'LEARNING' | 'FAIL' | 'SUCCESS';
+
 /** Full campaign detail from {@link CampaignsResource.get}. */
 export interface CampaignDetail extends CampaignSummary {
   /** Growth strategy set at creation (e.g. `custom`, `maximum_growth`). */
@@ -217,6 +220,12 @@ export interface CampaignDetail extends CampaignSummary {
    * `false` when auto-renew is off or the campaign has no stored value.
    */
   autoRenew: boolean;
+  /**
+   * When the current wallet cycle ends and the campaign renews.
+   * `null` unless the campaign is wallet-funded, auto-renew is on,
+   * and a cycle end is stored.
+   */
+  nextRenewalAt: string | null;
 }
 
 /** Paginated campaign list payload. */
@@ -463,6 +472,8 @@ export interface CampaignTier {
   tierName: string;
   isEnabled: boolean;
   allocationPercent: number;
+  /** Meta learning status for this tier. `null` when not yet reported. */
+  learningStatus: TierLearningStatus | null;
 }
 
 export interface CampaignTiersData {
@@ -482,11 +493,22 @@ export interface TierStatusUpdateItem {
 
 export interface UpdateCampaignTiersRequest {
   items: TierStatusUpdateItem[];
+  /**
+   * Set to `true` to continue a tier edit while ad sets are still learning.
+   * Omit or `false` to leave the warning unacknowledged.
+   */
+  acknowledgeLearningWarning?: boolean;
 }
 
 /** Campaign-level metric totals from {@link MetricsResource.overview}. */
 export interface MetricsOverview {
+  /** Attributed new listeners (same definition as dashboard Super Listeners / CPL). */
   listeners: number;
+  /**
+   * Distinct new + returning listeners in the selected window.
+   * Denominator for {@link MetricsOverview.streams_per_listener}.
+   */
+  total_listeners: number;
   streams: number;
   followers: number;
   impressions: number | null;
@@ -499,14 +521,15 @@ export interface MetricsOverview {
   /** Soundlink service fee (USD). */
   fees: number;
   currency: string;
-  /** Cost per listener. */
+  /** Cost per listener (`spend` / `listeners`). */
   cpl: number;
   /** Cost per follower. */
   cpf: number;
+  /** Streams / `total_listeners`. Zero when `total_listeners` is 0. */
   streams_per_listener: number;
 }
 
-/** One row of the `campaign_country_daily` v1.0 schema. */
+/** One row of the `campaign_country_daily` v1.1 schema. */
 export interface BreakdownRow {
   provider: 'soundlink';
   account_id: string;
@@ -526,8 +549,16 @@ export interface BreakdownRow {
   ad_clicks: number | null;
   link_clicks: number | null;
   streams: number;
+  /** Attributed new listeners (unchanged from schema 1.0). */
   listeners: number;
+  /** Alias of `listeners` (schema 1.1). */
+  new_listeners: number;
+  /** Returning listeners for this day/country. */
+  returning_listeners: number;
+  /** `new_listeners` + `returning_listeners`. Do not sum across days. */
+  total_listeners: number;
   followers: number;
+  /** Streams / `total_listeners` for this row. */
   streams_per_listener: number;
   spend_media: number;
   spend_total: number;
@@ -666,6 +697,11 @@ export interface SoundlinkDetail extends SoundlinkSummary {
   appleMusicUrl: string | null;
   /** Stored YouTube Music URL, or `null` when unset. */
   youtubeMusicUrl: string | null;
+  /**
+   * When `false`, the landing page skips Spotify login and only tracks the
+   * landing-page click.
+   */
+  attributionEnabled: boolean;
 }
 
 /** Body for `POST /v1/soundlinks`. */
@@ -693,6 +729,11 @@ export interface CreateSoundlinkRequest {
    * playlist returns `400 invalid_request`.
    */
   youtubeMusicUrl?: string;
+  /**
+   * When `false`, the landing page skips Spotify login and only tracks the
+   * landing-page click. Defaults to `true`. Cannot combine with `autoFollow: true`.
+   */
+  attributionEnabled?: boolean;
 }
 
 /** Paginated soundlink list payload. */

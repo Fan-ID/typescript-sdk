@@ -79,6 +79,8 @@ describe('Campaigns resource', () => {
         campaignId: 'camp_abc123',
         strategyType: 'custom',
         generation: 3,
+        autoRenew: false,
+        nextRenewalAt: null,
       },
     });
   });
@@ -296,7 +298,7 @@ describe('Campaigns resource', () => {
     const getResult = await soundlink.campaigns.tiers.get('camp_abc123');
     expect(getResult).toMatchObject({
       error: null,
-      data: { tiers: [{ tierId: 1 }] },
+      data: { tiers: [{ tierId: 1, learningStatus: null }] },
     });
 
     const updateResult = await soundlink.campaigns.tiers.update('camp_abc123', {
@@ -307,13 +309,14 @@ describe('Campaigns resource', () => {
           newAllocationPercent: 100,
         },
       ],
+      acknowledgeLearningWarning: true,
     });
 
     expect(updateResult).toMatchObject({
       error: null,
       data: {
         lastUpdate: '2026-07-27T12:00:00.000Z',
-        tiers: [{ allocationPercent: 100 }],
+        tiers: [{ allocationPercent: 100, learningStatus: 'LEARNING' }],
       },
     });
   });
@@ -334,7 +337,11 @@ describe('Metrics resource', () => {
 
     expect(response).toMatchObject({
       error: null,
-      data: { listeners: 100 },
+      data: {
+        listeners: 100,
+        total_listeners: 180,
+        streams_per_listener: 1.111,
+      },
     });
   });
 
@@ -450,7 +457,17 @@ describe('Metrics resource', () => {
 
     expect(response).toMatchObject({
       error: null,
-      data: { items: [{ country_code: 'US' }] },
+      data: {
+        schemaVersion: '1.1',
+        items: [
+          {
+            country_code: 'US',
+            new_listeners: 145,
+            returning_listeners: 40,
+            total_listeners: 185,
+          },
+        ],
+      },
     });
   });
 
@@ -526,6 +543,7 @@ describe('Soundlinks resource', () => {
         tiktokPixelId: null,
         appleMusicUrl: null,
         youtubeMusicUrl: null,
+        attributionEnabled: true,
       },
     });
   });
@@ -576,8 +594,41 @@ describe('Soundlinks resource', () => {
         status: 'active',
         artistIdFollow: null,
         appleMusicUrl: null,
+        attributionEnabled: true,
       },
     });
+  });
+
+  it('sends attributionEnabled false on create', async () => {
+    let body: { attributionEnabled?: boolean } | undefined;
+
+    server.use(
+      http.post(`${BASE_URL}/v1/soundlinks`, async ({ request }) => {
+        body = (await request.json()) as { attributionEnabled?: boolean };
+        return HttpResponse.json(
+          {
+            data: {
+              soundlinkId: 'sl_new123',
+              attributionEnabled: false,
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    const response = await soundlink.soundlinks.create(
+      {
+        name: 'LP Click Only',
+        spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+        attributionEnabled: false,
+      },
+      { idempotencyKey: 'create-soundlink-attr-off' },
+    );
+
+    expect(body?.attributionEnabled).toBe(false);
+    expect(response.data?.attributionEnabled).toBe(false);
   });
 
   it('sends appleMusicUrl on create and returns it on the detail', async () => {
