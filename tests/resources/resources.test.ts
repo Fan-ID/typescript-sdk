@@ -202,6 +202,59 @@ describe('Campaigns resource', () => {
     expect(params.get('pageSize')).toBe('20');
   });
 
+  it('fetches listening insights for a campaign', async () => {
+    const otherArtists = await soundlink.campaigns.listeningInsights(
+      'camp_abc123',
+      'other-artists',
+    );
+    expect(otherArtists).toMatchObject({
+      error: null,
+      data: {
+        insight: 'other-artists',
+        artists: [{ artist: 'peer artist' }],
+      },
+    });
+
+    const streamSplit = await soundlink.campaigns.listeningInsights(
+      'camp_abc123',
+      'stream-split',
+    );
+    expect(streamSplit).toMatchObject({
+      error: null,
+      data: {
+        insight: 'stream-split',
+        contexts: [{ engagementContext: 'promoted' }],
+      },
+    });
+  });
+
+  it('returns premium_plan_required for listening insights', async () => {
+    server.use(
+      http.get(`${BASE_URL}/v1/campaigns/:campaignId/listening-insights/:insight`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'premium_plan_required',
+              message: 'Listening insights require a premium plan.',
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    const response = await soundlink.campaigns.listeningInsights(
+      'camp_abc123',
+      'other-artists',
+    );
+
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'premium_plan_required', status: 403 },
+    });
+  });
+
   it('iterates all campaigns via listAll', async () => {
     const items: Array<{ campaignId: string }> = [];
     for await (const campaign of soundlink.campaigns.listAll({ pageSize: 10 })) {
@@ -527,6 +580,21 @@ describe('Metrics resource', () => {
     expect(new URL(requestUrl).search).toBe('');
   });
 
+  it('fetches cohort retention for a campaign', async () => {
+    const response = await soundlink.metrics.retention('camp_abc123', {
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        schemaVersion: '1.0',
+        items: [{ cohort_date: '2026-08-01', cohort_size: 120 }],
+      },
+    });
+  });
+
   it('lists breakdown metrics', async () => {
     const response = await soundlink.metrics.breakdown.list('camp_abc123');
 
@@ -833,6 +901,37 @@ describe('Soundlinks resource', () => {
     expect(response).toMatchObject({
       error: null,
       data: { views: 4821, streams: 9340, listeners: 3980 },
+    });
+  });
+
+  it('fetches cohort retention for a soundlink', async () => {
+    const response = await soundlink.soundlinks.retention('sl_abc123', {
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        schemaVersion: '1.0',
+        items: [{ soundlink_id: 'sl_abc123', cohort_size: 90 }],
+      },
+    });
+  });
+
+  it('fetches listening insights for a soundlink', async () => {
+    const response = await soundlink.soundlinks.listeningInsights(
+      'sl_abc123',
+      'other-artists',
+    );
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        soundlinkId: 'sl_abc123',
+        campaignId: null,
+        insight: 'other-artists',
+      },
     });
   });
 

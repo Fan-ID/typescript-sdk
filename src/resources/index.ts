@@ -1,4 +1,5 @@
 import type { HttpClient } from '../client/http-client.js';
+import { LISTENING_INSIGHTS_TIMEOUT_MS } from '../constants/defaults.js';
 import type { JsonlStream } from '../types/api.js';
 import { collectNdjsonStream } from '../core/jsonl.js';
 import type {
@@ -16,6 +17,7 @@ import type {
   CampaignListParams,
   CampaignStopData,
   CampaignTiersData,
+  CohortRetentionListData,
   CreateCampaignRequest,
   CreateSoundlinkRequest,
   CreativeDailyData,
@@ -30,6 +32,8 @@ import type {
   IdempotencyOptions,
   IncreaseCampaignBudgetData,
   IncreaseCampaignBudgetRequest,
+  ListeningInsight,
+  ListeningInsightsData,
   MetricsOverview,
   Pixel,
   PixelListData,
@@ -338,6 +342,27 @@ export class CampaignsResource {
   }
 
   /**
+   * What listeners who connected through this campaign went on to play.
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/listening-insights/{insight}`.
+   * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
+   * Date window comes from the listening graph — do not send `startDate`/`endDate`.
+   * Uses a 120s timeout (insights often take 30–50s).
+   *
+   * @param campaignId - Campaign identifier.
+   * @param insight - `other-artists` | `catalog-dig-in` | `stream-split`.
+   */
+  listeningInsights(
+    campaignId: string,
+    insight: ListeningInsight,
+  ): Promise<ApiResponse<ListeningInsightsData>> {
+    return this.http.get<ListeningInsightsData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/listening-insights/${encodeURIComponent(insight)}`,
+      timeout: LISTENING_INSIGHTS_TIMEOUT_MS,
+    });
+  }
+
+  /**
    * Create a wallet-funded campaign.
    *
    * Maps to `POST /v1/campaigns`. Requires `campaigns:write` and `Idempotency-Key`.
@@ -602,6 +627,50 @@ export class SoundlinksResource {
       },
     });
   }
+
+  /**
+   * Cohort retention for a soundlink (`soundlink_cohort_retention_daily`).
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/retention`.
+   * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
+   * One row per cohort date that has first plays. Day-N fields stay `null` until that day has passed.
+   *
+   * @param soundlinkId - Soundlink identifier.
+   * @param params - Inclusive `YYYY-MM-DD` date range. Omit for API defaults.
+   */
+  retention(
+    soundlinkId: string,
+    params: DateRangeParams = {},
+  ): Promise<ApiResponse<CohortRetentionListData>> {
+    return this.http.get<CohortRetentionListData>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/retention`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+      },
+    });
+  }
+
+  /**
+   * What listeners who connected through this soundlink went on to play.
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/listening-insights/{insight}`.
+   * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
+   * Date window comes from the listening graph — do not send `startDate`/`endDate`.
+   * Uses a 120s timeout (insights often take 30–50s).
+   *
+   * @param soundlinkId - Soundlink identifier.
+   * @param insight - `other-artists` | `catalog-dig-in` | `stream-split`.
+   */
+  listeningInsights(
+    soundlinkId: string,
+    insight: ListeningInsight,
+  ): Promise<ApiResponse<ListeningInsightsData>> {
+    return this.http.get<ListeningInsightsData>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/listening-insights/${encodeURIComponent(insight)}`,
+      timeout: LISTENING_INSIGHTS_TIMEOUT_MS,
+    });
+  }
 }
 
 /**
@@ -792,6 +861,29 @@ export class MetricsResource {
         endDate: params.endDate,
         page: params.page,
         pageSize: params.pageSize,
+      },
+    });
+  }
+
+  /**
+   * Cohort retention for the campaign's linked soundlink (`soundlink_cohort_retention_daily`).
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/metrics/retention`.
+   * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
+   * One row per cohort date that has first plays. Day-N fields stay `null` until that day has passed.
+   *
+   * @param campaignId - Campaign identifier.
+   * @param params - Inclusive `YYYY-MM-DD` date range. Omit for API defaults.
+   */
+  retention(
+    campaignId: string,
+    params: DateRangeParams = {},
+  ): Promise<ApiResponse<CohortRetentionListData>> {
+    return this.http.get<CohortRetentionListData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/retention`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
       },
     });
   }

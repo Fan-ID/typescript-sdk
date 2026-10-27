@@ -908,6 +908,125 @@ export interface EngagementExportParams extends DateRangeParams {
 /** Query params for breakdown JSONL export. Max **90 days** per request. */
 export type BreakdownExportParams = DateRangeParams;
 
+/**
+ * One row of the `soundlink_cohort_retention_daily` v1.0 schema.
+ *
+ * Day-N fields are `null` until that day has passed for the cohort date.
+ * Used by campaign and soundlink retention endpoints.
+ */
+export interface CohortRetentionDailyRow {
+  provider: 'soundlink';
+  account_id: string;
+  schema_version: string;
+  /** UTC calendar date (`YYYY-MM-DD`). */
+  cohort_date: string;
+  cohort_date_timezone: 'UTC';
+  exported_at: string;
+  soundlink_id: string;
+  soundlink_name: string;
+  soundlink_target_type: 'track' | 'playlist' | null;
+  soundlink_target_isrc?: string | null;
+  soundlink_target_spotify_track_id?: string | null;
+  soundlink_target_playlist_id?: string | null;
+  cohort_size: number;
+  returned_on_day_1: number | null;
+  retention_by_day_1: number | null;
+  returned_on_day_2: number | null;
+  retention_by_day_2: number | null;
+  returned_on_day_3: number | null;
+  retention_by_day_3: number | null;
+  returned_on_day_4: number | null;
+  retention_by_day_4: number | null;
+  returned_on_day_5: number | null;
+  retention_by_day_5: number | null;
+  returned_on_day_6: number | null;
+  retention_by_day_6: number | null;
+  returned_on_day_7: number | null;
+  retention_by_day_7: number | null;
+}
+
+/** Payload from campaign/soundlink `metrics/retention`. */
+export interface CohortRetentionListData {
+  schemaVersion: string;
+  items: CohortRetentionDailyRow[];
+}
+
+/** Path param for listening-insights endpoints. */
+export type ListeningInsight = 'other-artists' | 'catalog-dig-in' | 'stream-split';
+
+/** Date window returned with every listening insight (from the listening graph). */
+export interface ListeningInsightWindow {
+  startDate: string;
+  endDate: string;
+}
+
+/** Artist row in `other-artists` insight. */
+export interface OtherArtistsInsightArtist {
+  /** Lowercased, trimmed artist name. */
+  artist: string;
+  listeners: number;
+  streams: number;
+}
+
+/** `other-artists` listening insight payload. */
+export interface OtherArtistsListeningInsight {
+  soundlinkId: string;
+  campaignId: string | null;
+  insight: 'other-artists';
+  window: ListeningInsightWindow;
+  artists: OtherArtistsInsightArtist[];
+}
+
+/** Artist row in `catalog-dig-in` insight. */
+export interface CatalogDigInInsightArtist {
+  artist: string;
+  playlistListeners: number;
+  playlistStreams: number;
+  catalogListeners: number;
+  catalogStreams: number;
+  catalogTracks: number;
+  /** catalogListeners / playlistListeners. Null when playlistListeners is 0. */
+  catalogListenerRate: number | null;
+}
+
+/** `catalog-dig-in` listening insight payload. */
+export interface CatalogDigInListeningInsight {
+  soundlinkId: string;
+  campaignId: string | null;
+  insight: 'catalog-dig-in';
+  window: ListeningInsightWindow;
+  artists: CatalogDigInInsightArtist[];
+}
+
+/** Engagement bucket in `stream-split` insight. */
+export type StreamSplitEngagementContext = 'promoted' | 'playlist' | 'artist_catalog';
+
+/** One context row in `stream-split` insight. */
+export interface StreamSplitContext {
+  engagementContext: StreamSplitEngagementContext;
+  listeners: number;
+  streams: number;
+  tracks: number;
+}
+
+/** `stream-split` listening insight payload. */
+export interface StreamSplitListeningInsight {
+  soundlinkId: string;
+  campaignId: string | null;
+  insight: 'stream-split';
+  window: ListeningInsightWindow;
+  contexts: StreamSplitContext[];
+}
+
+/**
+ * Discriminated union returned by campaign/soundlink listening-insights.
+ * Narrow on `insight`.
+ */
+export type ListeningInsightsData =
+  | OtherArtistsListeningInsight
+  | CatalogDigInListeningInsight
+  | StreamSplitListeningInsight;
+
 /** Raw success envelope from the Public API (internal). */
 export interface ApiEnvelopeSuccess<T> {
   data: T;
