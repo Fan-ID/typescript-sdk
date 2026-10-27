@@ -28,6 +28,8 @@ export type { JsonlStream };
 export interface HttpGetOptions {
   path: string;
   query?: Record<string, string | number | boolean | undefined | null>;
+  /** Override the client timeout for this request only (milliseconds). */
+  timeout?: number;
 }
 
 export interface HttpJsonlOptions extends HttpGetOptions {
@@ -92,16 +94,20 @@ export class HttpClient {
     return this.options;
   }
 
-  async get<T>({ path, query }: HttpGetOptions): Promise<ApiResponse<T>> {
+  async get<T>({ path, query, timeout }: HttpGetOptions): Promise<ApiResponse<T>> {
     const url = joinUrl(
       this.options.baseUrl,
       `${API_VERSION_PREFIX}${path}${buildQueryString(query ?? {})}`,
     );
 
-    return this.requestJson<T>(url, {
-      method: 'GET',
-      headers: this.buildHeaders(),
-    });
+    return this.requestJson<T>(
+      url,
+      {
+        method: 'GET',
+        headers: this.buildHeaders(),
+      },
+      timeout,
+    );
   }
 
   async post<T>({
@@ -248,11 +254,12 @@ export class HttpClient {
   private async requestJson<T>(
     url: string,
     init: RequestInit,
+    timeoutMs?: number,
   ): Promise<ApiResponse<T>> {
     let response: Response;
 
     try {
-      response = await this.fetchWithRetry(url, init);
+      response = await this.fetchWithRetry(url, init, timeoutMs);
     } catch (error) {
       throw toTransportError(error);
     }
@@ -312,13 +319,18 @@ export class HttpClient {
     });
   }
 
-  private async fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    timeoutMs?: number,
+  ): Promise<Response> {
     const { maxRetries, timeout, fetch } = this.options;
+    const requestTimeout = timeoutMs ?? timeout;
     let attempt = 0;
 
     let response = await fetch(url, {
       ...init,
-      signal: AbortSignal.timeout(timeout),
+      signal: AbortSignal.timeout(requestTimeout),
     });
 
     while (
@@ -334,7 +346,7 @@ export class HttpClient {
 
       response = await fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(timeout),
+        signal: AbortSignal.timeout(requestTimeout),
       });
     }
 

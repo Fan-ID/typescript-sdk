@@ -222,6 +222,13 @@ const { data: engagement } = await soundlink.soundlinks.engagement.list('sl_abc1
 });
 
 // JSONL: soundlinks.breakdown.export / soundlinks.engagement.export (same pattern as Metrics below)
+
+// Premium: cohort retention + listening insights (same as Metrics section)
+const { data: retention } = await soundlink.soundlinks.retention('sl_abc123');
+const { data: insight } = await soundlink.soundlinks.listeningInsights(
+  'sl_abc123',
+  'stream-split',
+);
 ```
 
 ## Metrics
@@ -244,6 +251,18 @@ const { data: breakdown } = await soundlink.metrics.breakdown.list('camp_abc123'
   page: 1,
   pageSize: 50,
 });
+
+// Cohort retention — premium plan (`403 premium_plan_required` otherwise)
+const { data: retention } = await soundlink.metrics.retention('camp_abc123', {
+  startDate: '2026-08-01',
+  endDate: '2026-08-31',
+});
+
+// Listening insights — premium; SDK uses a 120s timeout (API often takes 30–50s)
+const { data: insight } = await soundlink.campaigns.listeningInsights(
+  'camp_abc123',
+  'other-artists',
+);
 ```
 
 ### JSONL exports (streaming)

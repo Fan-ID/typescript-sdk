@@ -346,6 +346,72 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
+  http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/retention`, () => {
+    return successEnvelope({
+      schemaVersion: '1.0',
+      items: [
+        {
+          provider: 'soundlink',
+          account_id: 'org_xyz',
+          schema_version: '1.0',
+          cohort_date: '2026-08-01',
+          cohort_date_timezone: 'UTC',
+          exported_at: '2026-08-28T03:00:00.000Z',
+          soundlink_id: 'sl_camp_linked',
+          soundlink_name: 'Sleep Playlist',
+          soundlink_target_type: 'track',
+          soundlink_target_isrc: null,
+          soundlink_target_spotify_track_id: '6habFhsOp2NvndAvgiJ01P',
+          soundlink_target_playlist_id: null,
+          cohort_size: 120,
+          returned_on_day_1: 40,
+          retention_by_day_1: 0.3333,
+          returned_on_day_2: 25,
+          retention_by_day_2: 0.4167,
+          returned_on_day_3: null,
+          retention_by_day_3: null,
+          returned_on_day_4: null,
+          retention_by_day_4: null,
+          returned_on_day_5: null,
+          retention_by_day_5: null,
+          returned_on_day_6: null,
+          retention_by_day_6: null,
+          returned_on_day_7: null,
+          retention_by_day_7: null,
+        },
+      ],
+    });
+  }),
+
+  http.get(
+    `${BASE_URL}/v1/campaigns/:campaignId/listening-insights/:insight`,
+    ({ params }) => {
+      if (String(params.insight) === 'stream-split') {
+        return successEnvelope({
+          soundlinkId: 'sl_camp_linked',
+          campaignId: String(params.campaignId),
+          insight: 'stream-split',
+          window: { startDate: '2026-07-30', endDate: '2026-09-29' },
+          contexts: [
+            {
+              engagementContext: 'promoted',
+              listeners: 80,
+              streams: 200,
+              tracks: 1,
+            },
+          ],
+        });
+      }
+      return successEnvelope({
+        soundlinkId: 'sl_camp_linked',
+        campaignId: String(params.campaignId),
+        insight: 'other-artists',
+        window: { startDate: '2026-07-30', endDate: '2026-09-29' },
+        artists: [{ artist: 'peer artist', listeners: 30, streams: 90 }],
+      });
+    },
+  ),
+
   http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/breakdown`, () => {
     return successEnvelope({
       schemaVersion: '1.1',
@@ -564,6 +630,56 @@ export const handlers: HttpHandler[] = [
       ctr_lp: 0.185,
     });
   }),
+
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/retention`, () => {
+    return successEnvelope({
+      schemaVersion: '1.0',
+      items: [
+        {
+          provider: 'soundlink',
+          account_id: 'org_xyz',
+          schema_version: '1.0',
+          cohort_date: '2026-08-01',
+          cohort_date_timezone: 'UTC',
+          exported_at: '2026-08-28T03:00:00.000Z',
+          soundlink_id: 'sl_abc123',
+          soundlink_name: 'Midnight Drive',
+          soundlink_target_type: 'track',
+          soundlink_target_isrc: null,
+          soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+          soundlink_target_playlist_id: null,
+          cohort_size: 90,
+          returned_on_day_1: 30,
+          retention_by_day_1: 0.3333,
+          returned_on_day_2: 18,
+          retention_by_day_2: 0.4,
+          returned_on_day_3: null,
+          retention_by_day_3: null,
+          returned_on_day_4: null,
+          retention_by_day_4: null,
+          returned_on_day_5: null,
+          retention_by_day_5: null,
+          returned_on_day_6: null,
+          retention_by_day_6: null,
+          returned_on_day_7: null,
+          retention_by_day_7: null,
+        },
+      ],
+    });
+  }),
+
+  http.get(
+    `${BASE_URL}/v1/soundlinks/:soundlinkId/listening-insights/:insight`,
+    ({ params }) => {
+      return successEnvelope({
+        soundlinkId: String(params.soundlinkId),
+        campaignId: null,
+        insight: 'other-artists',
+        window: { startDate: '2026-07-30', endDate: '2026-09-29' },
+        artists: [{ artist: 'peer artist', listeners: 12, streams: 40 }],
+      });
+    },
+  ),
 
   http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/breakdown`, () => {
     return successEnvelope({
