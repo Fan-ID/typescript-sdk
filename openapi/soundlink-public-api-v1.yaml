@@ -3001,8 +3001,10 @@ components:
           description: Stable snake_case error code.
           enum:
             - invalid_api_key
+            - invalid_token
             - api_key_revoked
             - api_key_expired
+            - access_denied
             - insufficient_scope
             - not_found
             - not_in_listening_graph
@@ -3021,6 +3023,8 @@ components:
             - learning_edit_ack_required
             - wallet_not_enabled
             - premium_plan_required
+            - youtube_music_not_enabled
+            - attribution_not_enabled
             - soundlink_plan_required
             - custom_pixel_not_enabled
             - meta_pixel_conflict
