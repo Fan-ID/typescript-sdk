@@ -66,6 +66,10 @@ export type {
   JsonlStream,
   MetricsOverview,
   Pagination,
+  Pixel,
+  PixelListData,
+  PixelPlatform,
+  PixelTestEventData,
   PingData,
   PublicApiErrorCode,
   SocialPlatform,
@@ -96,6 +100,7 @@ export type {
   TierTargeting,
   UpdateCampaignAutoRenewRequest,
   UpdateCampaignTiersRequest,
+  UpdatePixelRequest,
   WalletData,
 } from './types/api.js';
 

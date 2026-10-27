@@ -27,6 +27,81 @@ describe('Wallet resource', () => {
   });
 });
 
+describe('Pixels resource', () => {
+  let soundlink: Soundlink;
+
+  beforeEach(() => {
+    soundlink = new Soundlink({ apiKey: TEST_API_KEY, baseUrl: BASE_URL });
+  });
+
+  it('lists organization pixels', async () => {
+    const response = await soundlink.pixels.list();
+
+    expect(response).toMatchObject({
+      error: null,
+      data: { pixels: [{ id: '1234567890123456', platform: 'meta' }] },
+    });
+  });
+
+  it('updates a pixel without Idempotency-Key', async () => {
+    let sawIdempotencyKey = false;
+
+    server.use(
+      http.put(`${BASE_URL}/v1/pixels/:pixelId`, ({ request }) => {
+        sawIdempotencyKey = request.headers.has('Idempotency-Key');
+        return HttpResponse.json({
+          data: { id: '1234567890123456', platform: 'meta' },
+          meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+        });
+      }),
+    );
+
+    const response = await soundlink.pixels.update('1234567890123456', {
+      platform: 'meta',
+      accessToken: 'EAAB-test-token',
+    });
+
+    expect(sawIdempotencyKey).toBe(false);
+    expect(response).toMatchObject({
+      error: null,
+      data: { id: '1234567890123456', platform: 'meta' },
+    });
+  });
+
+  it('sends a pixel test event', async () => {
+    const response = await soundlink.pixels.sendTestEvent('1234567890123456');
+
+    expect(response).toMatchObject({
+      error: null,
+      data: { status: 'sent', pixelId: '1234567890123456' },
+    });
+  });
+
+  it('surfaces custom_pixel_not_enabled on list', async () => {
+    server.use(
+      http.get(`${BASE_URL}/v1/pixels`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'custom_pixel_not_enabled',
+              message: 'This organization does not have a custom Meta pixel enabled.',
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 403 },
+        ),
+      ),
+    );
+
+    const response = await soundlink.pixels.list();
+
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'custom_pixel_not_enabled', status: 403 },
+    });
+  });
+});
+
 describe('Strategies resource', () => {
   let soundlink: Soundlink;
 

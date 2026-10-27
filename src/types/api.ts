@@ -351,6 +351,33 @@ export interface WalletData {
   updatedAt: string | null;
 }
 
+/** Ad platform for an organization pixel. Only `meta` is supported today. */
+export type PixelPlatform = 'meta';
+
+/** One pixel from {@link PixelsResource.list} / {@link PixelsResource.update}. */
+export interface Pixel {
+  id: string;
+  platform: PixelPlatform;
+}
+
+/** Payload from `GET /v1/pixels`. */
+export interface PixelListData {
+  pixels: Pixel[];
+}
+
+/** Body for `PUT /v1/pixels/{pixelId}`. */
+export interface UpdatePixelRequest {
+  platform: PixelPlatform;
+  /** Conversions API access token. Stored and never returned. */
+  accessToken: string;
+}
+
+/** Payload from `POST /v1/pixels/{pixelId}/test-events`. */
+export interface PixelTestEventData {
+  status: 'sent';
+  pixelId: string;
+}
+
 /** One variant under a creative group (`GET .../metrics/creatives`). */
 export interface CreativeMetricsChild {
   caption: string | null;

@@ -58,6 +58,36 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
+  http.get(`${BASE_URL}/v1/pixels`, () => {
+    return successEnvelope({
+      pixels: [{ id: '1234567890123456', platform: 'meta' }],
+    });
+  }),
+
+  http.put(`${BASE_URL}/v1/pixels/:pixelId`, async ({ request, params }) => {
+    const body = (await request.json()) as {
+      platform: string;
+      accessToken: string;
+    };
+    if (!body.accessToken) {
+      return errorEnvelope('invalid_request', 'accessToken is required.', 400);
+    }
+    return successEnvelope({
+      id: String(params.pixelId),
+      platform: body.platform,
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/pixels/:pixelId/test-events`, ({ params }) => {
+    if (params.pixelId === 'missing') {
+      return errorEnvelope('not_found', 'Pixel not found.', 404);
+    }
+    return successEnvelope({
+      status: 'sent',
+      pixelId: String(params.pixelId),
+    });
+  }),
+
   http.get(`${BASE_URL}/v1/campaigns`, ({ request }) => {
     const url = new URL(request.url);
     const page = Number(url.searchParams.get('page') ?? '1');

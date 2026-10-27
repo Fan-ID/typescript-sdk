@@ -31,6 +31,9 @@ import type {
   IncreaseCampaignBudgetData,
   IncreaseCampaignBudgetRequest,
   MetricsOverview,
+  Pixel,
+  PixelListData,
+  PixelTestEventData,
   PingData,
   SoundlinkBreakdownListData,
   SoundlinkBreakdownListParams,
@@ -45,6 +48,7 @@ import type {
   StrategiesCatalogData,
   UpdateCampaignAutoRenewRequest,
   UpdateCampaignTiersRequest,
+  UpdatePixelRequest,
   WalletData,
 } from '../types/api.js';
 
@@ -169,6 +173,67 @@ export class StrategiesResource {
    */
   list(): Promise<ApiResponse<StrategiesCatalogData>> {
     return this.http.get<StrategiesCatalogData>({ path: '/strategies' });
+  }
+}
+
+/**
+ * Organization Meta pixels (`/v1/pixels`).
+ * Read needs `pixels:read`; write and test-events need `pixels:write`.
+ */
+export class PixelsResource {
+  constructor(private readonly http: HttpClient) {}
+
+  /**
+   * List Meta pixels saved for the organization.
+   *
+   * Maps to `GET /v1/pixels`. Requires `pixels:read`.
+   * Returns `403 custom_pixel_not_enabled` when the feature is off.
+   *
+   * @example
+   * ```ts
+   * const { data } = await soundlink.pixels.list();
+   * ```
+   */
+  list(): Promise<ApiResponse<PixelListData>> {
+    return this.http.get<PixelListData>({ path: '/pixels' });
+  }
+
+  /**
+   * Save or rotate a Meta pixel access token.
+   *
+   * Maps to `PUT /v1/pixels/{pixelId}`. Requires `pixels:write`.
+   * Does not require an `Idempotency-Key`. The access token is never returned.
+   *
+   * @example
+   * ```ts
+   * const { data } = await soundlink.pixels.update('1234567890123456', {
+   *   platform: 'meta',
+   *   accessToken: process.env.META_CAPI_TOKEN!,
+   * });
+   * ```
+   */
+  update(pixelId: string, body: UpdatePixelRequest): Promise<ApiResponse<Pixel>> {
+    return this.http.put<Pixel>({
+      path: `/pixels/${encodeURIComponent(pixelId)}`,
+      body,
+    });
+  }
+
+  /**
+   * Send a live Meta Conversions API test event to a saved pixel.
+   *
+   * Maps to `POST /v1/pixels/{pixelId}/test-events`. Requires `pixels:write`.
+   * This is not a sandbox event — it appears in Events Manager.
+   *
+   * @example
+   * ```ts
+   * const { data } = await soundlink.pixels.sendTestEvent('1234567890123456');
+   * ```
+   */
+  sendTestEvent(pixelId: string): Promise<ApiResponse<PixelTestEventData>> {
+    return this.http.post<PixelTestEventData>({
+      path: `/pixels/${encodeURIComponent(pixelId)}/test-events`,
+    });
   }
 }
 

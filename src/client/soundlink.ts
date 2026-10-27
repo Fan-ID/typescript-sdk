@@ -3,6 +3,7 @@ import {
   CampaignsResource,
   MetricsResource,
   PingResource,
+  PixelsResource,
   SoundlinksResource,
   StrategiesResource,
   WalletResource,
@@ -41,6 +42,9 @@ export class Soundlink {
   /** Growth strategy catalog. Requires `campaigns:read` scope. */
   readonly strategies: StrategiesResource;
 
+  /** Organization Meta pixels. Read needs `pixels:read`; write needs `pixels:write`. */
+  readonly pixels: PixelsResource;
+
   /** List, fetch, and manage campaigns. Read needs `campaigns:read`; writes need `campaigns:write`. */
   readonly campaigns: CampaignsResource;
 
@@ -62,6 +66,7 @@ export class Soundlink {
     this.ping = pingResource.ping.bind(pingResource);
     this.wallet = new WalletResource(http);
     this.strategies = new StrategiesResource(http);
+    this.pixels = new PixelsResource(http);
     this.campaigns = new CampaignsResource(http);
     this.soundlinks = new SoundlinksResource(http);
     this.metrics = new MetricsResource(http);
