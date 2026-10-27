@@ -261,11 +261,9 @@ const { data: retention } = await soundlink.metrics.retention('camp_abc123', {
 // Listening insights — premium; SDK uses a 120s timeout (API often takes 30–50s)
 const { data: insight } = await soundlink.campaigns.listeningInsights(
   'camp_abc123',
-  'other-artists', // or 'catalog-dig-in' | 'stream-split'
+  'other-artists',
 );
 ```
-
-Self-serve soundlinks mirror the same surface: `soundlinks.retention` and `soundlinks.listeningInsights`.
 
 ### JSONL exports (streaming)
 

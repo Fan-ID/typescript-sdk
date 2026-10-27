@@ -386,8 +386,7 @@ export const handlers: HttpHandler[] = [
   http.get(
     `${BASE_URL}/v1/campaigns/:campaignId/listening-insights/:insight`,
     ({ params }) => {
-      const insight = String(params.insight);
-      if (insight === 'stream-split') {
+      if (String(params.insight) === 'stream-split') {
         return successEnvelope({
           soundlinkId: 'sl_camp_linked',
           campaignId: String(params.campaignId),
@@ -399,25 +398,6 @@ export const handlers: HttpHandler[] = [
               listeners: 80,
               streams: 200,
               tracks: 1,
-            },
-          ],
-        });
-      }
-      if (insight === 'catalog-dig-in') {
-        return successEnvelope({
-          soundlinkId: 'sl_camp_linked',
-          campaignId: String(params.campaignId),
-          insight: 'catalog-dig-in',
-          window: { startDate: '2026-07-30', endDate: '2026-09-29' },
-          artists: [
-            {
-              artist: 'example artist',
-              playlistListeners: 50,
-              playlistStreams: 120,
-              catalogListeners: 20,
-              catalogStreams: 40,
-              catalogTracks: 8,
-              catalogListenerRate: 0.4,
             },
           ],
         });

@@ -348,9 +348,6 @@ export class CampaignsResource {
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
    * Date window comes from the listening graph — do not send `startDate`/`endDate`.
    * Uses a 120s timeout (insights often take 30–50s).
-   *
-   * @param campaignId - Campaign identifier.
-   * @param insight - `other-artists` | `catalog-dig-in` | `stream-split`.
    */
   listeningInsights(
     campaignId: string,
@@ -634,9 +631,6 @@ export class SoundlinksResource {
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/retention`.
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
    * One row per cohort date that has first plays. Day-N fields stay `null` until that day has passed.
-   *
-   * @param soundlinkId - Soundlink identifier.
-   * @param params - Inclusive `YYYY-MM-DD` date range. Omit for API defaults.
    */
   retention(
     soundlinkId: string,
@@ -658,9 +652,6 @@ export class SoundlinksResource {
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
    * Date window comes from the listening graph — do not send `startDate`/`endDate`.
    * Uses a 120s timeout (insights often take 30–50s).
-   *
-   * @param soundlinkId - Soundlink identifier.
-   * @param insight - `other-artists` | `catalog-dig-in` | `stream-split`.
    */
   listeningInsights(
     soundlinkId: string,
@@ -871,9 +862,6 @@ export class MetricsResource {
    * Maps to `GET /v1/campaigns/{campaignId}/metrics/retention`.
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
    * One row per cohort date that has first plays. Day-N fields stay `null` until that day has passed.
-   *
-   * @param campaignId - Campaign identifier.
-   * @param params - Inclusive `YYYY-MM-DD` date range. Omit for API defaults.
    */
   retention(
     campaignId: string,

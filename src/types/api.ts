@@ -910,9 +910,7 @@ export type BreakdownExportParams = DateRangeParams;
 
 /**
  * One row of the `soundlink_cohort_retention_daily` v1.0 schema.
- *
  * Day-N fields are `null` until that day has passed for the cohort date.
- * Used by campaign and soundlink retention endpoints.
  */
 export interface CohortRetentionDailyRow {
   provider: 'soundlink';
@@ -960,7 +958,6 @@ export interface ListeningInsightWindow {
   endDate: string;
 }
 
-/** Artist row in `other-artists` insight. */
 export interface OtherArtistsInsightArtist {
   /** Lowercased, trimmed artist name. */
   artist: string;
@@ -968,7 +965,6 @@ export interface OtherArtistsInsightArtist {
   streams: number;
 }
 
-/** `other-artists` listening insight payload. */
 export interface OtherArtistsListeningInsight {
   soundlinkId: string;
   campaignId: string | null;
@@ -977,7 +973,6 @@ export interface OtherArtistsListeningInsight {
   artists: OtherArtistsInsightArtist[];
 }
 
-/** Artist row in `catalog-dig-in` insight. */
 export interface CatalogDigInInsightArtist {
   artist: string;
   playlistListeners: number;
@@ -989,7 +984,6 @@ export interface CatalogDigInInsightArtist {
   catalogListenerRate: number | null;
 }
 
-/** `catalog-dig-in` listening insight payload. */
 export interface CatalogDigInListeningInsight {
   soundlinkId: string;
   campaignId: string | null;
@@ -998,10 +992,8 @@ export interface CatalogDigInListeningInsight {
   artists: CatalogDigInInsightArtist[];
 }
 
-/** Engagement bucket in `stream-split` insight. */
 export type StreamSplitEngagementContext = 'promoted' | 'playlist' | 'artist_catalog';
 
-/** One context row in `stream-split` insight. */
 export interface StreamSplitContext {
   engagementContext: StreamSplitEngagementContext;
   listeners: number;
@@ -1009,7 +1001,6 @@ export interface StreamSplitContext {
   tracks: number;
 }
 
-/** `stream-split` listening insight payload. */
 export interface StreamSplitListeningInsight {
   soundlinkId: string;
   campaignId: string | null;
@@ -1018,10 +1009,7 @@ export interface StreamSplitListeningInsight {
   contexts: StreamSplitContext[];
 }
 
-/**
- * Discriminated union returned by campaign/soundlink listening-insights.
- * Narrow on `insight`.
- */
+/** Discriminated on `insight`. */
 export type ListeningInsightsData =
   | OtherArtistsListeningInsight
   | CatalogDigInListeningInsight
