@@ -1,5 +1,13 @@
 # soundlink
 
+## 2.5.0
+
+### Minor Changes
+
+- [#27](https://github.com/Fan-ID/typescript-sdk/pull/27) [`7cf85a7`](https://github.com/Fan-ID/typescript-sdk/commit/7cf85a7277a6d1a070de8a872249ca365a12a079) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add `campaigns.activity` (`GET /v1/campaigns/{id}/activity`) and `metrics.creativeDaily` (`GET /v1/campaigns/{id}/metrics/creative-daily`). Creative variants include `timestamp_start_ms` and `timestamp_end_ms`.
+
+- [#29](https://github.com/Fan-ID/typescript-sdk/pull/29) [`3abddcb`](https://github.com/Fan-ID/typescript-sdk/commit/3abddcb4b6fab4c0007cb3aba6f9b74b87a44dc0) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Sync Public API field types with schema 1.1 and recent campaign/soundlink additions (SOU-7393): `nextRenewalAt`, overview/breakdown `total_listeners` (and breakdown new/returning splits), tier `learningStatus` / `acknowledgeLearningWarning`, and soundlink `attributionEnabled`. Re-sync the bundled OpenAPI spec.
+
 ## 2.4.0
 
 ### Minor Changes
