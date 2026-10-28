@@ -807,6 +807,9 @@ export interface SoundlinkBreakdownRow {
   country_code: string;
   views: number;
   link_clicks: number | null;
+  spotify_link_clicks: number;
+  apple_music_link_clicks: number;
+  youtube_music_link_clicks: number;
   streams: number;
   listeners: number;
   new_listeners: number | null;
