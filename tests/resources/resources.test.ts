@@ -946,7 +946,15 @@ describe('Soundlinks resource', () => {
       data: {
         schemaVersion: '1.0',
         items: [
-          { soundlink_id: 'sl_abc123', country_code: 'US', report_date: '2026-08-01' },
+          {
+            soundlink_id: 'sl_abc123',
+            country_code: 'US',
+            report_date: '2026-08-01',
+            link_clicks: 890,
+            spotify_link_clicks: 820,
+            apple_music_link_clicks: 50,
+            youtube_music_link_clicks: 10,
+          },
         ],
       },
     });
@@ -969,7 +977,13 @@ describe('Soundlinks resource', () => {
     }
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ soundlink_id: 'sl_abc123', country_code: 'US' });
+    expect(rows[0]).toMatchObject({
+      soundlink_id: 'sl_abc123',
+      country_code: 'US',
+      spotify_link_clicks: 820,
+      apple_music_link_clicks: 50,
+      youtube_music_link_clicks: 10,
+    });
   });
 
   it('collects soundlink breakdown export rows', async () => {

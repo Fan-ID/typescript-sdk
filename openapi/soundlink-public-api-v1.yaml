@@ -2099,6 +2099,9 @@ paths:
                       country_code: US
                       views: 4821
                       link_clicks: 890
+                      spotify_link_clicks: 820
+                      apple_music_link_clicks: 50
+                      youtube_music_link_clicks: 10
                       streams: 203
                       listeners: 145
                       new_listeners: 120
@@ -2183,8 +2186,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/SoundlinkCountryDailyRow'
               example: |
-                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"track","soundlink_target_isrc":"DEXW62500259","soundlink_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","soundlink_target_playlist_id":null,"country_code":"US","views":4821,"link_clicks":890,"streams":203,"listeners":145,"new_listeners":120,"returning_listeners":25,"new_listener_streams":160,"returning_listener_streams":43,"followers":12,"streams_per_listener":1.4,"ctr_lp":0.185}
-                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"track","soundlink_target_isrc":"DEXW62500259","soundlink_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","soundlink_target_playlist_id":null,"country_code":"DE","views":2103,"link_clicks":31,"streams":87,"listeners":61,"new_listeners":48,"returning_listeners":13,"new_listener_streams":64,"returning_listener_streams":23,"followers":4,"streams_per_listener":1.43,"ctr_lp":0.0147}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"track","soundlink_target_isrc":"DEXW62500259","soundlink_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","soundlink_target_playlist_id":null,"country_code":"US","views":4821,"link_clicks":890,"spotify_link_clicks":820,"apple_music_link_clicks":50,"youtube_music_link_clicks":10,"streams":203,"listeners":145,"new_listeners":120,"returning_listeners":25,"new_listener_streams":160,"returning_listener_streams":43,"followers":12,"streams_per_listener":1.4,"ctr_lp":0.185}
+                {"provider":"soundlink","account_id":"a7ac3173-2f71-4e79-921f-d15d7112dd11","schema_version":"1.0","report_date":"2026-08-01","report_date_timezone":"UTC","exported_at":"2026-08-28T03:00:00Z","soundlink_id":"V1StGXR8_Z5jdHi6B-myT","soundlink_name":"Midnight Drive","soundlink_target_type":"track","soundlink_target_isrc":"DEXW62500259","soundlink_target_spotify_track_id":"11dFghVXANMlKmJXsNCbNl","soundlink_target_playlist_id":null,"country_code":"DE","views":2103,"link_clicks":31,"spotify_link_clicks":28,"apple_music_link_clicks":2,"youtube_music_link_clicks":0,"streams":87,"listeners":61,"new_listeners":48,"returning_listeners":13,"new_listener_streams":64,"returning_listener_streams":23,"followers":4,"streams_per_listener":1.43,"ctr_lp":0.0147}
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -4666,6 +4669,9 @@ components:
         - soundlink_target_type
         - country_code
         - views
+        - spotify_link_clicks
+        - apple_music_link_clicks
+        - youtube_music_link_clicks
         - streams
         - listeners
         - followers
@@ -4728,8 +4734,28 @@ components:
           type: integer
           nullable: true
           description: |
-            CTA clicks across all DSPs on the landing page. Null if not tracked
-            for this soundlink type.
+            CTA clicks across all DSPs on the landing page (including DSPs
+            without a dedicated column). Always >= the sum of
+            `spotify_link_clicks` + `apple_music_link_clicks` +
+            `youtube_music_link_clicks` — do not derive a per-DSP count by
+            subtraction. Null if not tracked for this soundlink type.
+        spotify_link_clicks:
+          type: integer
+          description: |
+            Continue sessions to Spotify from the landing page. Safe to sum
+            across countries and days.
+        apple_music_link_clicks:
+          type: integer
+          description: |
+            Continue sessions to Apple Music from the landing page (outbound
+            click only; no Apple Music playback attribution). Safe to sum
+            across countries and days.
+        youtube_music_link_clicks:
+          type: integer
+          description: |
+            Continue sessions to YouTube Music from the landing page (outbound
+            click only; no YouTube Music playback attribution). Often `0` on
+            standalone soundlink marts. Safe to sum across countries and days.
         streams:
           type: integer
           description: |
