@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.8.0
+
+### Minor Changes
+
+- [#37](https://github.com/Fan-ID/typescript-sdk/pull/37) [`4e84808`](https://github.com/Fan-ID/typescript-sdk/commit/4e8480800556c4275ec647cf7059e6a94994cde3) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add per-DSP CTA fields on soundlink breakdown rows: `spotify_link_clicks`, `apple_music_link_clicks`, and `youtube_music_link_clicks` (SOU-7424).
+
 ## 2.7.0
 
 ### Minor Changes
