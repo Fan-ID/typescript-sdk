@@ -170,6 +170,11 @@ paths:
         Returns the Meta pixels configured for the organization. Access tokens
         are never returned. Today each entry has `platform: meta`.
 
+        Each pixel includes `isDefault` and send-health fields (`status`,
+        `lastErrorCode`, `errorSince`). `isDefault` only affects the app's
+        soundlink create picker; this API never applies a default pixel on
+        create.
+
         Requires `pixels:read`. Organizations without custom pixels enabled
         get `403 custom_pixel_not_enabled`.
       tags: [Pixels]
@@ -190,6 +195,10 @@ paths:
                   pixels:
                     - id: '1234567890123456'
                       platform: meta
+                      isDefault: true
+                      status: ok
+                      lastErrorCode: null
+                      errorSince: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -202,12 +211,13 @@ paths:
       operationId: updatePixel
       summary: Save an organization pixel
       description: |
-        Saves the Conversions API access token for `pixelId`. The same call
-        creates the pixel or rotates its token, and both return `200`:
+        Saves the Conversions API access token and/or default flag for
+        `pixelId`. The same call creates the pixel or rotates its token, and
+        both return `200`:
 
-        - No Meta pixel yet: the pixel is saved.
+        - No Meta pixel yet: the pixel is saved (`accessToken` required).
         - `pixelId` matches a Meta pixel the organization already has: its
-          access token is replaced.
+          access token is replaced when `accessToken` is sent.
         - A different Meta pixel for the same organization: the new pixel is
           saved alongside existing ones.
         - The pixel is configured by another organization: `409
@@ -215,6 +225,8 @@ paths:
         - The access token is already used with another pixel: `400
           invalid_request`.
         - `platform` other than `meta`: `400 invalid_request`.
+        - Optional `isDefault` sets or clears the org default for Meta. At
+          least one of `accessToken` or `isDefault` is required.
 
         The response never includes the access token. Use
         `POST /v1/pixels/{pixelId}/test-events` to check the pixel and token.
@@ -247,6 +259,7 @@ paths:
             example:
               platform: meta
               accessToken: 'EAAB...'
+              isDefault: true
       responses:
         '200':
           description: Pixel saved or token rotated
@@ -258,12 +271,55 @@ paths:
                 data:
                   id: '1234567890123456'
                   platform: meta
+                  isDefault: true
+                  status: ok
+                  lastErrorCode: null
+                  errorSince: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/UpdatePixelBadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/PixelForbidden' }
         '409': { $ref: '#/components/responses/PixelConflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+    delete:
+      operationId: deletePixel
+      summary: Delete an organization pixel
+      description: |
+        Deletes the Meta pixel `pixelId` for the organization.
+
+        - `204` when deleted.
+        - `404 not_found` when the pixel is not configured for the organization.
+        - `409 pixel_in_use` when any smart link still uses the pixel as its
+          main or side pixel (`details.smartLinkCount`).
+
+        Requires `pixels:write`. Organizations without custom pixels enabled
+        get `403 custom_pixel_not_enabled`.
+
+        **Auth:** Accepts API key or OAuth Bearer (`pixels:write`).
+      tags: [Pixels]
+      x-required-scope: pixels:write
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+
+      parameters:
+        - name: pixelId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Pixel id on the ad platform.
+      responses:
+        '204':
+          description: Pixel deleted
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PixelForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/PixelInUse' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -2784,12 +2840,33 @@ components:
 
     Pixel:
       type: object
-      required: [id, platform]
+      required: [id, platform, isDefault, status, lastErrorCode, errorSince]
       properties:
         id:
           type: string
         platform:
           $ref: '#/components/schemas/PixelPlatform'
+        isDefault:
+          type: boolean
+          description: |
+            Whether this pixel is the organization's default for its platform.
+            Only drives the app soundlink create picker; create APIs never
+            fall back to it.
+        status:
+          type: string
+          enum: [ok, error]
+          description: |
+            `error` while an open send-error episode exists for this pixel;
+            `ok` otherwise.
+        lastErrorCode:
+          type: string
+          nullable: true
+          description: Platform error code for the open episode, or `null`.
+        errorSince:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the open error episode started, or `null`.
 
     PixelListResponse:
       type: object
@@ -2809,14 +2886,21 @@ components:
 
     UpdatePixelRequest:
       type: object
-      required: [platform, accessToken]
+      required: [platform]
       properties:
         platform:
           $ref: '#/components/schemas/PixelPlatform'
         accessToken:
           type: string
           minLength: 1
-          description: Conversions API access token. Stored and never returned.
+          description: |
+            Conversions API access token. Stored and never returned. Required
+            when creating a new pixel; optional when only updating `isDefault`.
+        isDefault:
+          type: boolean
+          description: |
+            Sets or clears the organization's default Meta pixel. At least one
+            of `accessToken` or `isDefault` must be present.
 
     UpdatePixelResponse:
       type: object
@@ -3026,11 +3110,10 @@ components:
             - learning_edit_ack_required
             - wallet_not_enabled
             - premium_plan_required
-            - youtube_music_not_enabled
-            - attribution_not_enabled
             - soundlink_plan_required
             - custom_pixel_not_enabled
             - meta_pixel_conflict
+            - pixel_in_use
             - insufficient_credit
             - idempotency_key_conflict
             - rate_limit_exceeded
@@ -4478,14 +4561,16 @@ components:
         metaPixelId:
           type: string
           description: |
-            Meta pixel ID. Must be sent together with
-            `metaConversionAccessToken`. Omit both to skip Meta tracking.
+            Meta pixel ID. Send with `metaConversionAccessToken` to save or
+            rotate the token (unchanged). Or send `metaPixelId` alone to reuse
+            a pixel the organization already saved (requires pixel settings).
+            Omit both to skip Meta tracking. Never applies an org default.
         metaConversionAccessToken:
           type: string
           writeOnly: true
           description: |
             Meta Conversions API access token. Write-only: accepted on create,
-            never returned on GET. Must be sent together with `metaPixelId`.
+            never returned on GET. When present, `metaPixelId` is required.
         appleMusicUrl:
           type: string
           format: uri
@@ -4518,8 +4603,7 @@ components:
           description: |
             When false, the landing page skips Spotify login and only tracks
             the landing-page click. Omit or send true to keep attribution.
-            Sending false requires the organization to be allowed to turn
-            attribution off, and cannot be combined with `autoFollow: true`.
+            Cannot be combined with `autoFollow: true`.
 
     SoundlinkDetail:
       allOf:
@@ -5475,19 +5559,25 @@ components:
                   message: 'Idempotency-Key header is required and must not be empty.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
-            pixel_pair:
+            pixel_token_without_id:
               value:
                 error:
                   code: invalid_request
                   message: 'metaPixelId and metaConversionAccessToken must both be provided, or both omitted.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
+            pixel_not_owned:
+              value:
+                error:
+                  code: invalid_request
+                  message: "This pixel can't be used with this account. Check the pixel ID and access token, or contact support."
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
 
     CreateSoundlinkForbidden:
       description: |
-        Valid credentials but missing the `soundlinks:write` scope, the
-        organization has no self-serve plan, or the organization is not allowed
-        to create a soundlink with attribution off.
+        Valid credentials but missing the `soundlinks:write` scope, or the
+        organization has no self-serve plan.
       content:
         application/json:
           schema:
@@ -5505,13 +5595,6 @@ components:
                 error:
                   code: soundlink_plan_required
                   message: 'Creating a Soundlink requires a self-serve plan.'
-                meta:
-                  requestId: 550e8400-e29b-41d4-a716-446655440000
-            attribution_not_enabled:
-              value:
-                error:
-                  code: attribution_not_enabled
-                  message: 'This organization cannot create a soundlink with attribution off.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
     CreateSoundlinkUnprocessable:
@@ -5591,6 +5674,24 @@ components:
                 error:
                   code: meta_pixel_conflict
                   message: "This pixel can't be used with this account. Check the pixel ID and access token, or contact support."
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+
+    PixelInUse:
+      description: |
+        The pixel is still used by one or more smart links and cannot be deleted.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            pixel_in_use:
+              value:
+                error:
+                  code: pixel_in_use
+                  message: "This pixel is used by smart links and can't be deleted."
+                  details:
+                    smartLinkCount: 2
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
 

@@ -60,19 +60,37 @@ export const handlers: HttpHandler[] = [
 
   http.get(`${BASE_URL}/v1/pixels`, () => {
     return successEnvelope({
-      pixels: [{ id: '1234567890123456', platform: 'meta' }],
+      pixels: [
+        {
+          id: '1234567890123456',
+          platform: 'meta',
+          isDefault: true,
+          status: 'ok',
+          lastErrorCode: null,
+          errorSince: null,
+        },
+      ],
     });
   }),
 
   http.put(`${BASE_URL}/v1/pixels/:pixelId`, async ({ request, params }) => {
     const body = (await request.json()) as {
       platform: string;
-      accessToken: string;
+      accessToken?: string;
+      isDefault?: boolean;
     };
     return successEnvelope({
       id: String(params.pixelId),
       platform: body.platform,
+      isDefault: body.isDefault ?? false,
+      status: 'ok',
+      lastErrorCode: null,
+      errorSince: null,
     });
+  }),
+
+  http.delete(`${BASE_URL}/v1/pixels/:pixelId`, () => {
+    return new HttpResponse(null, { status: 204 });
   }),
 
   http.post(`${BASE_URL}/v1/pixels/:pixelId/test-events`, ({ params }) => {

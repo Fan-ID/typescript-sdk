@@ -270,6 +270,10 @@ export class HttpClient {
       return this.parseErrorEnvelope<T>(response, retryAfter);
     }
 
+    if (response.status === 204) {
+      return { data: null, error: null };
+    }
+
     let body: unknown;
     try {
       body = await response.json();

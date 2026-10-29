@@ -39,7 +39,18 @@ describe('Pixels resource', () => {
 
     expect(response).toMatchObject({
       error: null,
-      data: { pixels: [{ id: '1234567890123456', platform: 'meta' }] },
+      data: {
+        pixels: [
+          {
+            id: '1234567890123456',
+            platform: 'meta',
+            isDefault: true,
+            status: 'ok',
+            lastErrorCode: null,
+            errorSince: null,
+          },
+        ],
+      },
     });
   });
 
@@ -50,7 +61,14 @@ describe('Pixels resource', () => {
       http.put(`${BASE_URL}/v1/pixels/:pixelId`, ({ request }) => {
         sawIdempotencyKey = request.headers.has('Idempotency-Key');
         return HttpResponse.json({
-          data: { id: '1234567890123456', platform: 'meta' },
+          data: {
+            id: '1234567890123456',
+            platform: 'meta',
+            isDefault: true,
+            status: 'ok',
+            lastErrorCode: null,
+            errorSince: null,
+          },
           meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
         });
       }),
@@ -59,12 +77,53 @@ describe('Pixels resource', () => {
     const response = await soundlink.pixels.update('1234567890123456', {
       platform: 'meta',
       accessToken: 'EAAB-test-token',
+      isDefault: true,
     });
 
     expect(sawIdempotencyKey).toBe(false);
     expect(response).toMatchObject({
       error: null,
-      data: { id: '1234567890123456', platform: 'meta' },
+      data: {
+        id: '1234567890123456',
+        platform: 'meta',
+        isDefault: true,
+        status: 'ok',
+      },
+    });
+  });
+
+  it('deletes a pixel with 204', async () => {
+    const response = await soundlink.pixels.delete('1234567890123456');
+
+    expect(response).toEqual({ data: null, error: null });
+  });
+
+  it('surfaces pixel_in_use on delete', async () => {
+    server.use(
+      http.delete(`${BASE_URL}/v1/pixels/:pixelId`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'pixel_in_use',
+              message: 'This pixel is still used by one or more soundlinks.',
+              details: { smartLinkCount: 2 },
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    const response = await soundlink.pixels.delete('1234567890123456');
+
+    expect(response).toMatchObject({
+      data: null,
+      error: {
+        code: 'pixel_in_use',
+        status: 409,
+        details: { smartLinkCount: 2 },
+      },
     });
   });
 

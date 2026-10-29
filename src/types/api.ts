@@ -28,6 +28,7 @@ export type PublicApiErrorCode =
   | 'soundlink_plan_required'
   | 'custom_pixel_not_enabled'
   | 'meta_pixel_conflict'
+  | 'pixel_in_use'
   | 'insufficient_credit'
   | 'idempotency_key_conflict'
   | 'rate_limit_exceeded'
@@ -354,10 +355,19 @@ export interface WalletData {
 /** Ad platform for an organization pixel. Only `meta` is supported today. */
 export type PixelPlatform = 'meta';
 
+/** Send-health status on an organization pixel. */
+export type PixelStatus = 'ok' | 'error';
+
 /** One pixel from {@link PixelsResource.list} / {@link PixelsResource.update}. */
 export interface Pixel {
   id: string;
   platform: PixelPlatform;
+  /** App soundlink create picker only; create APIs never fall back to it. */
+  isDefault: boolean;
+  status: PixelStatus;
+  lastErrorCode: string | null;
+  /** ISO 8601 when an open send-error episode started, or `null`. */
+  errorSince: string | null;
 }
 
 /** Payload from `GET /v1/pixels`. */
@@ -365,11 +375,13 @@ export interface PixelListData {
   pixels: Pixel[];
 }
 
-/** Body for `PUT /v1/pixels/{pixelId}`. */
+/** Body for `PUT /v1/pixels/{pixelId}`. At least one of `accessToken` or `isDefault`. */
 export interface UpdatePixelRequest {
   platform: PixelPlatform;
-  /** Conversions API access token. Stored and never returned. */
-  accessToken: string;
+  /** Conversions API access token. Stored and never returned. Required when creating. */
+  accessToken?: string;
+  /** Sets or clears the organization default for Meta. */
+  isDefault?: boolean;
 }
 
 /** Payload from `POST /v1/pixels/{pixelId}/test-events`. */
@@ -744,11 +756,14 @@ export interface CreateSoundlinkRequest {
   autoFollow?: boolean;
   /** Spotify artist ID for auto-follow on track links. Ignored for playlists. */
   artistIdFollow?: string;
-  /** Must be sent together with `metaConversionAccessToken`. */
+  /**
+   * Meta pixel ID. Alone: reuse a pixel already saved via `pixels`.
+   * With `metaConversionAccessToken`: save or rotate. Never applies an org default.
+   */
   metaPixelId?: string;
   /**
    * Meta Conversions API token. Write-only: accepted on create, never returned.
-   * Must be sent together with `metaPixelId`.
+   * Requires `metaPixelId`.
    */
   metaConversionAccessToken?: string;
   /**
