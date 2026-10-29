@@ -154,13 +154,16 @@ const { data: wallet } = await soundlink.wallet.get();
 
 ```typescript
 const { data: pixels } = await soundlink.pixels.list();
+// pixels[0].isDefault, .status, .lastErrorCode, .errorSince
 
 await soundlink.pixels.update('1234567890123456', {
   platform: 'meta',
   accessToken: process.env.META_CAPI_TOKEN!,
+  isDefault: true,
 });
 
 await soundlink.pixels.sendTestEvent('1234567890123456');
+await soundlink.pixels.delete('1234567890123456'); // 204 → { data: null, error: null }
 ```
 
 Custom strategy create (requires `tierTargeting`):

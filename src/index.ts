@@ -78,6 +78,7 @@ export type {
   Pixel,
   PixelListData,
   PixelPlatform,
+  PixelStatus,
   PixelTestEventData,
   PingData,
   PublicApiErrorCode,

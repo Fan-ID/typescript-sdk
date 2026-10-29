@@ -203,9 +203,10 @@ export class PixelsResource {
   }
 
   /**
-   * Save or rotate a Meta pixel access token.
+   * Save or rotate a Meta pixel access token, and/or set `isDefault`.
    *
    * Maps to `PUT /v1/pixels/{pixelId}`. Requires `pixels:write`.
+   * At least one of `accessToken` or `isDefault` is required.
    * Does not require an `Idempotency-Key`. The access token is never returned.
    *
    * @example
@@ -213,6 +214,7 @@ export class PixelsResource {
    * const { data } = await soundlink.pixels.update('1234567890123456', {
    *   platform: 'meta',
    *   accessToken: process.env.META_CAPI_TOKEN!,
+   *   isDefault: true,
    * });
    * ```
    */
@@ -220,6 +222,23 @@ export class PixelsResource {
     return this.http.put<Pixel>({
       path: `/pixels/${encodeURIComponent(pixelId)}`,
       body,
+    });
+  }
+
+  /**
+   * Delete a saved Meta pixel.
+   *
+   * Maps to `DELETE /v1/pixels/{pixelId}` (`204`). Requires `pixels:write`.
+   * Returns `409 pixel_in_use` when a soundlink still references the pixel.
+   *
+   * @example
+   * ```ts
+   * const { error } = await soundlink.pixels.delete('1234567890123456');
+   * ```
+   */
+  delete(pixelId: string): Promise<ApiResponse<null>> {
+    return this.http.delete<null>({
+      path: `/pixels/${encodeURIComponent(pixelId)}`,
     });
   }
 
