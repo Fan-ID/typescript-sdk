@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.9.0
+
+### Minor Changes
+
+- [#39](https://github.com/Fan-ID/typescript-sdk/pull/39) [`4a19ee6`](https://github.com/Fan-ID/typescript-sdk/commit/4a19ee6a0fb3fb85c71c6435e05b34d8564b62d9) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Sync pixels with SOU-7372 / SOU-7376: `isDefault` + send-health on `Pixel`, optional `isDefault` on update, `pixels.delete` (`204` / `pixel_in_use`), and ID-only `metaPixelId` on soundlink create.
+
 ## 2.8.0
 
 ### Minor Changes
