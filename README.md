@@ -444,7 +444,7 @@ await server.close();
 | `self_serve_5000`                | `0.2`       | yes                         | `5000`                       |
 | `self_serve_25000`               | `0.2`       | yes                         | `25000`                      |
 
-`feeRate` always wins over the plan default. Self-serve caps attributed listeners seeded on harness `activate`; when the allowance is exhausted, further `activate` calls return `400`. Inspect with `emu.getPlan()`.
+`feeRate` always wins over the plan default. Self-serve caps attributed listeners seeded on harness `activate`; when the allowance is exhausted, further `activate` calls return `400`. Inspect with `emu.getPlan()` (`premium` is metadata only today — it does not change `/v1` payloads).
 
 **Documented divergences vs production**
 
@@ -454,6 +454,7 @@ await server.close();
 - Create `402 insufficient_credit` **releases** the Idempotency-Key (same key after top-up → `201`). Do not copy budget-increase 402 replay behavior.
 - Stop Idempotency-Key hash is `{ campaignId }` only.
 - Self-serve listener caps are emulator harness rules (not a Public API create error).
+- Create/auth error codes and messages match Public API (`422 invalid_daily_budget` / `invalid_duration_days`, Idempotency-Key wording, `402`/`401` strings).
 - Unit tests can call `emu.dispatch(...)` with no TCP.
 
 ## Roadmap

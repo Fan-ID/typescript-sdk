@@ -62,7 +62,11 @@ export interface SoundlinkEmulator {
   ): TransitionResult;
   /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
-  /** Resolved plan / fee / self-serve allowance for this emulator instance. */
+  /**
+   * Resolved plan / fee / self-serve allowance for this emulator instance.
+   * `premium` is metadata for partners (`PLAN_LEVEL >= 3`); it does not
+   * change `/v1` response shapes yet.
+   */
   getPlan(): ResolvedEmulatorPlan & {
     usedNewListeners: number;
     remainingNewListeners: number | null;

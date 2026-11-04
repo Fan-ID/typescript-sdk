@@ -17,6 +17,7 @@ export interface EmulatorPlanPreset {
   /**
    * Mirrors OpenAPI `x-premium-plan-level-min: 3` (`PLAN_LEVEL >= 3`).
    * Self-serve slugs are level 4 in backend — premium allowed.
+   * Metadata for `getPlan()` only; does not change `/v1` payloads yet.
    */
   premium: boolean;
   /** Self-serve listener allowance across activated campaigns. */
