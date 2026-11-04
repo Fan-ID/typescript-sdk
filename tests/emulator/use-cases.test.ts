@@ -188,6 +188,7 @@ describe('emulator use cases', () => {
       expect(first.status).toBe(402);
       const err = envelopeError(first.json);
       expect(err.code).toBe('insufficient_credit');
+      expect(err.message).toBe('Insufficient wallet balance for this campaign.');
       expect(err.details).toEqual({
         available: 10,
         required: DEFAULT_COMMITTED_USD,
@@ -320,6 +321,9 @@ describe('emulator use cases', () => {
       });
       expect(conflict.status).toBe(409);
       expect(envelopeError(conflict.json).code).toBe('idempotency_key_conflict');
+      expect(envelopeError(conflict.json).message).toBe(
+        'This Idempotency-Key was already used with a different request body.',
+      );
     });
 
     it('releases stop key on 400 while creating; same key works after activate', () => {
@@ -348,10 +352,16 @@ describe('emulator use cases', () => {
       });
       expect(missing.status).toBe(400);
       expect(envelopeError(missing.json).code).toBe('invalid_request');
+      expect(envelopeError(missing.json).message).toBe(
+        'Idempotency-Key header is required and must not be empty.',
+      );
 
       const tooLong = createCampaign('x'.repeat(256));
       expect(tooLong.status).toBe(400);
       expect(envelopeError(tooLong.json).code).toBe('invalid_request');
+      expect(envelopeError(tooLong.json).message).toBe(
+        'Idempotency-Key must not exceed 255 characters.',
+      );
     });
   });
 
@@ -378,6 +388,9 @@ describe('emulator use cases', () => {
       });
       expect(res.status).toBe(401);
       expect(envelopeError(res.json).code).toBe('invalid_api_key');
+      expect(envelopeError(res.json).message).toBe(
+        'Missing credentials. Send Authorization: Bearer.',
+      );
     });
 
     it('ping and strategies succeed', () => {

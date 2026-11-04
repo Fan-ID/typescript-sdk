@@ -88,11 +88,19 @@ function requireApiKey(
 ): EmulatorResponse | null {
   const authorization = headerValue(headers, 'authorization');
   if (!authorization?.startsWith('Bearer ')) {
-    return failure(401, 'invalid_api_key', 'Missing API key.');
+    return failure(
+      401,
+      'invalid_api_key',
+      'Missing credentials. Send Authorization: Bearer.',
+    );
   }
   const token = authorization.slice('Bearer '.length).trim();
   if (!token.startsWith('sk_') || token !== store.apiKey) {
-    return failure(401, 'invalid_api_key', 'Invalid API key.');
+    return failure(
+      401,
+      'invalid_api_key',
+      'Missing credentials. Send Authorization: Bearer.',
+    );
   }
   return null;
 }
@@ -100,12 +108,20 @@ function requireApiKey(
 function readIdempotencyKey(
   headers: Record<string, string> | undefined,
 ): { key: string } | EmulatorResponse {
-  const key = headerValue(headers, 'idempotency-key');
-  if (!key || key.length === 0 || key.length > 255) {
+  const raw = headerValue(headers, 'idempotency-key');
+  const key = raw?.trim() ?? '';
+  if (!key) {
     return failure(
       400,
       'invalid_request',
-      'Idempotency-Key header is required and must be at most 255 characters.',
+      'Idempotency-Key header is required and must not be empty.',
+    );
+  }
+  if (key.length > 255) {
+    return failure(
+      400,
+      'invalid_request',
+      'Idempotency-Key must not exceed 255 characters.',
     );
   }
   return { key };
@@ -141,41 +157,80 @@ function isValidDurationDays(durationDays: number): boolean {
   return durationDays >= DURATION_DAYS_MIN && durationDays <= DURATION_DAYS_MAX_CUSTOM;
 }
 
+type ParseCreateFailure = {
+  ok: false;
+  status: number;
+  code: string;
+  message: string;
+};
+
 function parseCreateBody(
   body: unknown,
-): { ok: true; value: CreateCampaignRequest } | { ok: false; message: string } {
+): { ok: true; value: CreateCampaignRequest } | ParseCreateFailure {
   if (!body || typeof body !== 'object') {
-    return { ok: false, message: 'Request body must be a JSON object.' };
+    return {
+      ok: false,
+      status: 400,
+      code: 'invalid_request',
+      message: 'Invalid request body.',
+    };
   }
   const raw = body as Record<string, unknown>;
   if (typeof raw.spotifyUrl !== 'string' || raw.spotifyUrl.length === 0) {
-    return { ok: false, message: 'spotifyUrl is required.' };
-  }
-  if (
-    typeof raw.dailyBudget !== 'number' ||
-    !Number.isFinite(raw.dailyBudget) ||
-    raw.dailyBudget < MIN_DAILY_BUDGET_USD
-  ) {
     return {
       ok: false,
-      message: `dailyBudget must be a finite number >= ${String(MIN_DAILY_BUDGET_USD)}.`,
+      status: 400,
+      code: 'invalid_request',
+      message: 'Missing required field: spotifyUrl.',
     };
   }
-  if (
-    typeof raw.durationDays !== 'number' ||
-    !Number.isFinite(raw.durationDays) ||
-    !isValidDurationDays(raw.durationDays)
-  ) {
+  if (typeof raw.dailyBudget !== 'number') {
     return {
       ok: false,
-      message: 'durationDays must be an integer 7–30, or 60, or 90.',
+      status: 400,
+      code: 'invalid_request',
+      message: 'Missing required field: dailyBudget.',
     };
   }
-  if (typeof raw.genre !== 'string') {
-    return { ok: false, message: 'genre is required.' };
+  if (typeof raw.durationDays !== 'number') {
+    return {
+      ok: false,
+      status: 400,
+      code: 'invalid_request',
+      message: 'Missing required field: durationDays.',
+    };
   }
-  if (typeof raw.strategyType !== 'string') {
-    return { ok: false, message: 'strategyType is required.' };
+  if (typeof raw.genre !== 'string' || raw.genre.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'invalid_request',
+      message: 'Missing required field: genre.',
+    };
+  }
+  if (typeof raw.strategyType !== 'string' || raw.strategyType.length === 0) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'invalid_request',
+      message: 'Missing required field: strategyType.',
+    };
+  }
+  if (!Number.isFinite(raw.dailyBudget) || raw.dailyBudget < MIN_DAILY_BUDGET_USD) {
+    return {
+      ok: false,
+      status: 422,
+      code: 'invalid_daily_budget',
+      message: 'dailyBudget must be at least 10 (USD per day).',
+    };
+  }
+  if (!Number.isFinite(raw.durationDays) || !isValidDurationDays(raw.durationDays)) {
+    return {
+      ok: false,
+      status: 422,
+      code: 'invalid_duration_days',
+      message: 'durationDays must be an integer from 7 to 30, or 60, or 90.',
+    };
   }
   return { ok: true, value: body as CreateCampaignRequest };
 }
@@ -297,7 +352,7 @@ function handleCreateCampaign(
 
   const parsed = parseCreateBody(request.body);
   if (!parsed.ok) {
-    return failure(400, 'invalid_request', parsed.message);
+    return failure(parsed.status, parsed.code, parsed.message);
   }
 
   const requestHash = hashPayload(parsed.value);
@@ -307,7 +362,7 @@ function handleCreateCampaign(
       return failure(
         409,
         'idempotency_key_conflict',
-        'Idempotency-Key was already used with a different request body.',
+        'This Idempotency-Key was already used with a different request body.',
       );
     }
     return success(existing.status, existing.body);
@@ -319,10 +374,15 @@ function handleCreateCampaign(
   const wallet = store.getWallet();
   if (wallet.available < committedUsd) {
     // Create 402 releases the key (do not persist) — matches backend create path.
-    return failure(402, 'insufficient_credit', 'Insufficient wallet credit.', {
-      available: wallet.available,
-      required: committedUsd,
-    });
+    return failure(
+      402,
+      'insufficient_credit',
+      'Insufficient wallet balance for this campaign.',
+      {
+        available: wallet.available,
+        required: committedUsd,
+      },
+    );
   }
 
   store.debitWallet(committedUsd);

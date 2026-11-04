@@ -7,6 +7,7 @@ import {
   DEFAULT_CREATE_BODY,
   EMULATOR_API_KEY,
   envelopeData,
+  envelopeError,
 } from './helpers.js';
 
 describe('emulator transition guards and money', () => {
@@ -99,43 +100,53 @@ describe('emulator transition guards and money', () => {
     expect(res.status).toBe(400);
   });
 
-  it('create validation rejects non-finite budget and invalid durationDays', () => {
+  it('create validation rejects non-finite budget and invalid durationDays with 422', () => {
     const emu = createEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: 10_000,
     });
 
-    const cases: Array<{ body: Record<string, unknown>; key: string }> = [
+    const cases: Array<{
+      body: Record<string, unknown>;
+      key: string;
+      code: string;
+    }> = [
       {
         key: 'guards-nan-budget',
         body: { ...DEFAULT_CREATE_BODY, dailyBudget: Number.NaN },
+        code: 'invalid_daily_budget',
       },
       {
         key: 'guards-inf-budget',
         body: { ...DEFAULT_CREATE_BODY, dailyBudget: Number.POSITIVE_INFINITY },
+        code: 'invalid_daily_budget',
       },
       {
         key: 'guards-neg-duration',
         body: { ...DEFAULT_CREATE_BODY, durationDays: -7 },
+        code: 'invalid_duration_days',
       },
       {
         key: 'guards-bad-duration',
         body: { ...DEFAULT_CREATE_BODY, durationDays: 31 },
+        code: 'invalid_duration_days',
       },
       {
         key: 'guards-float-duration',
         body: { ...DEFAULT_CREATE_BODY, durationDays: 7.5 },
+        code: 'invalid_duration_days',
       },
     ];
 
-    for (const { body, key } of cases) {
+    for (const { body, key, code } of cases) {
       const res = emu.dispatch({
         method: 'POST',
         path: '/v1/campaigns',
         headers: authHeaders(key),
         body,
       });
-      expect(res.status, key).toBe(400);
+      expect(res.status, key).toBe(422);
+      expect(envelopeError(res.json).code, key).toBe(code);
       expect(emu.getWallet().balance, key).toBe(10_000);
     }
   });
@@ -152,6 +163,9 @@ describe('emulator transition guards and money', () => {
       body: { ...DEFAULT_CREATE_BODY, dailyBudget: 20, durationDays: 7 },
     });
     expect(res.status).toBe(402);
+    expect(envelopeError(res.json).message).toBe(
+      'Insufficient wallet balance for this campaign.',
+    );
     expect(emu.getWallet().balance).toBe(50);
   });
 });
