@@ -1,6 +1,6 @@
 # Public API emulator
 
-Local, stateful stand-in for the Soundlink Public API. Test wallet campaign flows without Meta spend or a hosted sandbox.
+Local, stateful stand-in for the Soundlink Public API. Use it in automated tests for wallet campaign flows without Meta spend or a hosted sandbox.
 
 Import: `soundlink/api-emulator` (not re-exported from `soundlink`).
 

@@ -377,7 +377,7 @@ npm run test:live
 
 ## Local Public API emulator
 
-Partner integration tests without Meta spend: import `soundlink/api-emulator`, `listen` on loopback, drive lifecycle with harness transitions (`activate` / `set_spend` / `reject_meta` / `end`). Works with the SDK **or** plain `fetch` / curl (fix `port` and call from another local process).
+Local integration tests without Meta spend: import `soundlink/api-emulator`, `listen` on loopback, drive lifecycle with harness transitions (`activate` / `set_spend` / `reject_meta` / `end`). Works with the SDK **or** plain `fetch` / curl (fix `port` and call from another local process).
 
 Full guide: **[docs/api-emulator.md](./docs/api-emulator.md)**.
 
