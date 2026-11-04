@@ -81,16 +81,12 @@ describe('emulator plans', () => {
     const emu = createEmulator({
       apiKey: EMULATOR_API_KEY,
       plan: 'self_serve_5000',
-      // tiny allowance via override is not supported — use consume by activating
-      // many times against 5000 with default seed 120 → floor(5000/120)=41 activates
       initialWalletBalance: 100_000,
     });
     expect(emu.getPlan().maxNewListeners).toBe(
       EMULATOR_PLAN_PRESETS.self_serve_5000.maxNewListeners,
     );
 
-    // Force near-exhaustion: consume 5000 - 0 by activating with custom path —
-    // seed grants min(120, remaining). Exhaust by looping.
     let lastId = '';
     for (let i = 0; i < 42; i += 1) {
       const create = emu.dispatch({

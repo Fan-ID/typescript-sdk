@@ -14,7 +14,6 @@ import { applyPublicStop, applyTransition, TransitionError } from './transitions
 
 export interface EmulatorRequest {
   method: string;
-  /** Pathname with optional query string. */
   path: string;
   headers?: Record<string, string>;
   body?: unknown;

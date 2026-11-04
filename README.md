@@ -377,27 +377,18 @@ npm run test:live
 
 ## Local Public API emulator
 
-For partner integration tests without Meta spend, import `soundlink/emulator` (not re-exported from `soundlink`).
+Partner integration tests without Meta spend: import `soundlink/emulator`, point the SDK at `emu.listen().baseUrl`, drive lifecycle with harness transitions (`activate` / `set_spend` / `reject_meta` / `end`).
 
-It exposes the same `/v1` envelopes the SDK expects, plus a **local-only** harness under `/__emulator/*` to force lifecycle transitions (activate, Meta reject, spend, end).
+Full guide: **[docs/emulator.md](./docs/emulator.md)** (quick start, plans, recipes, errors, vs production).
 
-```typescript
+```ts
 import { Soundlink } from 'soundlink';
 import { createEmulator } from 'soundlink/emulator';
 
-const emu = createEmulator({
-  apiKey: 'sk_emulator_test',
-  initialWalletBalance: 500,
-  // Prefer `plan` (sets fee + self-serve limits). `feeRate` overrides when needed.
-  plan: 'enterprise', // fee 10%; or 'self_serve_5000' / 'label_power' / …
-  // feeRate: 0.12,
-});
-
+const apiKey = 'sk_emulator_test';
+const emu = createEmulator({ apiKey, initialWalletBalance: 500, plan: 'enterprise' });
 const server = await emu.listen();
-const soundlink = new Soundlink({
-  apiKey: 'sk_emulator_test',
-  baseUrl: server.baseUrl,
-});
+const soundlink = new Soundlink({ apiKey, baseUrl: server.baseUrl });
 
 const { data: created } = await soundlink.campaigns.create(
   {
@@ -407,55 +398,13 @@ const { data: created } = await soundlink.campaigns.create(
     genre: 'Pop',
     strategyType: 'maximum_growth',
   },
-  { idempotencyKey: 'demo-create-1' },
+  { idempotencyKey: 'demo-1' },
 );
-
-await fetch(
-  `${server.baseUrl}/__emulator/campaigns/${created!.campaignId}/transition`,
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'activate' }),
-  },
-);
-
-const { data: detail } = await soundlink.campaigns.get(created!.campaignId);
-console.log(detail?.status); // "active"
-
+await emu.transition(created!.campaignId, 'activate');
+await soundlink.metrics.overview(created!.campaignId);
+await soundlink.campaigns.stop(created!.campaignId, { idempotencyKey: 'stop-1' });
 await server.close();
 ```
-
-**Harness routes** (no auth; safe only because listen refuses non-loopback):
-
-| Method | Path                                    | Purpose                                          |
-| ------ | --------------------------------------- | ------------------------------------------------ |
-| `POST` | `/__emulator/reset`                     | Clear wallet/campaigns/idempotency               |
-| `POST` | `/__emulator/wallet`                    | `{ balance }` without deleting campaigns         |
-| `POST` | `/__emulator/campaigns/{id}/transition` | `activate` · `reject_meta` · `set_spend` · `end` |
-
-**Plans** (`createEmulator({ plan })`)
-
-| Plan                             | Default fee | Premium (`PLAN_LEVEL >= 3`) | Self-serve `maxNewListeners` |
-| -------------------------------- | ----------- | --------------------------- | ---------------------------- |
-| _(omit)_                         | `0`         | —                           | —                            |
-| `free` / `artist_pro` / `studio` | `0.2`       | no                          | —                            |
-| `label_power`                    | `0.15`      | yes                         | —                            |
-| `enterprise`                     | `0.1`       | yes                         | —                            |
-| `self_serve_5000`                | `0.2`       | yes                         | `5000`                       |
-| `self_serve_25000`               | `0.2`       | yes                         | `25000`                      |
-
-`feeRate` always wins over the plan default. Self-serve caps attributed listeners seeded on harness `activate`; when the allowance is exhausted, further `activate` calls return `400`. Inspect with `emu.getPlan()` (`premium` is metadata only today — it does not change `/v1` payloads).
-
-**Documented divergences vs production**
-
-- After create/stop settle, wallet always reports `reserved === 0` (`available === balance`).
-- Without `plan` / `feeRate`, fee defaults to `0` → `spend_total === spend_media`, `fees === 0`.
-- `reject_meta` → `inactive` **without** wallet credit; refund only on public `stop` or harness `end`.
-- Create `402 insufficient_credit` **releases** the Idempotency-Key (same key after top-up → `201`). Do not copy budget-increase 402 replay behavior.
-- Stop Idempotency-Key hash is `{ campaignId }` only.
-- Self-serve listener caps are emulator harness rules (not a Public API create error).
-- Create/auth error codes and messages match Public API (`422 invalid_daily_budget` / `invalid_duration_days`, Idempotency-Key wording, `402`/`401` strings).
-- Unit tests can call `emu.dispatch(...)` with no TCP.
 
 ## Roadmap
 

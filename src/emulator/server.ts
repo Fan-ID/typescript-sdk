@@ -34,11 +34,10 @@ function normalizeHeaders(headers: IncomingMessage['headers']): Record<string, s
 async function readBody(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
-    const value: unknown = chunk;
-    if (typeof value === 'string') {
-      chunks.push(Buffer.from(value));
-    } else if (value instanceof Uint8Array) {
-      chunks.push(Buffer.from(value));
+    if (typeof chunk === 'string') {
+      chunks.push(Buffer.from(chunk));
+    } else if (chunk instanceof Uint8Array) {
+      chunks.push(Buffer.from(chunk));
     }
   }
   if (chunks.length === 0) {
@@ -55,7 +54,6 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-/** Loopback-only HTTP server for the in-memory emulator store. */
 export function listen(
   store: EmulatorStore,
   options: ListenOptions = {},

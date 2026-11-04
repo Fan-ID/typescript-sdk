@@ -34,12 +34,9 @@ export interface CreateEmulatorOptions {
    * self-serve `maxNewListeners` when applicable.
    */
   plan?: EmulatorPlan;
-  /**
-   * Overrides plan fee (and default `0` when no plan). Refund / overview fees
-   * use this rate via `computeRefundGrossFromRawSpend`.
-   */
+  /** Overrides plan fee (and default `0` when no plan). */
   feeRate?: number;
-  /** Organization id returned on campaign detail. Default: `org_emulator`. */
+  /** Organization id on campaign detail. Default: `org_emulator`. */
   organizationId?: string;
 }
 
@@ -63,9 +60,8 @@ export interface SoundlinkEmulator {
   /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
   /**
-   * Resolved plan / fee / self-serve allowance for this emulator instance.
-   * `premium` is metadata for partners (`PLAN_LEVEL >= 3`); it does not
-   * change `/v1` response shapes yet.
+   * Plan / fee / self-serve allowance. `premium` is metadata only
+   * (`PLAN_LEVEL >= 3`); it does not change `/v1` payloads yet.
    */
   getPlan(): ResolvedEmulatorPlan & {
     usedNewListeners: number;
