@@ -21,6 +21,16 @@
         "types": "./dist/esm/index.d.ts",
         "default": "./dist/cjs/index.cjs"
       }
+    },
+    "./emulator": {
+      "import": {
+        "types": "./dist/esm/emulator.d.ts",
+        "default": "./dist/esm/emulator.js"
+      },
+      "require": {
+        "types": "./dist/esm/emulator.d.ts",
+        "default": "./dist/cjs/emulator.cjs"
+      }
     }
   },
   "files": [

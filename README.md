@@ -375,6 +375,71 @@ SOUNDLINK_API_KEY=sk_... \
 npm run test:live
 ```
 
+## Local Public API emulator
+
+For partner integration tests without Meta spend, import `soundlink/emulator` (not re-exported from `soundlink`).
+
+It exposes the same `/v1` envelopes the SDK expects, plus a **local-only** harness under `/__emulator/*` to force lifecycle transitions (activate, Meta reject, spend, end).
+
+```typescript
+import { Soundlink } from 'soundlink';
+import { createEmulator } from 'soundlink/emulator';
+
+const emu = createEmulator({
+  apiKey: 'sk_emulator_test',
+  initialWalletBalance: 500,
+  feeRate: 0, // default; refund math matches backend with fee 0
+});
+
+const server = await emu.listen(); // binds 127.0.0.1 only — other hosts are rejected
+const soundlink = new Soundlink({
+  apiKey: 'sk_emulator_test',
+  baseUrl: server.baseUrl,
+});
+
+const { data: created } = await soundlink.campaigns.create(
+  {
+    spotifyUrl: 'https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh',
+    dailyBudget: 10,
+    durationDays: 7,
+    genre: 'Pop',
+    strategyType: 'maximum_growth',
+  },
+  { idempotencyKey: 'demo-create-1' },
+);
+
+await fetch(
+  `${server.baseUrl}/__emulator/campaigns/${created!.campaignId}/transition`,
+  {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'activate' }),
+  },
+);
+
+const { data: detail } = await soundlink.campaigns.get(created!.campaignId);
+console.log(detail?.status); // "active"
+
+await server.close();
+```
+
+**Harness routes** (no auth; safe only because listen refuses non-loopback):
+
+| Method | Path                                    | Purpose                                          |
+| ------ | --------------------------------------- | ------------------------------------------------ |
+| `POST` | `/__emulator/reset`                     | Clear wallet/campaigns/idempotency               |
+| `POST` | `/__emulator/wallet`                    | `{ balance }` without deleting campaigns         |
+| `POST` | `/__emulator/campaigns/{id}/transition` | `activate` · `reject_meta` · `set_spend` · `end` |
+
+**Documented divergences vs production**
+
+- After create/stop settle, wallet always reports `reserved === 0` (`available === balance`).
+- `feeRate` defaults to `0` → `spend_total === spend_media`, `fees === 0`.
+- `reject_meta` → `inactive` **without** wallet credit; refund only on public `stop` or harness `end`.
+- Create `402 insufficient_credit` **releases** the Idempotency-Key (same key after top-up → `201`). Do not copy budget-increase 402 replay behavior.
+- Stop Idempotency-Key hash is `{ campaignId }` only.
+- Unit tests can call `emu.dispatch(...)` with no TCP.
+
 ## Roadmap
 
 - Video import helpers (`videos:write`) — when prioritized
