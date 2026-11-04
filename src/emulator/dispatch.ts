@@ -14,7 +14,7 @@ import { applyPublicStop, applyTransition, TransitionError } from './transitions
 
 export interface EmulatorRequest {
   method: string;
-  /** Pathname with optional query string (e.g. `/v1/campaigns/x/metrics/overview?startDate=…`). */
+  /** Pathname with optional query string. */
   path: string;
   headers?: Record<string, string>;
   body?: unknown;
@@ -25,14 +25,8 @@ export interface EmulatorResponse {
   json: unknown;
 }
 
-interface ParsedPath {
-  pathname: string;
-  searchParams: URLSearchParams;
-}
-
-function parsePath(path: string): ParsedPath {
-  const url = new URL(path, 'http://emulator.local');
-  return { pathname: url.pathname, searchParams: url.searchParams };
+function parsePathname(path: string): string {
+  return new URL(path, 'http://emulator.local').pathname;
 }
 
 function matchPathGroup(pathname: string, pattern: RegExp): string | undefined {
@@ -191,7 +185,7 @@ export function dispatch(
   request: EmulatorRequest,
 ): EmulatorResponse {
   const method = request.method.toUpperCase();
-  const { pathname } = parsePath(request.path);
+  const pathname = parsePathname(request.path);
 
   if (pathname.startsWith('/__emulator')) {
     return dispatchHarness(store, method, pathname, request.body);
@@ -273,8 +267,6 @@ export function dispatch(
     /^\/v1\/campaigns\/([^/]+)\/metrics\/overview$/,
   );
   if (method === 'GET' && overviewCampaignId) {
-    // startDate/endDate accepted and ignored (parity with partner clients).
-    void parsePath(request.path).searchParams;
     const campaign = store.getCampaign(decodeURIComponent(overviewCampaignId));
     if (!campaign) {
       return failure(404, 'campaign_not_found', 'Campaign not found.');

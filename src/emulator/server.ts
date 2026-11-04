@@ -55,10 +55,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
   }
 }
 
-/**
- * Start a loopback-only HTTP server backed by the in-memory emulator store.
- * Rejects `host` values other than `127.0.0.1`.
- */
+/** Loopback-only HTTP server for the in-memory emulator store. */
 export function listen(
   store: EmulatorStore,
   options: ListenOptions = {},

@@ -140,13 +140,11 @@ describe('emulator transition guards and money', () => {
     }
   });
 
-  it('debitWallet refuses amounts that would make balance negative', () => {
+  it('create returns 402 when committed exceeds available', () => {
     const emu = createEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: 50,
     });
-    // Direct store access via oversize create is blocked by available check;
-    // assert wallet stays intact after a would-be oversize create.
     const res = emu.dispatch({
       method: 'POST',
       path: '/v1/campaigns',

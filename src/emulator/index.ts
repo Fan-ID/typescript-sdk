@@ -1,6 +1,11 @@
 import type { WalletData } from '../types/api.js';
 import { dispatch, type EmulatorRequest, type EmulatorResponse } from './dispatch.js';
 import {
+  resolveEmulatorPlan,
+  type EmulatorPlan,
+  type ResolvedEmulatorPlan,
+} from './plans.js';
+import {
   listen as startListen,
   type EmulatorServer,
   type ListenOptions,
@@ -13,6 +18,8 @@ import {
 import { applyTransition, type TransitionResult } from './transitions.js';
 
 export type { EmulatorRequest, EmulatorResponse } from './dispatch.js';
+export type { EmulatorPlan, ResolvedEmulatorPlan } from './plans.js';
+export { EMULATOR_PLAN_PRESETS } from './plans.js';
 export type { EmulatorServer, ListenOptions } from './server.js';
 export { LOOPBACK_HOST } from './server.js';
 export type { EmulatorTransitionAction } from './store.js';
@@ -23,8 +30,13 @@ export interface CreateEmulatorOptions {
   /** Starting wallet balance in USD. Default: `1000`. */
   initialWalletBalance?: number;
   /**
-   * Service fee rate used by refund math (`computeRefundGrossFromRawSpend`).
-   * Default `0` (emulator v1).
+   * Organization plan preset. Sets default `feeRate`, premium flag, and
+   * self-serve `maxNewListeners` when applicable.
+   */
+  plan?: EmulatorPlan;
+  /**
+   * Overrides plan fee (and default `0` when no plan). Refund / overview fees
+   * use this rate via `computeRefundGrossFromRawSpend`.
    */
   feeRate?: number;
   /** Organization id returned on campaign detail. Default: `org_emulator`. */
@@ -32,11 +44,10 @@ export interface CreateEmulatorOptions {
 }
 
 export interface SoundlinkEmulator {
-  /** In-process request handler (no TCP). Prefer this in unit tests. */
+  /** In-process request handler (no TCP). */
   dispatch(request: EmulatorRequest): EmulatorResponse;
   /**
-   * Bind HTTP on loopback only (`127.0.0.1`). Rejects any other `host`.
-   * Use `baseUrl` as the SDK `baseUrl` (SDK prepends `/v1`).
+   * Bind HTTP on `127.0.0.1` only. Pass `baseUrl` to the SDK (SDK prepends `/v1`).
    */
   listen(options?: ListenOptions): Promise<EmulatorServer>;
   /** Clears wallet/campaigns/idempotency and restores `initialWalletBalance`. */
@@ -49,8 +60,13 @@ export interface SoundlinkEmulator {
     action: EmulatorTransitionAction,
     mediaSpendUsd?: number,
   ): TransitionResult;
-  /** Current wallet snapshot (post-settle: `reserved === 0`). */
+  /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
+  /** Resolved plan / fee / self-serve allowance for this emulator instance. */
+  getPlan(): ResolvedEmulatorPlan & {
+    usedNewListeners: number;
+    remainingNewListeners: number | null;
+  };
 }
 
 export function createEmulator(options: CreateEmulatorOptions = {}): SoundlinkEmulator {
@@ -59,11 +75,18 @@ export function createEmulator(options: CreateEmulatorOptions = {}): SoundlinkEm
     throw new Error('apiKey must start with "sk_".');
   }
 
+  const resolved = resolveEmulatorPlan({
+    plan: options.plan,
+    feeRate: options.feeRate,
+  });
+
   const store: EmulatorStore = createEmulatorStore({
     apiKey,
     initialWalletBalance: options.initialWalletBalance ?? 1000,
-    feeRate: options.feeRate ?? 0,
+    feeRate: resolved.feeRate,
     organizationId: options.organizationId,
+    premium: resolved.premium,
+    maxNewListeners: resolved.maxNewListeners,
   });
 
   return {
@@ -84,6 +107,13 @@ export function createEmulator(options: CreateEmulatorOptions = {}): SoundlinkEm
     },
     getWallet() {
       return store.getWallet();
+    },
+    getPlan() {
+      return {
+        ...resolved,
+        usedNewListeners: store.usedNewListeners,
+        remainingNewListeners: store.remainingNewListeners(),
+      };
     },
   };
 }

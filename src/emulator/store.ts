@@ -46,6 +46,8 @@ export interface EmulatorStoreOptions {
   initialWalletBalance: number;
   feeRate: number;
   organizationId?: string;
+  premium?: boolean;
+  maxNewListeners?: number | null;
 }
 
 export interface EmulatorStore {
@@ -53,9 +55,20 @@ export interface EmulatorStore {
   readonly feeRate: number;
   readonly organizationId: string;
   readonly initialWalletBalance: number;
+  readonly premium: boolean;
+  readonly maxNewListeners: number | null;
+  /** Attributed listeners consumed against self-serve allowance (activate seeds). */
+  readonly usedNewListeners: number;
   reset(): void;
   getWallet(): WalletData;
   setWalletBalance(balance: number): WalletData;
+  /** Remaining self-serve listeners, or `null` when unlimited. */
+  remainingNewListeners(): number | null;
+  /**
+   * Reserves `requested` listeners against the self-serve cap.
+   * Returns how many were granted (may be less than requested).
+   */
+  consumeNewListeners(requested: number): number;
   listCampaigns(): EmulatorCampaignRecord[];
   getCampaign(campaignId: string): EmulatorCampaignRecord | undefined;
   createCampaign(input: {
@@ -100,26 +113,33 @@ function emptyOverview(): MetricsOverview {
   };
 }
 
-function seedOverviewAfterActivate(): MetricsOverview {
-  const listeners = 120;
-  const totalListeners = 150;
-  const streams = 450;
-  const followers = 18;
+const DEFAULT_ACTIVATE_LISTENERS = 120;
+const DEFAULT_ACTIVATE_TOTAL_LISTENERS = 150;
+const DEFAULT_ACTIVATE_STREAMS = 450;
+const DEFAULT_ACTIVATE_FOLLOWERS = 18;
+
+function seedOverviewAfterActivate(listenersGranted: number): MetricsOverview {
+  const scale = listenersGranted / DEFAULT_ACTIVATE_LISTENERS;
+  const listeners = listenersGranted;
+  const totalListeners = Math.round(DEFAULT_ACTIVATE_TOTAL_LISTENERS * scale);
+  const streams = Math.round(DEFAULT_ACTIVATE_STREAMS * scale);
+  const followers = Math.round(DEFAULT_ACTIVATE_FOLLOWERS * scale);
   return {
     listeners,
     total_listeners: totalListeners,
     streams,
     followers,
-    impressions: 8000,
-    ad_clicks: 400,
-    link_clicks: 220,
+    impressions: listeners > 0 ? 8000 : 0,
+    ad_clicks: listeners > 0 ? 400 : 0,
+    link_clicks: listeners > 0 ? 220 : 0,
     spend_media: 0,
     spend_total: 0,
     fees: 0,
     currency: 'USD',
     cpl: 0,
     cpf: 0,
-    streams_per_listener: Number((streams / totalListeners).toFixed(4)),
+    streams_per_listener:
+      totalListeners > 0 ? Number((streams / totalListeners).toFixed(4)) : 0,
   };
 }
 
@@ -146,8 +166,11 @@ function roundMoney(value: number): number {
 
 export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStore {
   const organizationId = options.organizationId ?? ORG_EMULATOR_ID;
+  const maxNewListeners =
+    options.maxNewListeners === undefined ? null : options.maxNewListeners;
   let balance = roundMoney(options.initialWalletBalance);
   let updatedAt: string | null = nowIso();
+  let usedNewListeners = 0;
   const campaigns = new Map<string, EmulatorCampaignRecord>();
   const idempotency = new Map<string, IdempotencyRecord>();
 
@@ -156,10 +179,16 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
     feeRate: options.feeRate,
     organizationId,
     initialWalletBalance: options.initialWalletBalance,
+    premium: options.premium ?? true,
+    maxNewListeners,
+    get usedNewListeners() {
+      return usedNewListeners;
+    },
 
     reset() {
       balance = roundMoney(options.initialWalletBalance);
       updatedAt = nowIso();
+      usedNewListeners = 0;
       campaigns.clear();
       idempotency.clear();
     },
@@ -178,6 +207,25 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       balance = roundMoney(nextBalance);
       updatedAt = nowIso();
       return store.getWallet();
+    },
+
+    remainingNewListeners() {
+      if (maxNewListeners === null) {
+        return null;
+      }
+      return Math.max(0, maxNewListeners - usedNewListeners);
+    },
+
+    consumeNewListeners(requested: number) {
+      const want = Math.max(0, Math.floor(requested));
+      if (maxNewListeners === null) {
+        usedNewListeners += want;
+        return want;
+      }
+      const remaining = Math.max(0, maxNewListeners - usedNewListeners);
+      const granted = Math.min(want, remaining);
+      usedNewListeners += granted;
+      return granted;
     },
 
     listCampaigns() {
@@ -282,7 +330,11 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
     buildOverview(campaign) {
       const base = campaign.overview ?? emptyOverview();
       const spendMedia = campaign.mediaSpendUsd;
-      const fees = 0;
+      const rate = store.feeRate;
+      const fees =
+        rate > 0 && spendMedia > 0
+          ? Number((spendMedia / (1 - rate) - spendMedia).toFixed(2))
+          : 0;
       const listeners = base.listeners;
       const followers = base.followers;
       return {
@@ -299,8 +351,12 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   return store;
 }
 
-export function seedOverview(campaign: EmulatorCampaignRecord): void {
-  campaign.overview = seedOverviewAfterActivate();
+export function seedOverview(
+  store: EmulatorStore,
+  campaign: EmulatorCampaignRecord,
+): void {
+  const granted = store.consumeNewListeners(DEFAULT_ACTIVATE_LISTENERS);
+  campaign.overview = seedOverviewAfterActivate(granted);
 }
 
 export function hashPayload(value: unknown): string {

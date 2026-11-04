@@ -388,10 +388,12 @@ import { createEmulator } from 'soundlink/emulator';
 const emu = createEmulator({
   apiKey: 'sk_emulator_test',
   initialWalletBalance: 500,
-  feeRate: 0, // default; refund math matches backend with fee 0
+  // Prefer `plan` (sets fee + self-serve limits). `feeRate` overrides when needed.
+  plan: 'enterprise', // fee 10%; or 'self_serve_5000' / 'label_power' / …
+  // feeRate: 0.12,
 });
 
-const server = await emu.listen(); // binds 127.0.0.1 only — other hosts are rejected
+const server = await emu.listen();
 const soundlink = new Soundlink({
   apiKey: 'sk_emulator_test',
   baseUrl: server.baseUrl,
@@ -431,13 +433,27 @@ await server.close();
 | `POST` | `/__emulator/wallet`                    | `{ balance }` without deleting campaigns         |
 | `POST` | `/__emulator/campaigns/{id}/transition` | `activate` · `reject_meta` · `set_spend` · `end` |
 
+**Plans** (`createEmulator({ plan })`)
+
+| Plan                  | Default fee | Premium | Self-serve `maxNewListeners` |
+| --------------------- | ----------- | ------- | ---------------------------- |
+| _(omit)_              | `0`         | —       | —                            |
+| `free` / `artist_pro` | `0.2`       | no      | —                            |
+| `label_power`         | `0.15`      | yes     | —                            |
+| `enterprise`          | `0.1`       | yes     | —                            |
+| `self_serve_5000`     | `0.2`       | no      | `5000`                       |
+| `self_serve_25000`    | `0.2`       | no      | `25000`                      |
+
+`feeRate` always wins over the plan default. Self-serve caps attributed listeners seeded on harness `activate`; when the allowance is exhausted, further `activate` calls return `400`. Inspect with `emu.getPlan()`.
+
 **Documented divergences vs production**
 
 - After create/stop settle, wallet always reports `reserved === 0` (`available === balance`).
-- `feeRate` defaults to `0` → `spend_total === spend_media`, `fees === 0`.
+- Without `plan` / `feeRate`, fee defaults to `0` → `spend_total === spend_media`, `fees === 0`.
 - `reject_meta` → `inactive` **without** wallet credit; refund only on public `stop` or harness `end`.
 - Create `402 insufficient_credit` **releases** the Idempotency-Key (same key after top-up → `201`). Do not copy budget-increase 402 replay behavior.
 - Stop Idempotency-Key hash is `{ campaignId }` only.
+- Self-serve listener caps are emulator harness rules (not a Public API create error).
 - Unit tests can call `emu.dispatch(...)` with no TCP.
 
 ## Roadmap

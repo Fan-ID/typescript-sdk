@@ -11,10 +11,6 @@ import {
   EMULATOR_API_KEY,
 } from './helpers.js';
 
-/**
- * End-to-end smoke: SDK client → HTTP emulator → harness transitions.
- * Loopback fetch is allowed by tests/setup.ts MSW bypass for 127.0.0.1.
- */
 describe('emulator SDK smoke', () => {
   let emu: SoundlinkEmulator;
   let httpServer: EmulatorServer | undefined;
