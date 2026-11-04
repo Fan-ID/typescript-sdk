@@ -1,14 +1,16 @@
 # Public API emulator
 
-Local, stateful stand-in for the Soundlink Public API. Use it to test wallet campaign flows without Meta spend or a hosted sandbox.
+Local, stateful stand-in for the Soundlink Public API. Test wallet campaign flows without Meta spend or a hosted sandbox.
 
-Import: `soundlink/emulator` (not re-exported from `soundlink`).
+Import: `soundlink/api-emulator` (not re-exported from `soundlink`).
 
-## Quick start
+Works with the SDK **or** plain `fetch` / curl — anything that can hit HTTP on the same machine.
+
+## Quick start (SDK)
 
 ```ts
 import { Soundlink } from 'soundlink';
-import { createEmulator } from 'soundlink/emulator';
+import { createEmulator } from 'soundlink/api-emulator';
 
 const apiKey = 'sk_emulator_test';
 const emu = createEmulator({
@@ -42,6 +44,63 @@ await server.close();
 
 Same lifecycle without TCP: `emu.dispatch({ method, path, headers, body })`.
 
+## Use from another process (fetch / curl)
+
+`listen` is a normal HTTP server on **loopback only**. Fix the port, keep the process alive, call it from any other local codebase — no SDK required on the client side.
+
+**Process A** (starts the emulator — needs `soundlink`):
+
+```ts
+import { createEmulator } from 'soundlink/api-emulator';
+
+const apiKey = 'sk_emulator_test';
+const emu = createEmulator({ apiKey, initialWalletBalance: 500, plan: 'enterprise' });
+const server = await emu.listen({ port: 8787 });
+console.log(`api-emulator at ${server.baseUrl}`);
+// leave this process running
+```
+
+**Process B** (your app, tests, curl — same machine):
+
+```ts
+const base = 'http://127.0.0.1:8787';
+const apiKey = 'sk_emulator_test';
+
+const created = await fetch(`${base}/v1/campaigns`, {
+  method: 'POST',
+  headers: {
+    Authorization: `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': 'demo-1',
+  },
+  body: JSON.stringify({
+    spotifyUrl: 'https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh',
+    dailyBudget: 10,
+    durationDays: 7,
+    genre: 'Pop',
+    strategyType: 'maximum_growth',
+  }),
+}).then((r) => r.json());
+
+const campaignId = created.data.campaignId;
+
+await fetch(`${base}/__emulator/campaigns/${campaignId}/transition`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ action: 'activate' }),
+});
+
+await fetch(`${base}/v1/campaigns/${campaignId}`, {
+  headers: { Authorization: `Bearer ${apiKey}` },
+}).then((r) => r.json());
+```
+
+```bash
+curl -s http://127.0.0.1:8787/v1/ping -H "Authorization: Bearer sk_emulator_test"
+```
+
+Limits: bind is always `127.0.0.1` (not reachable from other machines / default Docker networks without host networking). Harness routes (`/__emulator/*`) have no auth — that is why listen refuses non-loopback hosts.
+
 ## Lifecycle
 
 | Step       | How                                                                           |
@@ -55,7 +114,7 @@ Wallet after settle: `reserved === 0`, `available === balance`.
 
 ## Harness
 
-No auth. Only reachable because `listen` binds `127.0.0.1`. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` in-process.
+No auth. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` in-process when you own the Node process.
 
 | Action                    | Effect                                               |
 | ------------------------- | ---------------------------------------------------- |
@@ -66,8 +125,6 @@ No auth. Only reachable because `listen` binds `127.0.0.1`. Prefer `emu.transiti
 | `POST /__emulator/wallet` | `{ balance }` — top-up without clearing campaigns    |
 | `POST /__emulator/reset`  | wipe campaigns, idempotency, restore initial balance |
 
-HTTP form:
-
 ```http
 POST /__emulator/campaigns/{campaignId}/transition
 Content-Type: application/json
@@ -77,13 +134,13 @@ Content-Type: application/json
 
 ## Options
 
-| Option                 | Default            | Notes                                                 |
-| ---------------------- | ------------------ | ----------------------------------------------------- |
-| `apiKey`               | `sk_emulator_test` | Must start with `sk_`; same value in the SDK client   |
-| `initialWalletBalance` | `1000`             | USD                                                   |
-| `plan`                 | —                  | Sets fee (+ self-serve listener cap). See table below |
-| `feeRate`              | `0` (or plan fee)  | Always overrides plan fee; must be in `[0, 1)`        |
-| `organizationId`       | `org_emulator`     | Returned on campaign detail                           |
+| Option                 | Default            | Notes                                                      |
+| ---------------------- | ------------------ | ---------------------------------------------------------- |
+| `apiKey`               | `sk_emulator_test` | Must start with `sk_`; same value in SDK / `Authorization` |
+| `initialWalletBalance` | `1000`             | USD                                                        |
+| `plan`                 | —                  | Sets fee (+ self-serve listener cap). See table below      |
+| `feeRate`              | `0` (or plan fee)  | Always overrides plan fee; must be in `[0, 1)`             |
+| `organizationId`       | `org_emulator`     | Returned on campaign detail                                |
 
 ### Plans
 
@@ -98,7 +155,7 @@ Content-Type: application/json
 
 `emu.getPlan()` → fee, premium flag, remaining listeners. `premium` is metadata only (does not change `/v1` payloads).
 
-Self-serve: each `activate` consumes seeded listeners; when the allowance is exhausted, further `activate` calls fail with `400`.
+Self-serve: each `activate` consumes seeded listeners; when exhausted, further `activate` calls fail with `400`.
 
 ## Recipes
 

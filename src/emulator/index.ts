@@ -44,7 +44,9 @@ export interface SoundlinkEmulator {
   /** In-process request handler (no TCP). */
   dispatch(request: EmulatorRequest): EmulatorResponse;
   /**
-   * Bind HTTP on `127.0.0.1` only. Pass `baseUrl` to the SDK (SDK prepends `/v1`).
+   * Bind HTTP on `127.0.0.1` only. Pass `baseUrl` to the SDK, or call
+   * `/v1` and `/__emulator` with plain `fetch` / curl (fix `port` to share
+   * with another local process on the same machine).
    */
   listen(options?: ListenOptions): Promise<EmulatorServer>;
   /** Clears wallet/campaigns/idempotency and restores `initialWalletBalance`. */

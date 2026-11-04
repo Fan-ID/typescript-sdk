@@ -2,7 +2,7 @@ import { defineConfig } from 'tsup';
 
 const entry = {
   index: 'src/index.ts',
-  emulator: 'src/emulator/index.ts',
+  'api-emulator': 'src/emulator/index.ts',
 };
 
 export default defineConfig([

@@ -5,7 +5,11 @@ import type { EmulatorStore } from './store.js';
 export const LOOPBACK_HOST = '127.0.0.1';
 
 export interface ListenOptions {
-  /** TCP port. `0` (default) binds an ephemeral port. */
+  /**
+   * TCP port. `0` (default) binds an ephemeral port.
+   * Use a fixed port (e.g. `8787`) when another local process will call
+   * this server with `fetch` / curl.
+   */
   port?: number;
   /**
    * Bind address. Must be `127.0.0.1` — any other value is rejected

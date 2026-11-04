@@ -22,19 +22,20 @@
         "default": "./dist/cjs/index.cjs"
       }
     },
-    "./emulator": {
+    "./api-emulator": {
       "import": {
-        "types": "./dist/esm/emulator.d.ts",
-        "default": "./dist/esm/emulator.js"
+        "types": "./dist/esm/api-emulator.d.ts",
+        "default": "./dist/esm/api-emulator.js"
       },
       "require": {
-        "types": "./dist/esm/emulator.d.ts",
-        "default": "./dist/cjs/emulator.cjs"
+        "types": "./dist/esm/api-emulator.d.ts",
+        "default": "./dist/cjs/api-emulator.cjs"
       }
     }
   },
   "files": [
     "dist",
+    "docs",
     "openapi",
     "README.md",
     "CHANGELOG.md",

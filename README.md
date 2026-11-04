@@ -377,17 +377,17 @@ npm run test:live
 
 ## Local Public API emulator
 
-Partner integration tests without Meta spend: import `soundlink/emulator`, point the SDK at `emu.listen().baseUrl`, drive lifecycle with harness transitions (`activate` / `set_spend` / `reject_meta` / `end`).
+Partner integration tests without Meta spend: import `soundlink/api-emulator`, `listen` on loopback, drive lifecycle with harness transitions (`activate` / `set_spend` / `reject_meta` / `end`). Works with the SDK **or** plain `fetch` / curl (fix `port` and call from another local process).
 
-Full guide: **[docs/emulator.md](./docs/emulator.md)** (quick start, plans, recipes, errors, vs production).
+Full guide: **[docs/api-emulator.md](./docs/api-emulator.md)**.
 
 ```ts
 import { Soundlink } from 'soundlink';
-import { createEmulator } from 'soundlink/emulator';
+import { createEmulator } from 'soundlink/api-emulator';
 
 const apiKey = 'sk_emulator_test';
 const emu = createEmulator({ apiKey, initialWalletBalance: 500, plan: 'enterprise' });
-const server = await emu.listen();
+const server = await emu.listen(); // or { port: 8787 } for fetch from another process
 const soundlink = new Soundlink({ apiKey, baseUrl: server.baseUrl });
 
 const { data: created } = await soundlink.campaigns.create(
