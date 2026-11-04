@@ -1,11 +1,11 @@
-/** Matches fan-id-backend credit.service debit rounding. */
+/** Committed wallet debit: dailyBudget × durationDays, cents-rounded. */
 export function computeCommittedUsd(dailyBudget: number, durationDays: number): number {
   return Math.round(dailyBudget * durationDays * 100) / 100;
 }
 
 /**
- * Matches `CampaignBudgetService.computeRefundGrossFromRawSpend`
- * (feeRate default 0 in the emulator).
+ * Unspent gross refund after media spend, given feeRate
+ * (default 0 in the emulator when no plan / fee is set).
  */
 export function computeRefundGrossFromRawSpend(
   mediaSpendUsd: number,

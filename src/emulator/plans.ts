@@ -1,7 +1,6 @@
 /**
- * Emulator plan presets. Fees mirror typical `AD_PROCESSING_FEE` plan_limits
- * (percent → rate): free/pro ~20%, label ~15%, enterprise ~10%.
- * Self-serve adds a listener allowance used to cap overview attribution.
+ * Local plan presets for fees and optional self-serve listener caps.
+ * Defaults are for emulator tests only — not a published price list.
  */
 export type EmulatorPlan =
   | 'free'
@@ -15,8 +14,7 @@ export type EmulatorPlan =
 export interface EmulatorPlanPreset {
   feeRate: number;
   /**
-   * Mirrors OpenAPI `x-premium-plan-level-min: 3` (`PLAN_LEVEL >= 3`).
-   * Self-serve slugs are level 4 in backend — premium allowed.
+   * Whether this preset is treated as premium in the emulator.
    * Metadata for `getPlan()` only; does not change `/v1` payloads yet.
    */
   premium: boolean;

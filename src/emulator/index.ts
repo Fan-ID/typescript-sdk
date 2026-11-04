@@ -62,8 +62,8 @@ export interface ApiEmulator {
   /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
   /**
-   * Plan / fee / self-serve allowance. `premium` is metadata only
-   * (`PLAN_LEVEL >= 3`); it does not change `/v1` payloads yet.
+   * Plan / fee / self-serve allowance. `premium` is metadata only;
+   * it does not change `/v1` payloads yet.
    */
   getPlan(): ResolvedEmulatorPlan & {
     usedNewListeners: number;
