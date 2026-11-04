@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
-  createEmulator,
+  createApiEmulator,
   LOOPBACK_HOST,
   type EmulatorServer,
-  type SoundlinkEmulator,
+  type ApiEmulator,
 } from '../../src/emulator/index.js';
 import { EMULATOR_API_KEY, envelopeData } from './helpers.js';
 
 describe('emulator listen', () => {
-  let emu: SoundlinkEmulator;
+  let emu: ApiEmulator;
   let httpServer: EmulatorServer | undefined;
 
   afterEach(async () => {
@@ -19,7 +19,7 @@ describe('emulator listen', () => {
   });
 
   it('rejects non-loopback host', async () => {
-    emu = createEmulator({ apiKey: EMULATOR_API_KEY });
+    emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
     await expect(emu.listen({ host: '0.0.0.0' })).rejects.toThrow(
       /only allows host 127\.0\.0\.1/,
     );
@@ -29,7 +29,7 @@ describe('emulator listen', () => {
   });
 
   it('serves /v1/ping on 127.0.0.1', async () => {
-    emu = createEmulator({ apiKey: EMULATOR_API_KEY });
+    emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
     httpServer = await emu.listen({ host: LOOPBACK_HOST, port: 0 });
 
     expect(httpServer.host).toBe(LOOPBACK_HOST);
@@ -46,7 +46,7 @@ describe('emulator listen', () => {
   });
 
   it('rejects invalid JSON body with 400', async () => {
-    emu = createEmulator({ apiKey: EMULATOR_API_KEY });
+    emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
     httpServer = await emu.listen({ port: 0 });
 
     const response = await fetch(`${httpServer.baseUrl}/v1/campaigns`, {

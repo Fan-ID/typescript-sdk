@@ -24,7 +24,7 @@ export type { EmulatorServer, ListenOptions } from './server.js';
 export { LOOPBACK_HOST } from './server.js';
 export type { EmulatorTransitionAction } from './store.js';
 
-export interface CreateEmulatorOptions {
+export interface CreateApiEmulatorOptions {
   /** Bearer token accepted by `/v1` (must start with `sk_`). Default: `sk_emulator_test`. */
   apiKey?: string;
   /** Starting wallet balance in USD. Default: `1000`. */
@@ -40,7 +40,7 @@ export interface CreateEmulatorOptions {
   organizationId?: string;
 }
 
-export interface SoundlinkEmulator {
+export interface ApiEmulator {
   /** In-process request handler (no TCP). */
   dispatch(request: EmulatorRequest): EmulatorResponse;
   /**
@@ -71,7 +71,7 @@ export interface SoundlinkEmulator {
   };
 }
 
-export function createEmulator(options: CreateEmulatorOptions = {}): SoundlinkEmulator {
+export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEmulator {
   const apiKey = options.apiKey ?? 'sk_emulator_test';
   if (!apiKey.startsWith('sk_')) {
     throw new Error('apiKey must start with "sk_".');

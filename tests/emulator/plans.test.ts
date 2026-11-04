@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmulator } from '../../src/emulator/index.js';
+import { createApiEmulator } from '../../src/emulator/index.js';
 import {
   EMULATOR_PLAN_PRESETS,
   resolveEmulatorPlan,
@@ -31,7 +31,7 @@ describe('emulator plans', () => {
   });
 
   it('enterprise plan applies fee on refund and overview', () => {
-    const emu = createEmulator({
+    const emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       plan: 'enterprise',
       initialWalletBalance: 500,
@@ -78,7 +78,7 @@ describe('emulator plans', () => {
   });
 
   it('self_serve_5000 caps activate listeners and blocks when exhausted', () => {
-    const emu = createEmulator({
+    const emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       plan: 'self_serve_5000',
       initialWalletBalance: 100_000,
@@ -109,7 +109,7 @@ describe('emulator plans', () => {
   });
 
   it('feeRate override wins over plan fee', () => {
-    const emu = createEmulator({
+    const emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       plan: 'enterprise',
       feeRate: 0,

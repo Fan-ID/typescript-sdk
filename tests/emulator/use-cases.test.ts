@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createEmulator, type SoundlinkEmulator } from '../../src/emulator/index.js';
+import { createApiEmulator, type ApiEmulator } from '../../src/emulator/index.js';
 import type {
   CampaignDetail,
   CampaignStopData,
@@ -19,10 +19,10 @@ import {
 const INITIAL_BALANCE = 500;
 
 describe('emulator use cases', () => {
-  let emu: SoundlinkEmulator;
+  let emu: ApiEmulator;
 
   beforeEach(() => {
-    emu = createEmulator({
+    emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: INITIAL_BALANCE,
       feeRate: 0,
@@ -178,7 +178,7 @@ describe('emulator use cases', () => {
 
   describe('DoD 2 — create 402 releases Idempotency-Key', () => {
     it('returns insufficient_credit with details and no campaign; same key succeeds after setWallet', () => {
-      emu = createEmulator({
+      emu = createApiEmulator({
         apiKey: EMULATOR_API_KEY,
         initialWalletBalance: 10,
         feeRate: 0,

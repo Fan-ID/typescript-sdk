@@ -383,10 +383,14 @@ Full guide: **[docs/api-emulator.md](./docs/api-emulator.md)**.
 
 ```ts
 import { Soundlink } from 'soundlink';
-import { createEmulator } from 'soundlink/api-emulator';
+import { createApiEmulator } from 'soundlink/api-emulator';
 
 const apiKey = 'sk_emulator_test';
-const emu = createEmulator({ apiKey, initialWalletBalance: 500, plan: 'enterprise' });
+const emu = createApiEmulator({
+  apiKey,
+  initialWalletBalance: 500,
+  plan: 'enterprise',
+});
 const server = await emu.listen(); // or { port: 8787 } for fetch from another process
 const soundlink = new Soundlink({ apiKey, baseUrl: server.baseUrl });
 

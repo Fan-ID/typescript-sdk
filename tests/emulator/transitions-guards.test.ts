@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEmulator } from '../../src/emulator/index.js';
+import { createApiEmulator } from '../../src/emulator/index.js';
 import { computeRefundGrossFromRawSpend } from '../../src/emulator/money.js';
 import {
   asCampaignCreate,
@@ -11,8 +11,8 @@ import {
 } from './helpers.js';
 
 describe('emulator transition guards and money', () => {
-  it('rejects createEmulator apiKey without sk_ prefix', () => {
-    expect(() => createEmulator({ apiKey: 'not-a-key' })).toThrow(/sk_/);
+  it('rejects createApiEmulator apiKey without sk_ prefix', () => {
+    expect(() => createApiEmulator({ apiKey: 'not-a-key' })).toThrow(/sk_/);
   });
 
   it('computeRefundGrossFromRawSpend matches feeRate 0 and positive fee', () => {
@@ -22,7 +22,7 @@ describe('emulator transition guards and money', () => {
   });
 
   it('activate / set_spend / end / reject_meta enforce status guards', () => {
-    const emu = createEmulator({
+    const emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: 500,
     });
@@ -54,7 +54,7 @@ describe('emulator transition guards and money', () => {
   });
 
   it('reject_meta from active is allowed', () => {
-    const emu = createEmulator({
+    const emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: 500,
     });
@@ -71,7 +71,7 @@ describe('emulator transition guards and money', () => {
   });
 
   it('harness transition returns 400 for unknown action', () => {
-    const emu = createEmulator({ apiKey: EMULATOR_API_KEY });
+    const emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
     const create = emu.dispatch({
       method: 'POST',
       path: '/v1/campaigns',
@@ -90,7 +90,7 @@ describe('emulator transition guards and money', () => {
   });
 
   it('create validation rejects incomplete body', () => {
-    const emu = createEmulator({ apiKey: EMULATOR_API_KEY });
+    const emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
     const res = emu.dispatch({
       method: 'POST',
       path: '/v1/campaigns',
@@ -101,7 +101,7 @@ describe('emulator transition guards and money', () => {
   });
 
   it('create validation rejects non-finite budget and invalid durationDays with 422', () => {
-    const emu = createEmulator({
+    const emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: 10_000,
     });
@@ -152,7 +152,7 @@ describe('emulator transition guards and money', () => {
   });
 
   it('create returns 402 when committed exceeds available', () => {
-    const emu = createEmulator({
+    const emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: 50,
     });

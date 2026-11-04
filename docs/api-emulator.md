@@ -10,10 +10,10 @@ Works with the SDK **or** plain `fetch` / curl — anything that can hit HTTP on
 
 ```ts
 import { Soundlink } from 'soundlink';
-import { createEmulator } from 'soundlink/api-emulator';
+import { createApiEmulator } from 'soundlink/api-emulator';
 
 const apiKey = 'sk_emulator_test';
-const emu = createEmulator({
+const emu = createApiEmulator({
   apiKey,
   initialWalletBalance: 500,
   plan: 'enterprise', // optional — sets fee (+ self-serve caps when applicable)
@@ -51,10 +51,14 @@ Same lifecycle without TCP: `emu.dispatch({ method, path, headers, body })`.
 **Process A** (starts the emulator — needs `soundlink`):
 
 ```ts
-import { createEmulator } from 'soundlink/api-emulator';
+import { createApiEmulator } from 'soundlink/api-emulator';
 
 const apiKey = 'sk_emulator_test';
-const emu = createEmulator({ apiKey, initialWalletBalance: 500, plan: 'enterprise' });
+const emu = createApiEmulator({
+  apiKey,
+  initialWalletBalance: 500,
+  plan: 'enterprise',
+});
 const server = await emu.listen({ port: 8787 });
 console.log(`api-emulator at ${server.baseUrl}`);
 // leave this process running
@@ -162,7 +166,7 @@ Self-serve: each `activate` consumes seeded listeners; when exhausted, further `
 **Insufficient credit (402)** — create releases the Idempotency-Key:
 
 ```ts
-const low = createEmulator({ apiKey, initialWalletBalance: 10 });
+const low = createApiEmulator({ apiKey, initialWalletBalance: 10 });
 await low.listen();
 // create → 402 insufficient_credit
 low.setWallet(500);
@@ -179,7 +183,11 @@ await soundlink.campaigns.stop(id, { idempotencyKey: 'stop-reject' }); // full r
 **Partial spend + fee**:
 
 ```ts
-const emu = createEmulator({ apiKey, plan: 'enterprise', initialWalletBalance: 500 });
+const emu = createApiEmulator({
+  apiKey,
+  plan: 'enterprise',
+  initialWalletBalance: 500,
+});
 // create committed 70 → activate → set_spend(40) → stop
 // refund ≈ 25.56; wallet ≈ 455.56
 ```

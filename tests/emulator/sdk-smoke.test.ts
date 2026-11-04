@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Soundlink } from '../../src/index.js';
 import {
-  createEmulator,
+  createApiEmulator,
   type EmulatorServer,
-  type SoundlinkEmulator,
+  type ApiEmulator,
 } from '../../src/emulator/index.js';
 import {
   DEFAULT_COMMITTED_USD,
@@ -12,7 +12,7 @@ import {
 } from './helpers.js';
 
 describe('emulator SDK smoke', () => {
-  let emu: SoundlinkEmulator;
+  let emu: ApiEmulator;
   let httpServer: EmulatorServer | undefined;
   const initialBalance = 500;
 
@@ -24,7 +24,7 @@ describe('emulator SDK smoke', () => {
   });
 
   it('create → activate → overview → set_spend → stop via SDK baseUrl', async () => {
-    emu = createEmulator({
+    emu = createApiEmulator({
       apiKey: EMULATOR_API_KEY,
       initialWalletBalance: initialBalance,
       feeRate: 0,
