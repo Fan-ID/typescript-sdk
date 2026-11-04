@@ -21,8 +21,10 @@ describe('emulator plans', () => {
     expect(resolveEmulatorPlan({ plan: 'enterprise', feeRate: 0 }).feeRate).toBe(0);
     expect(resolveEmulatorPlan({}).feeRate).toBe(0);
     const selfServe = resolveEmulatorPlan({ plan: 'self_serve_5000' });
+    expect(selfServe.feeRate).toBe(0.15);
     expect(selfServe.maxNewListeners).toBe(5000);
     expect(selfServe.premium).toBe(true);
+    expect(resolveEmulatorPlan({ plan: 'self_serve_25000' }).feeRate).toBe(0.15);
   });
 
   it('rejects invalid feeRate', () => {

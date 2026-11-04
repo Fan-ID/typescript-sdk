@@ -28,8 +28,8 @@ export const EMULATOR_PLAN_PRESETS: Record<EmulatorPlan, EmulatorPlanPreset> = {
   studio: { feeRate: 0.2, premium: false },
   label_power: { feeRate: 0.15, premium: true },
   enterprise: { feeRate: 0.1, premium: true },
-  self_serve_5000: { feeRate: 0.2, premium: true, maxNewListeners: 5000 },
-  self_serve_25000: { feeRate: 0.2, premium: true, maxNewListeners: 25_000 },
+  self_serve_5000: { feeRate: 0.15, premium: true, maxNewListeners: 5000 },
+  self_serve_25000: { feeRate: 0.15, premium: true, maxNewListeners: 25_000 },
 };
 
 export interface ResolvedEmulatorPlan {

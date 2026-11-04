@@ -154,8 +154,8 @@ Content-Type: application/json
 | `free` / `artist_pro` / `studio` | `0.2`  | —               |
 | `label_power`                    | `0.15` | —               |
 | `enterprise`                     | `0.1`  | —               |
-| `self_serve_5000`                | `0.2`  | 5000 listeners  |
-| `self_serve_25000`               | `0.2`  | 25000 listeners |
+| `self_serve_5000`                | `0.15` | 5000 listeners  |
+| `self_serve_25000`               | `0.15` | 25000 listeners |
 
 `emu.getPlan()` → fee, premium flag, remaining listeners. `premium` is metadata only (does not change `/v1` payloads).
 
