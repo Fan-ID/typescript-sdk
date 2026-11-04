@@ -435,14 +435,14 @@ await server.close();
 
 **Plans** (`createEmulator({ plan })`)
 
-| Plan                  | Default fee | Premium | Self-serve `maxNewListeners` |
-| --------------------- | ----------- | ------- | ---------------------------- |
-| _(omit)_              | `0`         | —       | —                            |
-| `free` / `artist_pro` | `0.2`       | no      | —                            |
-| `label_power`         | `0.15`      | yes     | —                            |
-| `enterprise`          | `0.1`       | yes     | —                            |
-| `self_serve_5000`     | `0.2`       | no      | `5000`                       |
-| `self_serve_25000`    | `0.2`       | no      | `25000`                      |
+| Plan                             | Default fee | Premium (`PLAN_LEVEL >= 3`) | Self-serve `maxNewListeners` |
+| -------------------------------- | ----------- | --------------------------- | ---------------------------- |
+| _(omit)_                         | `0`         | —                           | —                            |
+| `free` / `artist_pro` / `studio` | `0.2`       | no                          | —                            |
+| `label_power`                    | `0.15`      | yes                         | —                            |
+| `enterprise`                     | `0.1`       | yes                         | —                            |
+| `self_serve_5000`                | `0.2`       | yes                         | `5000`                       |
+| `self_serve_25000`               | `0.2`       | yes                         | `25000`                      |
 
 `feeRate` always wins over the plan default. Self-serve caps attributed listeners seeded on harness `activate`; when the allowance is exhausted, further `activate` calls return `400`. Inspect with `emu.getPlan()`.
 

@@ -16,9 +16,13 @@ describe('emulator plans', () => {
   it('resolveEmulatorPlan uses plan fee unless feeRate overrides', () => {
     expect(resolveEmulatorPlan({ plan: 'enterprise' }).feeRate).toBe(0.1);
     expect(resolveEmulatorPlan({ plan: 'label_power' }).feeRate).toBe(0.15);
+    expect(resolveEmulatorPlan({ plan: 'studio' }).feeRate).toBe(0.2);
+    expect(resolveEmulatorPlan({ plan: 'studio' }).premium).toBe(false);
     expect(resolveEmulatorPlan({ plan: 'enterprise', feeRate: 0 }).feeRate).toBe(0);
     expect(resolveEmulatorPlan({}).feeRate).toBe(0);
-    expect(resolveEmulatorPlan({ plan: 'self_serve_5000' }).maxNewListeners).toBe(5000);
+    const selfServe = resolveEmulatorPlan({ plan: 'self_serve_5000' });
+    expect(selfServe.maxNewListeners).toBe(5000);
+    expect(selfServe.premium).toBe(true);
   });
 
   it('rejects invalid feeRate', () => {

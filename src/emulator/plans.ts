@@ -6,6 +6,7 @@
 export type EmulatorPlan =
   | 'free'
   | 'artist_pro'
+  | 'studio'
   | 'label_power'
   | 'enterprise'
   | 'self_serve_5000'
@@ -13,7 +14,10 @@ export type EmulatorPlan =
 
 export interface EmulatorPlanPreset {
   feeRate: number;
-  /** When false, premium-only Public API routes would return 403 (future endpoints). */
+  /**
+   * Mirrors OpenAPI `x-premium-plan-level-min: 3` (`PLAN_LEVEL >= 3`).
+   * Self-serve slugs are level 4 in backend — premium allowed.
+   */
   premium: boolean;
   /** Self-serve listener allowance across activated campaigns. */
   maxNewListeners?: number;
@@ -22,10 +26,11 @@ export interface EmulatorPlanPreset {
 export const EMULATOR_PLAN_PRESETS: Record<EmulatorPlan, EmulatorPlanPreset> = {
   free: { feeRate: 0.2, premium: false },
   artist_pro: { feeRate: 0.2, premium: false },
+  studio: { feeRate: 0.2, premium: false },
   label_power: { feeRate: 0.15, premium: true },
   enterprise: { feeRate: 0.1, premium: true },
-  self_serve_5000: { feeRate: 0.2, premium: false, maxNewListeners: 5000 },
-  self_serve_25000: { feeRate: 0.2, premium: false, maxNewListeners: 25_000 },
+  self_serve_5000: { feeRate: 0.2, premium: true, maxNewListeners: 5000 },
+  self_serve_25000: { feeRate: 0.2, premium: true, maxNewListeners: 25_000 },
 };
 
 export interface ResolvedEmulatorPlan {
