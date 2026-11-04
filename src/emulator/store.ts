@@ -227,12 +227,18 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
     },
 
     creditWallet(amount: number) {
-      if (amount <= 0) return;
+      if (!Number.isFinite(amount) || amount <= 0) return;
       balance = roundMoney(balance + amount);
       updatedAt = nowIso();
     },
 
     debitWallet(amount: number) {
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error('debitWallet requires a finite positive amount.');
+      }
+      if (amount > balance) {
+        throw new Error('debitWallet would make wallet balance negative.');
+      }
       balance = roundMoney(balance - amount);
       updatedAt = nowIso();
     },

@@ -132,6 +132,21 @@ const BUILT_IN_STRATEGIES: BuiltInStrategyType[] = [
   'revenue_maximization',
 ];
 
+const MIN_DAILY_BUDGET_USD = 10;
+const DURATION_DAYS_MIN = 7;
+const DURATION_DAYS_MAX_CUSTOM = 30;
+const DURATION_DAYS_EXTRAS = new Set([60, 90]);
+
+function isValidDurationDays(durationDays: number): boolean {
+  if (!Number.isInteger(durationDays)) {
+    return false;
+  }
+  if (DURATION_DAYS_EXTRAS.has(durationDays)) {
+    return true;
+  }
+  return durationDays >= DURATION_DAYS_MIN && durationDays <= DURATION_DAYS_MAX_CUSTOM;
+}
+
 function parseCreateBody(
   body: unknown,
 ): { ok: true; value: CreateCampaignRequest } | { ok: false; message: string } {
@@ -142,11 +157,25 @@ function parseCreateBody(
   if (typeof raw.spotifyUrl !== 'string' || raw.spotifyUrl.length === 0) {
     return { ok: false, message: 'spotifyUrl is required.' };
   }
-  if (typeof raw.dailyBudget !== 'number' || raw.dailyBudget < 10) {
-    return { ok: false, message: 'dailyBudget must be a number >= 10.' };
+  if (
+    typeof raw.dailyBudget !== 'number' ||
+    !Number.isFinite(raw.dailyBudget) ||
+    raw.dailyBudget < MIN_DAILY_BUDGET_USD
+  ) {
+    return {
+      ok: false,
+      message: `dailyBudget must be a finite number >= ${String(MIN_DAILY_BUDGET_USD)}.`,
+    };
   }
-  if (typeof raw.durationDays !== 'number') {
-    return { ok: false, message: 'durationDays is required.' };
+  if (
+    typeof raw.durationDays !== 'number' ||
+    !Number.isFinite(raw.durationDays) ||
+    !isValidDurationDays(raw.durationDays)
+  ) {
+    return {
+      ok: false,
+      message: 'durationDays must be an integer 7–30, or 60, or 90.',
+    };
   }
   if (typeof raw.genre !== 'string') {
     return { ok: false, message: 'genre is required.' };

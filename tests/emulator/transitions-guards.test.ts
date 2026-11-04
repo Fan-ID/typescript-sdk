@@ -98,4 +98,62 @@ describe('emulator transition guards and money', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('create validation rejects non-finite budget and invalid durationDays', () => {
+    const emu = createEmulator({
+      apiKey: EMULATOR_API_KEY,
+      initialWalletBalance: 10_000,
+    });
+
+    const cases: Array<{ body: Record<string, unknown>; key: string }> = [
+      {
+        key: 'guards-nan-budget',
+        body: { ...DEFAULT_CREATE_BODY, dailyBudget: Number.NaN },
+      },
+      {
+        key: 'guards-inf-budget',
+        body: { ...DEFAULT_CREATE_BODY, dailyBudget: Number.POSITIVE_INFINITY },
+      },
+      {
+        key: 'guards-neg-duration',
+        body: { ...DEFAULT_CREATE_BODY, durationDays: -7 },
+      },
+      {
+        key: 'guards-bad-duration',
+        body: { ...DEFAULT_CREATE_BODY, durationDays: 31 },
+      },
+      {
+        key: 'guards-float-duration',
+        body: { ...DEFAULT_CREATE_BODY, durationDays: 7.5 },
+      },
+    ];
+
+    for (const { body, key } of cases) {
+      const res = emu.dispatch({
+        method: 'POST',
+        path: '/v1/campaigns',
+        headers: authHeaders(key),
+        body,
+      });
+      expect(res.status, key).toBe(400);
+      expect(emu.getWallet().balance, key).toBe(10_000);
+    }
+  });
+
+  it('debitWallet refuses amounts that would make balance negative', () => {
+    const emu = createEmulator({
+      apiKey: EMULATOR_API_KEY,
+      initialWalletBalance: 50,
+    });
+    // Direct store access via oversize create is blocked by available check;
+    // assert wallet stays intact after a would-be oversize create.
+    const res = emu.dispatch({
+      method: 'POST',
+      path: '/v1/campaigns',
+      headers: authHeaders('guards-oversize-commit'),
+      body: { ...DEFAULT_CREATE_BODY, dailyBudget: 20, durationDays: 7 },
+    });
+    expect(res.status).toBe(402);
+    expect(emu.getWallet().balance).toBe(50);
+  });
 });

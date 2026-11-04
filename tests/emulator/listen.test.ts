@@ -1,25 +1,15 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   createEmulator,
   LOOPBACK_HOST,
   type EmulatorServer,
   type SoundlinkEmulator,
 } from '../../src/emulator/index.js';
-import { server as mswServer } from '../mocks/server.js';
 import { EMULATOR_API_KEY, envelopeData } from './helpers.js';
 
 describe('emulator listen', () => {
   let emu: SoundlinkEmulator;
   let httpServer: EmulatorServer | undefined;
-
-  beforeAll(() => {
-    // Real TCP fetch must not be intercepted by MSW.
-    mswServer.close();
-  });
-
-  afterAll(() => {
-    mswServer.listen({ onUnhandledRequest: 'error' });
-  });
 
   afterEach(async () => {
     if (httpServer) {

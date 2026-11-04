@@ -1,11 +1,10 @@
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { Soundlink } from '../../src/index.js';
 import {
   createEmulator,
   type EmulatorServer,
   type SoundlinkEmulator,
 } from '../../src/emulator/index.js';
-import { server as mswServer } from '../mocks/server.js';
 import {
   DEFAULT_COMMITTED_USD,
   DEFAULT_CREATE_BODY,
@@ -14,20 +13,12 @@ import {
 
 /**
  * End-to-end smoke: SDK client → HTTP emulator → harness transitions.
- * MSW is closed for this file so real loopback fetch works.
+ * Loopback fetch is allowed by tests/setup.ts MSW bypass for 127.0.0.1.
  */
 describe('emulator SDK smoke', () => {
   let emu: SoundlinkEmulator;
   let httpServer: EmulatorServer | undefined;
   const initialBalance = 500;
-
-  beforeAll(() => {
-    mswServer.close();
-  });
-
-  afterAll(() => {
-    mswServer.listen({ onUnhandledRequest: 'error' });
-  });
 
   afterEach(async () => {
     if (httpServer) {
@@ -63,7 +54,7 @@ describe('emulator SDK smoke', () => {
     expect(created.error).toBeNull();
     expect(created.data?.status).toBe('creating');
     const campaignId = created.data?.campaignId;
-    expect(campaignId).toEqual(expect.any(String));
+    expect(typeof campaignId).toBe('string');
     if (!campaignId) {
       throw new Error('expected campaignId');
     }
