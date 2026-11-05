@@ -1,5 +1,5 @@
 /**
- * Local plan presets for fees and optional self-serve listener caps.
+ * Local plan presets for paid-campaign fees.
  * Defaults are for emulator tests only — not a published price list.
  */
 export type EmulatorPlan =
@@ -7,9 +7,7 @@ export type EmulatorPlan =
   | 'artist_pro'
   | 'studio'
   | 'label_power'
-  | 'enterprise'
-  | 'self_serve_5000'
-  | 'self_serve_25000';
+  | 'enterprise';
 
 export interface EmulatorPlanPreset {
   feeRate: number;
@@ -18,8 +16,6 @@ export interface EmulatorPlanPreset {
    * Metadata for `getPlan()` only; does not change `/v1` payloads yet.
    */
   premium: boolean;
-  /** Self-serve listener allowance across activated campaigns. */
-  maxNewListeners?: number;
 }
 
 export const EMULATOR_PLAN_PRESETS: Record<EmulatorPlan, EmulatorPlanPreset> = {
@@ -28,8 +24,6 @@ export const EMULATOR_PLAN_PRESETS: Record<EmulatorPlan, EmulatorPlanPreset> = {
   studio: { feeRate: 0.2, premium: false },
   label_power: { feeRate: 0.15, premium: true },
   enterprise: { feeRate: 0.1, premium: true },
-  self_serve_5000: { feeRate: 0.15, premium: true, maxNewListeners: 5000 },
-  self_serve_25000: { feeRate: 0.15, premium: true, maxNewListeners: 25_000 },
 };
 
 export interface ResolvedEmulatorPlan {
@@ -37,7 +31,6 @@ export interface ResolvedEmulatorPlan {
   plan: EmulatorPlan | null;
   feeRate: number;
   premium: boolean;
-  maxNewListeners: number | null;
 }
 
 export function resolveEmulatorPlan(options: {
@@ -60,6 +53,5 @@ export function resolveEmulatorPlan(options: {
     plan: options.plan ?? null,
     feeRate,
     premium: preset?.premium ?? true,
-    maxNewListeners: preset?.maxNewListeners ?? null,
   };
 }

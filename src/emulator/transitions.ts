@@ -61,15 +61,8 @@ export function applyTransition(
           `Cannot activate campaign in status "${campaign.status}".`,
         );
       }
-      if (store.maxNewListeners !== null && store.remainingNewListeners() === 0) {
-        throw new TransitionError(
-          400,
-          'invalid_request',
-          `Self-serve listener limit reached (${String(store.maxNewListeners)}).`,
-        );
-      }
       campaign.status = 'active';
-      seedOverview(store, campaign);
+      seedOverview(campaign);
       store.updateCampaign(campaign);
       break;
     }
