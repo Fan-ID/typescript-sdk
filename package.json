@@ -21,6 +21,16 @@
         "types": "./dist/esm/index.d.ts",
         "default": "./dist/cjs/index.cjs"
       }
+    },
+    "./api-emulator": {
+      "import": {
+        "types": "./dist/esm/api-emulator.d.ts",
+        "default": "./dist/esm/api-emulator.js"
+      },
+      "require": {
+        "types": "./dist/esm/api-emulator.d.ts",
+        "default": "./dist/cjs/api-emulator.cjs"
+      }
     }
   },
   "files": [

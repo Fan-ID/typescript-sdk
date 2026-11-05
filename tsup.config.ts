@@ -1,8 +1,13 @@
 import { defineConfig } from 'tsup';
 
+const entry = {
+  index: 'src/index.ts',
+  'api-emulator': 'src/emulator/index.ts',
+};
+
 export default defineConfig([
   {
-    entry: ['src/index.ts'],
+    entry,
     format: ['esm'],
     dts: {
       resolve: true,
@@ -13,10 +18,11 @@ export default defineConfig([
     outDir: 'dist/esm',
   },
   {
-    entry: ['src/index.ts'],
+    entry,
     format: ['cjs'],
     sourcemap: true,
     treeshake: true,
+    clean: false,
     outDir: 'dist/cjs',
     outExtension: () => ({ js: '.cjs' }),
   },
