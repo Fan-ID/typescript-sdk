@@ -148,6 +148,8 @@ Content-Type: application/json
 
 ### Plans
 
+Local test presets, not the public price list. Pass `feeRate` when the test needs a specific rate.
+
 | Plan                             | Fee    |
 | -------------------------------- | ------ |
 | _(omit)_                         | `0`    |
@@ -159,15 +161,17 @@ Content-Type: application/json
 
 ## Recipes
 
-**Insufficient credit (402)** — create releases the Idempotency-Key:
+**Insufficient credit (402)** — top up, then retry with a **new** `Idempotency-Key`:
 
 ```ts
 const low = createApiEmulator({ apiKey, initialWalletBalance: 10 });
 await low.listen();
-// create → 402 insufficient_credit
+// create with idempotencyKey 'create-1' → 402 insufficient_credit
 low.setWallet(500);
-// same Idempotency-Key → 201
+// create with idempotencyKey 'create-2' → 201
 ```
+
+Create `402` does not store the key in this emulator, so the same key would also succeed after `setWallet`. Do not rely on that. The public API can replay a recorded `402`, and the documented retry is a new key.
 
 **Meta reject** — no wallet credit until you stop:
 
@@ -207,5 +211,6 @@ Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` rel
 - Default fee is `0` unless you set `plan` / `feeRate`.
 - Harness routes are emulator-only.
 - `reject_meta` does not refund; public `stop` / harness `end` do.
-- Create `402` releases the key (unlike some budget-increase replay paths).
+- Create `402` releases the key (unlike some budget-increase replay paths). Retry with a new key anyway.
+- Genre, Spotify URL shape, and `strategyType` are not validated, so a value production would reject with `422` can return `201` here.
 - Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview).
