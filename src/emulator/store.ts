@@ -46,8 +46,6 @@ export interface EmulatorStoreOptions {
   initialWalletBalance: number;
   feeRate: number;
   organizationId?: string;
-  premium?: boolean;
-  maxNewListeners?: number | null;
 }
 
 export interface EmulatorStore {
@@ -55,20 +53,9 @@ export interface EmulatorStore {
   readonly feeRate: number;
   readonly organizationId: string;
   readonly initialWalletBalance: number;
-  readonly premium: boolean;
-  readonly maxNewListeners: number | null;
-  /** Attributed listeners consumed against self-serve allowance (activate seeds). */
-  readonly usedNewListeners: number;
   reset(): void;
   getWallet(): WalletData;
   setWalletBalance(balance: number): WalletData;
-  /** Remaining self-serve listeners, or `null` when unlimited. */
-  remainingNewListeners(): number | null;
-  /**
-   * Reserves `requested` listeners against the self-serve cap.
-   * Returns how many were granted (may be less than requested).
-   */
-  consumeNewListeners(requested: number): number;
   listCampaigns(): EmulatorCampaignRecord[];
   getCampaign(campaignId: string): EmulatorCampaignRecord | undefined;
   createCampaign(input: {
@@ -166,11 +153,8 @@ function roundMoney(value: number): number {
 
 export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStore {
   const organizationId = options.organizationId ?? ORG_EMULATOR_ID;
-  const maxNewListeners =
-    options.maxNewListeners === undefined ? null : options.maxNewListeners;
   let balance = roundMoney(options.initialWalletBalance);
   let updatedAt: string | null = nowIso();
-  let usedNewListeners = 0;
   const campaigns = new Map<string, EmulatorCampaignRecord>();
   const idempotency = new Map<string, IdempotencyRecord>();
 
@@ -179,16 +163,10 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
     feeRate: options.feeRate,
     organizationId,
     initialWalletBalance: options.initialWalletBalance,
-    premium: options.premium ?? true,
-    maxNewListeners,
-    get usedNewListeners() {
-      return usedNewListeners;
-    },
 
     reset() {
       balance = roundMoney(options.initialWalletBalance);
       updatedAt = nowIso();
-      usedNewListeners = 0;
       campaigns.clear();
       idempotency.clear();
     },
@@ -207,25 +185,6 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       balance = roundMoney(nextBalance);
       updatedAt = nowIso();
       return store.getWallet();
-    },
-
-    remainingNewListeners() {
-      if (maxNewListeners === null) {
-        return null;
-      }
-      return Math.max(0, maxNewListeners - usedNewListeners);
-    },
-
-    consumeNewListeners(requested: number) {
-      const want = Math.max(0, Math.floor(requested));
-      if (maxNewListeners === null) {
-        usedNewListeners += want;
-        return want;
-      }
-      const remaining = Math.max(0, maxNewListeners - usedNewListeners);
-      const granted = Math.min(want, remaining);
-      usedNewListeners += granted;
-      return granted;
     },
 
     listCampaigns() {
@@ -351,12 +310,8 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   return store;
 }
 
-export function seedOverview(
-  store: EmulatorStore,
-  campaign: EmulatorCampaignRecord,
-): void {
-  const granted = store.consumeNewListeners(DEFAULT_ACTIVATE_LISTENERS);
-  campaign.overview = seedOverviewAfterActivate(granted);
+export function seedOverview(campaign: EmulatorCampaignRecord): void {
+  campaign.overview = seedOverviewAfterActivate(DEFAULT_ACTIVATE_LISTENERS);
 }
 
 export function hashPayload(value: unknown): string {

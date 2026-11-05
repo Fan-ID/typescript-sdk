@@ -30,8 +30,7 @@ export interface CreateApiEmulatorOptions {
   /** Starting wallet balance in USD. Default: `1000`. */
   initialWalletBalance?: number;
   /**
-   * Organization plan preset. Sets default `feeRate`, premium flag, and
-   * self-serve `maxNewListeners` when applicable.
+   * Paid-campaign plan preset. Sets default `feeRate` and the premium flag.
    */
   plan?: EmulatorPlan;
   /** Overrides plan fee (and default `0` when no plan). */
@@ -62,13 +61,10 @@ export interface ApiEmulator {
   /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
   /**
-   * Plan / fee / self-serve allowance. `premium` is metadata only;
+   * Plan, fee, and premium flag. `premium` is metadata only;
    * it does not change `/v1` payloads yet.
    */
-  getPlan(): ResolvedEmulatorPlan & {
-    usedNewListeners: number;
-    remainingNewListeners: number | null;
-  };
+  getPlan(): ResolvedEmulatorPlan;
 }
 
 export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEmulator {
@@ -87,8 +83,6 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
     initialWalletBalance: options.initialWalletBalance ?? 1000,
     feeRate: resolved.feeRate,
     organizationId: options.organizationId,
-    premium: resolved.premium,
-    maxNewListeners: resolved.maxNewListeners,
   });
 
   return {
@@ -111,11 +105,7 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
       return store.getWallet();
     },
     getPlan() {
-      return {
-        ...resolved,
-        usedNewListeners: store.usedNewListeners,
-        remainingNewListeners: store.remainingNewListeners(),
-      };
+      return resolved;
     },
   };
 }
