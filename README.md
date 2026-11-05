@@ -375,6 +375,41 @@ SOUNDLINK_API_KEY=sk_... \
 npm run test:live
 ```
 
+## Local Public API emulator
+
+Local integration tests without Meta spend: import `soundlink/api-emulator`, `listen` on loopback, drive lifecycle with harness transitions (`activate` / `set_spend` / `reject_meta` / `end`). Works with the SDK **or** plain `fetch` / curl (fix `port` and call from another local process).
+
+Full guide: **[docs/api-emulator.md](./docs/api-emulator.md)**.
+
+```ts
+import { Soundlink } from 'soundlink';
+import { createApiEmulator } from 'soundlink/api-emulator';
+
+const apiKey = 'sk_emulator_test';
+const emu = createApiEmulator({
+  apiKey,
+  initialWalletBalance: 500,
+  plan: 'enterprise',
+});
+const server = await emu.listen(); // or { port: 8787 } for fetch from another process
+const soundlink = new Soundlink({ apiKey, baseUrl: server.baseUrl });
+
+const { data: created } = await soundlink.campaigns.create(
+  {
+    spotifyUrl: 'https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh',
+    dailyBudget: 10,
+    durationDays: 7,
+    genre: 'Pop',
+    strategyType: 'maximum_growth',
+  },
+  { idempotencyKey: 'demo-1' },
+);
+await emu.transition(created!.campaignId, 'activate');
+await soundlink.metrics.overview(created!.campaignId);
+await soundlink.campaigns.stop(created!.campaignId, { idempotencyKey: 'stop-1' });
+await server.close();
+```
+
 ## Roadmap
 
 - Video import helpers (`videos:write`) — when prioritized
