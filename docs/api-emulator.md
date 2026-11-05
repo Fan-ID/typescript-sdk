@@ -16,7 +16,7 @@ const apiKey = 'sk_emulator_test';
 const emu = createApiEmulator({
   apiKey,
   initialWalletBalance: 500,
-  plan: 'enterprise', // optional — sets fee (+ self-serve caps when applicable)
+  plan: 'enterprise', // optional — sets the paid-campaign fee
 });
 
 const server = await emu.listen(); // 127.0.0.1 only
@@ -142,24 +142,20 @@ Content-Type: application/json
 | ---------------------- | ------------------ | ---------------------------------------------------------- |
 | `apiKey`               | `sk_emulator_test` | Must start with `sk_`; same value in SDK / `Authorization` |
 | `initialWalletBalance` | `1000`             | USD                                                        |
-| `plan`                 | —                  | Sets fee (+ self-serve listener cap). See table below      |
+| `plan`                 | —                  | Sets the paid-campaign fee. See table below                |
 | `feeRate`              | `0` (or plan fee)  | Always overrides plan fee; must be in `[0, 1)`             |
 | `organizationId`       | `org_emulator`     | Returned on campaign detail                                |
 
 ### Plans
 
-| Plan                             | Fee    | Self-serve cap  |
-| -------------------------------- | ------ | --------------- |
-| _(omit)_                         | `0`    | —               |
-| `free` / `artist_pro` / `studio` | `0.2`  | —               |
-| `label_power`                    | `0.15` | —               |
-| `enterprise`                     | `0.1`  | —               |
-| `self_serve_5000`                | `0.15` | 5000 listeners  |
-| `self_serve_25000`               | `0.15` | 25000 listeners |
+| Plan                             | Fee    |
+| -------------------------------- | ------ |
+| _(omit)_                         | `0`    |
+| `free` / `artist_pro` / `studio` | `0.2`  |
+| `label_power`                    | `0.15` |
+| `enterprise`                     | `0.1`  |
 
-`emu.getPlan()` → fee, premium flag, remaining listeners. `premium` is metadata only (does not change `/v1` payloads).
-
-Self-serve: each `activate` consumes seeded listeners; when exhausted, further `activate` calls fail with `400`.
+`emu.getPlan()` → fee and premium flag. `premium` is metadata only (does not change `/v1` payloads).
 
 ## Recipes
 
@@ -209,7 +205,7 @@ Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` rel
 ## Not production
 
 - Default fee is `0` unless you set `plan` / `feeRate`.
-- Harness routes and self-serve listener caps are emulator-only.
+- Harness routes are emulator-only.
 - `reject_meta` does not refund; public `stop` / harness `end` do.
 - Create `402` releases the key (unlike some budget-increase replay paths).
 - Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview).
