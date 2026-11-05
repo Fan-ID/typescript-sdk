@@ -1,5 +1,15 @@
 # soundlink
 
+## 2.10.0
+
+### Minor Changes
+
+- [#42](https://github.com/Fan-ID/typescript-sdk/pull/42) [`39e7138`](https://github.com/Fan-ID/typescript-sdk/commit/39e71386d981eff12be880f0096867dfa7042d3f) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add `soundlink/api-emulator` — local stateful Public API emulator for lifecycle tests (`create` → activate/spend → `stop`/`end` refund) without Meta spend.
+
+### Patch Changes
+
+- [#43](https://github.com/Fan-ID/typescript-sdk/pull/43) [`03e87a4`](https://github.com/Fan-ID/typescript-sdk/commit/03e87a48ac5b1b787ccb3ca68ff954297185782c) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add emulator plan presets so paid-campaign tests can set fee with `plan` and `getPlan()`.
+
 ## 2.9.0
 
 ### Minor Changes
