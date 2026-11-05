@@ -105,26 +105,28 @@ const DEFAULT_ACTIVATE_TOTAL_LISTENERS = 150;
 const DEFAULT_ACTIVATE_STREAMS = 450;
 const DEFAULT_ACTIVATE_FOLLOWERS = 18;
 
-function seedOverviewAfterActivate(): MetricsOverview {
-  const listeners = DEFAULT_ACTIVATE_LISTENERS;
-  const totalListeners = DEFAULT_ACTIVATE_TOTAL_LISTENERS;
-  const streams = DEFAULT_ACTIVATE_STREAMS;
-  const followers = DEFAULT_ACTIVATE_FOLLOWERS;
+function seedOverviewAfterActivate(listenersGranted: number): MetricsOverview {
+  const scale = listenersGranted / DEFAULT_ACTIVATE_LISTENERS;
+  const listeners = listenersGranted;
+  const totalListeners = Math.round(DEFAULT_ACTIVATE_TOTAL_LISTENERS * scale);
+  const streams = Math.round(DEFAULT_ACTIVATE_STREAMS * scale);
+  const followers = Math.round(DEFAULT_ACTIVATE_FOLLOWERS * scale);
   return {
     listeners,
     total_listeners: totalListeners,
     streams,
     followers,
-    impressions: 8000,
-    ad_clicks: 400,
-    link_clicks: 220,
+    impressions: listeners > 0 ? 8000 : 0,
+    ad_clicks: listeners > 0 ? 400 : 0,
+    link_clicks: listeners > 0 ? 220 : 0,
     spend_media: 0,
     spend_total: 0,
     fees: 0,
     currency: 'USD',
     cpl: 0,
     cpf: 0,
-    streams_per_listener: Number((streams / totalListeners).toFixed(4)),
+    streams_per_listener:
+      totalListeners > 0 ? Number((streams / totalListeners).toFixed(4)) : 0,
   };
 }
 
@@ -309,7 +311,7 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
 }
 
 export function seedOverview(campaign: EmulatorCampaignRecord): void {
-  campaign.overview = seedOverviewAfterActivate();
+  campaign.overview = seedOverviewAfterActivate(DEFAULT_ACTIVATE_LISTENERS);
 }
 
 export function hashPayload(value: unknown): string {

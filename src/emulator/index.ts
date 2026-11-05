@@ -1,6 +1,11 @@
 import type { WalletData } from '../types/api.js';
 import { dispatch, type EmulatorRequest, type EmulatorResponse } from './dispatch.js';
 import {
+  resolveEmulatorPlan,
+  type EmulatorPlan,
+  type ResolvedEmulatorPlan,
+} from './plans.js';
+import {
   listen as startListen,
   type EmulatorServer,
   type ListenOptions,
@@ -13,6 +18,8 @@ import {
 import { applyTransition, type TransitionResult } from './transitions.js';
 
 export type { EmulatorRequest, EmulatorResponse } from './dispatch.js';
+export type { EmulatorPlan, ResolvedEmulatorPlan } from './plans.js';
+export { EMULATOR_PLAN_PRESETS } from './plans.js';
 export type { EmulatorServer, ListenOptions } from './server.js';
 export { LOOPBACK_HOST } from './server.js';
 export type { EmulatorTransitionAction } from './store.js';
@@ -22,7 +29,11 @@ export interface CreateApiEmulatorOptions {
   apiKey?: string;
   /** Starting wallet balance in USD. Default: `1000`. */
   initialWalletBalance?: number;
-  /** Service fee used when converting media spend to a gross refund. Default: `0`. */
+  /**
+   * Paid-campaign plan preset. Sets default `feeRate` and the premium flag.
+   */
+  plan?: EmulatorPlan;
+  /** Overrides plan fee (and default `0` when no plan). */
   feeRate?: number;
   /** Organization id on campaign detail. Default: `org_emulator`. */
   organizationId?: string;
@@ -49,6 +60,11 @@ export interface ApiEmulator {
   ): TransitionResult;
   /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
+  /**
+   * Plan, fee, and premium flag. `premium` is metadata only;
+   * it does not change `/v1` payloads yet.
+   */
+  getPlan(): ResolvedEmulatorPlan;
 }
 
 export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEmulator {
@@ -57,15 +73,15 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
     throw new Error('apiKey must start with "sk_".');
   }
 
-  const feeRate = options.feeRate ?? 0;
-  if (!Number.isFinite(feeRate) || feeRate < 0 || feeRate >= 1) {
-    throw new Error('feeRate must be a finite number in [0, 1).');
-  }
+  const resolved = resolveEmulatorPlan({
+    plan: options.plan,
+    feeRate: options.feeRate,
+  });
 
   const store: EmulatorStore = createEmulatorStore({
     apiKey,
     initialWalletBalance: options.initialWalletBalance ?? 1000,
-    feeRate,
+    feeRate: resolved.feeRate,
     organizationId: options.organizationId,
   });
 
@@ -87,6 +103,9 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
     },
     getWallet() {
       return store.getWallet();
+    },
+    getPlan() {
+      return resolved;
     },
   };
 }
