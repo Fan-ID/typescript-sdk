@@ -562,6 +562,7 @@ export const handlers: HttpHandler[] = [
       appleMusicUrl?: string;
       youtubeMusicUrl?: string;
       attributionEnabled?: boolean;
+      streamValueEventEnabled?: boolean;
     };
 
     return HttpResponse.json(
@@ -582,6 +583,7 @@ export const handlers: HttpHandler[] = [
           appleMusicUrl: body.appleMusicUrl ?? null,
           youtubeMusicUrl: body.youtubeMusicUrl ?? null,
           attributionEnabled: body.attributionEnabled ?? true,
+          streamValueEventEnabled: body.streamValueEventEnabled ?? false,
         },
         meta: { requestId: REQUEST_ID },
       },
@@ -610,6 +612,7 @@ export const handlers: HttpHandler[] = [
       appleMusicUrl: null,
       youtubeMusicUrl: null,
       attributionEnabled: true,
+      streamValueEventEnabled: false,
     });
   }),
 
@@ -634,6 +637,7 @@ export const handlers: HttpHandler[] = [
       appleMusicUrl: null,
       youtubeMusicUrl: null,
       attributionEnabled: true,
+      streamValueEventEnabled: false,
     });
   }),
 

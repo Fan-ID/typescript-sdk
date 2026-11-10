@@ -26,6 +26,7 @@ export type PublicApiErrorCode =
   | 'youtube_music_not_enabled'
   | 'attribution_not_enabled'
   | 'soundlink_plan_required'
+  | 'stream_value_not_enabled'
   | 'custom_pixel_not_enabled'
   | 'meta_pixel_conflict'
   | 'pixel_in_use'
@@ -746,6 +747,11 @@ export interface SoundlinkDetail extends SoundlinkSummary {
    * landing-page click.
    */
   attributionEnabled: boolean;
+  /**
+   * Whether Soundlink Stream Value is on for this soundlink. `true` only when
+   * it was set at creation.
+   */
+  streamValueEventEnabled: boolean;
 }
 
 /** Body for `POST /v1/soundlinks`. */
@@ -781,6 +787,14 @@ export interface CreateSoundlinkRequest {
    * landing-page click. Defaults to `true`. Cannot combine with `autoFollow: true`.
    */
   attributionEnabled?: boolean;
+  /**
+   * When `true`, Soundlink sends a Meta conversion event named
+   * "Soundlink Stream Value" for attributed streams on this soundlink.
+   * Defaults to `false`. The organization must already be enabled for it, or
+   * create returns `403 stream_value_not_enabled`. Cannot combine with
+   * `attributionEnabled: false`. Can only be set at creation.
+   */
+  streamValueEventEnabled?: boolean;
 }
 
 /** Paginated soundlink list payload. */
