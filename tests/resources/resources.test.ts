@@ -746,6 +746,7 @@ describe('Soundlinks resource', () => {
         appleMusicUrl: null,
         youtubeMusicUrl: null,
         attributionEnabled: true,
+        streamValueEventEnabled: false,
       },
     });
   });
@@ -797,6 +798,7 @@ describe('Soundlinks resource', () => {
         artistIdFollow: null,
         appleMusicUrl: null,
         attributionEnabled: true,
+        streamValueEventEnabled: false,
       },
     });
   });
@@ -831,6 +833,38 @@ describe('Soundlinks resource', () => {
 
     expect(body?.attributionEnabled).toBe(false);
     expect(response.data?.attributionEnabled).toBe(false);
+  });
+
+  it('sends streamValueEventEnabled true on create', async () => {
+    let body: { streamValueEventEnabled?: boolean } | undefined;
+
+    server.use(
+      http.post(`${BASE_URL}/v1/soundlinks`, async ({ request }) => {
+        body = (await request.json()) as { streamValueEventEnabled?: boolean };
+        return HttpResponse.json(
+          {
+            data: {
+              soundlinkId: 'sl_new123',
+              streamValueEventEnabled: true,
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    const response = await soundlink.soundlinks.create(
+      {
+        name: 'Stream Value Mix',
+        spotifyUrl: 'https://open.spotify.com/track/11dFghVXANMlKmJXsNCbNl',
+        streamValueEventEnabled: true,
+      },
+      { idempotencyKey: 'create-soundlink-stream-value' },
+    );
+
+    expect(body?.streamValueEventEnabled).toBe(true);
+    expect(response.data?.streamValueEventEnabled).toBe(true);
   });
 
   it('sends appleMusicUrl on create and returns it on the detail', async () => {

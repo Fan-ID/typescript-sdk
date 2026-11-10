@@ -1827,6 +1827,12 @@ paths:
         Requires the `soundlinks:write` scope and a self-serve plan on the
         organization; otherwise returns `403 soundlink_plan_required`.
 
+        `streamValueEventEnabled: true` turns on Soundlink Stream Value for
+        that soundlink. The organization must already be enabled for it, or
+        the request returns `403 stream_value_not_enabled`. It cannot be
+        combined with `attributionEnabled: false`. Events are sent only when
+        the soundlink has a Meta pixel and conversion access token.
+
         `Idempotency-Key` is **required**. Reusing the key with an unchanged
         body replays the original `201`; a different body returns
         `409 idempotency_key_conflict`. Keys are honored for 24 hours.
@@ -1857,10 +1863,11 @@ paths:
                   metaPixelId: '1234567890123456'
                   metaConversionAccessToken: 'EAAB...'
               playlist:
-                summary: Playlist soundlink
+                summary: Playlist soundlink with Stream Value
                 value:
                   name: Late Night Mix
                   spotifyUrl: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M'
+                  streamValueEventEnabled: true
       responses:
         '201':
           description: Soundlink created
@@ -1881,6 +1888,7 @@ paths:
                   autoFollow: true
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   attributionEnabled: true
+                  streamValueEventEnabled: false
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
@@ -1931,6 +1939,7 @@ paths:
                   autoFollow: true
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   attributionEnabled: true
+                  streamValueEventEnabled: false
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
@@ -1980,6 +1989,7 @@ paths:
                   autoFollow: true
                   artistIdFollow: '4gzpq5DPGxSnKTe4SA8HAU'
                   attributionEnabled: true
+                  streamValueEventEnabled: false
                   metaPixelId: '1234567890123456'
                   tiktokPixelId: null
                   appleMusicUrl: null
@@ -3111,6 +3121,7 @@ components:
             - wallet_not_enabled
             - premium_plan_required
             - soundlink_plan_required
+            - stream_value_not_enabled
             - custom_pixel_not_enabled
             - meta_pixel_conflict
             - pixel_in_use
@@ -4604,6 +4615,18 @@ components:
             When false, the landing page skips Spotify login and only tracks
             the landing-page click. Omit or send true to keep attribution.
             Cannot be combined with `autoFollow: true`.
+        streamValueEventEnabled:
+          type: boolean
+          default: false
+          description: |
+            When true, Soundlink sends a Meta conversion event named
+            "Soundlink Stream Value" for attributed streams on this soundlink.
+            Requires the organization to be enabled for Soundlink Stream Value,
+            otherwise the request returns `403 stream_value_not_enabled`.
+            Cannot be combined with `attributionEnabled: false`. Omit or send
+            false to leave it off. Can only be set at creation. Events are
+            sent only when the soundlink has a Meta pixel and conversion
+            access token.
 
     SoundlinkDetail:
       allOf:
@@ -4617,6 +4640,7 @@ components:
             - appleMusicUrl
             - youtubeMusicUrl
             - attributionEnabled
+            - streamValueEventEnabled
           properties:
             autoFollow:
               type: boolean
@@ -4655,6 +4679,11 @@ components:
               description: |
                 Whether this soundlink keeps Spotify attribution. `false`
                 means the landing page skips login and only tracks the click.
+            streamValueEventEnabled:
+              type: boolean
+              description: |
+                Whether Soundlink Stream Value is on for this soundlink.
+                `true` only when it was set at creation.
 
     SoundlinkDetailResponse:
       type: object
@@ -5576,8 +5605,9 @@ components:
 
     CreateSoundlinkForbidden:
       description: |
-        Valid credentials but missing the `soundlinks:write` scope, or the
-        organization has no self-serve plan.
+        Valid credentials but missing the `soundlinks:write` scope, the
+        organization has no self-serve plan, or Soundlink Stream Value was
+        requested for an organization that is not enabled for it.
       content:
         application/json:
           schema:
@@ -5595,6 +5625,13 @@ components:
                 error:
                   code: soundlink_plan_required
                   message: 'Creating a Soundlink requires a self-serve plan.'
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+            stream_value_not_enabled:
+              value:
+                error:
+                  code: stream_value_not_enabled
+                  message: 'This organization cannot create a soundlink with stream value enabled.'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
     CreateSoundlinkUnprocessable:
