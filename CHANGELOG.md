@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.11.0
+
+### Minor Changes
+
+- [#46](https://github.com/Fan-ID/typescript-sdk/pull/46) [`6999a0c`](https://github.com/Fan-ID/typescript-sdk/commit/6999a0c643162bdf6c2346977556104d70879e98) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Accept `streamValueEventEnabled` on soundlink create and return it on soundlink detail.
+
 ## 2.10.0
 
 ### Minor Changes
