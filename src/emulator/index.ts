@@ -12,6 +12,7 @@ import {
 } from './server.js';
 import {
   createEmulatorStore,
+  type EmulatorFault,
   type EmulatorStore,
   type EmulatorTransitionAction,
 } from './store.js';
@@ -22,7 +23,7 @@ export type { EmulatorPlan, ResolvedEmulatorPlan } from './plans.js';
 export { EMULATOR_PLAN_PRESETS } from './plans.js';
 export type { EmulatorServer, ListenOptions } from './server.js';
 export { LOOPBACK_HOST } from './server.js';
-export type { EmulatorTransitionAction } from './store.js';
+export type { EmulatorFault, EmulatorTransitionAction } from './store.js';
 
 export interface CreateApiEmulatorOptions {
   /** Bearer token accepted by `/v1` (must start with `sk_`). Default: `sk_emulator_test`. */
@@ -52,6 +53,11 @@ export interface ApiEmulator {
   reset(): void;
   /** Sets wallet balance without deleting campaigns (402 retry path). */
   setWallet(balance: number): WalletData;
+  /**
+   * Fails the next authenticated `/v1` request once.
+   * `timeout` only hangs on `listen`. In-process `dispatch` returns `hang: true`.
+   */
+  failNext(fault: EmulatorFault): void;
   /** Same logic as `POST /__emulator/campaigns/{id}/transition`. */
   transition(
     campaignId: string,
@@ -97,6 +103,9 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
     },
     setWallet(balance) {
       return store.setWalletBalance(balance);
+    },
+    failNext(fault) {
+      store.armFault(fault);
     },
     transition(campaignId, action, mediaSpendUsd) {
       return applyTransition(store, campaignId, action, mediaSpendUsd);

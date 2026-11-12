@@ -12,6 +12,9 @@ export const ORG_EMULATOR_ID = 'org_emulator';
 
 export type EmulatorTransitionAction = 'activate' | 'reject_meta' | 'set_spend' | 'end';
 
+/** One-shot failure for the next authenticated `/v1` request. */
+export type EmulatorFault = 'timeout' | 'conflict' | 'server_error';
+
 export interface EmulatorCampaignRecord {
   campaignId: string;
   status: CampaignStatus;
@@ -73,6 +76,8 @@ export interface EmulatorStore {
   getIdempotency(key: string): IdempotencyRecord | undefined;
   setIdempotency(key: string, record: IdempotencyRecord): void;
   deleteIdempotency(key: string): void;
+  armFault(fault: EmulatorFault): void;
+  takeFault(): EmulatorFault | null;
   toCampaignDetail(campaign: EmulatorCampaignRecord): CampaignDetail;
   buildOverview(campaign: EmulatorCampaignRecord): MetricsOverview;
 }
@@ -157,6 +162,7 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   let updatedAt: string | null = nowIso();
   const campaigns = new Map<string, EmulatorCampaignRecord>();
   const idempotency = new Map<string, IdempotencyRecord>();
+  let pendingFault: EmulatorFault | null = null;
 
   const store: EmulatorStore = {
     apiKey: options.apiKey,
@@ -169,6 +175,7 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       updatedAt = nowIso();
       campaigns.clear();
       idempotency.clear();
+      pendingFault = null;
     },
 
     getWallet() {
@@ -260,6 +267,16 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
 
     deleteIdempotency(key: string) {
       idempotency.delete(key);
+    },
+
+    armFault(fault: EmulatorFault) {
+      pendingFault = fault;
+    },
+
+    takeFault() {
+      const fault = pendingFault;
+      pendingFault = null;
+      return fault;
     },
 
     toCampaignDetail(campaign) {

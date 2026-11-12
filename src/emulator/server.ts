@@ -98,6 +98,14 @@ export function listen(
         }
 
         const response = dispatch(store, { method, path, headers, body });
+        if (response.hang) {
+          req.on('close', () => {
+            if (!res.writableEnded) {
+              res.end();
+            }
+          });
+          return;
+        }
         res.writeHead(response.status, {
           'Content-Type': 'application/json',
         });
