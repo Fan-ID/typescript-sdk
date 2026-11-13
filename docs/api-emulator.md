@@ -137,7 +137,7 @@ Content-Type: application/json
 { "action": "set_spend", "mediaSpendUsd": 40 }
 ```
 
-`failNext` (or `POST /__emulator/fault` with `{ "fault" }`) accepts `timeout`, `conflict`, or `server_error`. `conflict` is one `409 idempotency_key_conflict`. `server_error` is `500 internal_error` for the call and the SDK's default retries, then the next call succeeds. `timeout` writes nothing on `listen`; in-process `dispatch` returns `hang: true` and status `408`, which is not sent on the socket. A second arm while one is pending is rejected (`failNext` throws; the HTTP route returns `400`). The fault does not change the wallet, and `reset` clears it. A missing API key is still `401` and leaves the fault armed.
+`failNext` (or `POST /__emulator/fault` with `{ "fault" }`) accepts `timeout`, `conflict`, or `server_error`. `conflict` is one `409 idempotency_key_conflict`. `server_error` is `500 internal_error` for the call plus `maxRetries` (omit it to use the SDK default), then the next call succeeds. Pass the same `maxRetries` the client uses. `timeout` writes nothing on `listen`; in-process `dispatch` returns `hang: true` and status `408`, which is not sent on the socket. A second arm while one is pending is rejected (`failNext` throws; the HTTP route returns `400`). The fault does not change the wallet, and `reset` clears it. A missing API key is still `401` and leaves the fault armed.
 
 ## Options
 

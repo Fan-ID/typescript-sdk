@@ -18,6 +18,29 @@ export type EmulatorFault = 'timeout' | 'conflict' | 'server_error';
 /** Authenticated responses a `server_error` covers: the call plus the SDK's default retries. */
 export const SERVER_ERROR_FAULT_RESPONSES = DEFAULT_MAX_RETRIES + 1;
 
+export function resolveFaultResponses(
+  fault: EmulatorFault,
+  maxRetries: unknown,
+): { ok: true; responses: number } | { ok: false; message: string } {
+  if (fault !== 'server_error') {
+    if (maxRetries !== undefined) {
+      return { ok: false, message: 'maxRetries applies only to server_error.' };
+    }
+    return { ok: true, responses: 1 };
+  }
+  if (maxRetries === undefined) {
+    return { ok: true, responses: SERVER_ERROR_FAULT_RESPONSES };
+  }
+  if (
+    typeof maxRetries !== 'number' ||
+    !Number.isInteger(maxRetries) ||
+    maxRetries < 0
+  ) {
+    return { ok: false, message: 'maxRetries must be a non-negative integer.' };
+  }
+  return { ok: true, responses: maxRetries + 1 };
+}
+
 export interface EmulatorPixelRecord {
   id: string;
   accessToken: string;
@@ -85,8 +108,7 @@ export interface EmulatorStore {
   getIdempotency(key: string): IdempotencyRecord | undefined;
   setIdempotency(key: string, record: IdempotencyRecord): void;
   deleteIdempotency(key: string): void;
-  /** Returns false when a fault is already armed. */
-  armFault(fault: EmulatorFault): boolean;
+  armFault(fault: EmulatorFault, responses?: number): boolean;
   takeFault(): EmulatorFault | null;
   listPixels(): EmulatorPixelRecord[];
   getPixel(pixelId: string): EmulatorPixelRecord | undefined;
@@ -288,12 +310,13 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       idempotency.delete(key);
     },
 
-    armFault(fault) {
+    armFault(fault, responses) {
       if (pendingFault) {
         return false;
       }
       pendingFault = fault;
-      faultRemaining = fault === 'server_error' ? SERVER_ERROR_FAULT_RESPONSES : 1;
+      faultRemaining =
+        responses ?? (fault === 'server_error' ? SERVER_ERROR_FAULT_RESPONSES : 1);
       return true;
     },
 

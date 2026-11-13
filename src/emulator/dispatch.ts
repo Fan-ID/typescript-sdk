@@ -8,6 +8,7 @@ import type {
 import { computeCommittedUsd } from './money.js';
 import {
   hashPayload,
+  resolveFaultResponses,
   type EmulatorFault,
   type EmulatorStore,
   type EmulatorTransitionAction,
@@ -651,10 +652,11 @@ function dispatchHarness(
   body: unknown,
 ): EmulatorResponse {
   if (method === 'POST' && pathname === '/__emulator/fault') {
-    const fault =
+    const record =
       body && typeof body === 'object'
-        ? (body as { fault?: unknown }).fault
+        ? (body as { fault?: unknown; maxRetries?: unknown })
         : undefined;
+    const fault = record?.fault;
     if (!isFault(fault)) {
       return failure(
         400,
@@ -662,7 +664,12 @@ function dispatchHarness(
         'fault must be timeout | conflict | server_error.',
       );
     }
-    if (!store.armFault(fault)) {
+    const maxRetries = record?.maxRetries;
+    const resolved = resolveFaultResponses(fault, maxRetries);
+    if (!resolved.ok) {
+      return failure(400, 'invalid_request', resolved.message);
+    }
+    if (!store.armFault(fault, resolved.responses)) {
       return failure(400, 'invalid_request', 'A fault is already armed.');
     }
     return success(200, { fault });

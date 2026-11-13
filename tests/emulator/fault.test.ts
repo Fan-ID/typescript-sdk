@@ -163,7 +163,9 @@ describe('emulator failNext', () => {
   it('rejects a second fault while one is armed', () => {
     emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
     emu.failNext('conflict');
-    expect(() => { emu.failNext('timeout'); }).toThrow('A fault is already armed.');
+    expect(() => {
+      emu.failNext('timeout');
+    }).toThrow('A fault is already armed.');
 
     const denied = emu.dispatch({
       method: 'POST',
@@ -179,6 +181,32 @@ describe('emulator failNext', () => {
       headers: authHeaders(),
     });
     expect(conflict.status).toBe(409);
+  });
+
+  it('covers a custom maxRetries on server_error', () => {
+    emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
+    emu.failNext('server_error', 0);
+
+    const failed = emu.dispatch({
+      method: 'GET',
+      path: '/v1/wallet',
+      headers: authHeaders(),
+    });
+    expect(failed.status).toBe(500);
+
+    const wallet = emu.dispatch({
+      method: 'GET',
+      path: '/v1/wallet',
+      headers: authHeaders(),
+    });
+    expect(wallet.status).toBe(200);
+  });
+
+  it('rejects maxRetries on a fault the SDK does not retry', () => {
+    emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
+    expect(() => { emu.failNext('timeout', 0); }).toThrow(
+      'maxRetries applies only to server_error.',
+    );
   });
 
   it('rejects an unknown fault', () => {

@@ -12,6 +12,7 @@ import {
 } from './server.js';
 import {
   createEmulatorStore,
+  resolveFaultResponses,
   type EmulatorFault,
   type EmulatorStore,
   type EmulatorTransitionAction,
@@ -55,9 +56,10 @@ export interface ApiEmulator {
   setWallet(balance: number): WalletData;
   /**
    * `timeout` hangs on `listen`. `dispatch` returns `hang: true` and status 408, which is not written.
-   * `server_error` repeats for the SDK default retries. Throws if a fault is already armed.
+   * `server_error` repeats for `maxRetries` (default: the SDK default) plus the first call.
+   * Throws if a fault is already armed.
    */
-  failNext(fault: EmulatorFault): void;
+  failNext(fault: EmulatorFault, maxRetries?: number): void;
   /** Same logic as `POST /__emulator/campaigns/{id}/transition`. */
   transition(
     campaignId: string,
@@ -104,8 +106,12 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
     setWallet(balance) {
       return store.setWalletBalance(balance);
     },
-    failNext(fault) {
-      if (!store.armFault(fault)) {
+    failNext(fault, maxRetries) {
+      const resolved = resolveFaultResponses(fault, maxRetries);
+      if (!resolved.ok) {
+        throw new Error(resolved.message);
+      }
+      if (!store.armFault(fault, resolved.responses)) {
         throw new Error('A fault is already armed.');
       }
     },
