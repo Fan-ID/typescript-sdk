@@ -97,6 +97,67 @@ describe('emulator pixels', () => {
     );
   });
 
+  it('rejects a body that does not match the pixel contract', () => {
+    const emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
+    const cases = [
+      null,
+      { accessToken: 'token-a' },
+      { platform: 'meta', accessToken: 'token-a', extra: true },
+      { platform: 'meta', accessToken: 1 },
+      { platform: 'meta', accessToken: '   ' },
+      { platform: 'meta', isDefault: 'yes' },
+      { platform: 'meta' },
+    ];
+
+    for (const body of cases) {
+      const response = emu.dispatch({
+        method: 'PUT',
+        path: '/v1/pixels/111',
+        headers: authHeaders(),
+        body,
+      });
+      expect(response.status).toBe(400);
+      expect(envelopeError(response.json).code).toBe('invalid_request');
+    }
+  });
+
+  it('rotates a token and rejects a bad pixel id', () => {
+    const emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
+    emu.dispatch({
+      method: 'PUT',
+      path: '/v1/pixels/111',
+      headers: authHeaders(),
+      body: { platform: 'meta', accessToken: 'token-a', isDefault: true },
+    });
+
+    const rotated = emu.dispatch({
+      method: 'PUT',
+      path: '/v1/pixels/111',
+      headers: authHeaders(),
+      body: { platform: 'meta', accessToken: 'token-b' },
+    });
+    expect(rotated.status).toBe(200);
+    expect(envelopeData(rotated.json)).toMatchObject({
+      id: '111',
+      isDefault: true,
+    });
+
+    const wrongMethod = emu.dispatch({
+      method: 'GET',
+      path: '/v1/pixels/111',
+      headers: authHeaders(),
+    });
+    expect(wrongMethod.status).toBe(404);
+
+    const blankId = emu.dispatch({
+      method: 'DELETE',
+      path: '/v1/pixels/%20',
+      headers: authHeaders(),
+    });
+    expect(blankId.status).toBe(400);
+    expect(envelopeError(blankId.json).message).toBe('pixelId is required.');
+  });
+
   it('rejects a platform other than meta', () => {
     const emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
     const response = emu.dispatch({

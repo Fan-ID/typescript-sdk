@@ -202,11 +202,31 @@ describe('emulator failNext', () => {
     expect(wallet.status).toBe(200);
   });
 
+  it('rejects a maxRetries that is not a non-negative integer', () => {
+    emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
+    expect(() => { emu.failNext('server_error', -1); }).toThrow(
+      'maxRetries must be a non-negative integer.',
+    );
+    expect(() => { emu.failNext('server_error', 1.5); }).toThrow(
+      'maxRetries must be a non-negative integer.',
+    );
+
+    const response = emu.dispatch({
+      method: 'POST',
+      path: '/__emulator/fault',
+      body: { fault: 'server_error', maxRetries: '0' },
+    });
+    expect(response.status).toBe(400);
+    expect(envelopeError(response.json).message).toBe(
+      'maxRetries must be a non-negative integer.',
+    );
+  });
+
   it('rejects maxRetries on a fault the SDK does not retry', () => {
     emu = createApiEmulator({ apiKey: EMULATOR_API_KEY });
-    expect(() => { emu.failNext('timeout', 0); }).toThrow(
-      'maxRetries applies only to server_error.',
-    );
+    expect(() => {
+      emu.failNext('timeout', 0);
+    }).toThrow('maxRetries applies only to server_error.');
   });
 
   it('rejects an unknown fault', () => {
