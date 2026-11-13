@@ -6,14 +6,46 @@ import type {
   StrategyType,
   WalletData,
 } from '../types/api.js';
+import { DEFAULT_MAX_RETRIES } from '../constants/defaults.js';
 import { computeCommittedUsd } from './money.js';
 
 export const ORG_EMULATOR_ID = 'org_emulator';
 
 export type EmulatorTransitionAction = 'activate' | 'reject_meta' | 'set_spend' | 'end';
 
-/** One-shot failure for the next authenticated `/v1` request. */
 export type EmulatorFault = 'timeout' | 'conflict' | 'server_error';
+
+/** Authenticated responses a `server_error` covers: the call plus the SDK's default retries. */
+export const SERVER_ERROR_FAULT_RESPONSES = DEFAULT_MAX_RETRIES + 1;
+
+export function resolveFaultResponses(
+  fault: EmulatorFault,
+  maxRetries: unknown,
+): { ok: true; responses: number } | { ok: false; message: string } {
+  if (fault !== 'server_error') {
+    if (maxRetries !== undefined) {
+      return { ok: false, message: 'maxRetries applies only to server_error.' };
+    }
+    return { ok: true, responses: 1 };
+  }
+  if (maxRetries === undefined) {
+    return { ok: true, responses: SERVER_ERROR_FAULT_RESPONSES };
+  }
+  if (
+    typeof maxRetries !== 'number' ||
+    !Number.isInteger(maxRetries) ||
+    maxRetries < 0
+  ) {
+    return { ok: false, message: 'maxRetries must be a non-negative integer.' };
+  }
+  return { ok: true, responses: maxRetries + 1 };
+}
+
+export interface EmulatorPixelRecord {
+  id: string;
+  accessToken: string;
+  isDefault: boolean;
+}
 
 export interface EmulatorCampaignRecord {
   campaignId: string;
@@ -76,8 +108,13 @@ export interface EmulatorStore {
   getIdempotency(key: string): IdempotencyRecord | undefined;
   setIdempotency(key: string, record: IdempotencyRecord): void;
   deleteIdempotency(key: string): void;
-  armFault(fault: EmulatorFault): void;
+  armFault(fault: EmulatorFault, responses?: number): boolean;
   takeFault(): EmulatorFault | null;
+  listPixels(): EmulatorPixelRecord[];
+  getPixel(pixelId: string): EmulatorPixelRecord | undefined;
+  findPixelByAccessToken(accessToken: string): EmulatorPixelRecord | undefined;
+  savePixel(pixel: EmulatorPixelRecord): void;
+  deletePixel(pixelId: string): void;
   toCampaignDetail(campaign: EmulatorCampaignRecord): CampaignDetail;
   buildOverview(campaign: EmulatorCampaignRecord): MetricsOverview;
 }
@@ -162,7 +199,9 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   let updatedAt: string | null = nowIso();
   const campaigns = new Map<string, EmulatorCampaignRecord>();
   const idempotency = new Map<string, IdempotencyRecord>();
+  const pixels = new Map<string, EmulatorPixelRecord>();
   let pendingFault: EmulatorFault | null = null;
+  let faultRemaining = 0;
 
   const store: EmulatorStore = {
     apiKey: options.apiKey,
@@ -175,7 +214,9 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       updatedAt = nowIso();
       campaigns.clear();
       idempotency.clear();
+      pixels.clear();
       pendingFault = null;
+      faultRemaining = 0;
     },
 
     getWallet() {
@@ -269,14 +310,58 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       idempotency.delete(key);
     },
 
-    armFault(fault: EmulatorFault) {
+    armFault(fault, responses) {
+      if (pendingFault) {
+        return false;
+      }
       pendingFault = fault;
+      faultRemaining =
+        responses ?? (fault === 'server_error' ? SERVER_ERROR_FAULT_RESPONSES : 1);
+      return true;
     },
 
     takeFault() {
+      if (!pendingFault || faultRemaining <= 0) {
+        return null;
+      }
       const fault = pendingFault;
-      pendingFault = null;
+      faultRemaining -= 1;
+      if (faultRemaining === 0) {
+        pendingFault = null;
+      }
       return fault;
+    },
+
+    listPixels() {
+      return [...pixels.values()];
+    },
+
+    getPixel(pixelId) {
+      return pixels.get(pixelId);
+    },
+
+    findPixelByAccessToken(accessToken) {
+      for (const pixel of pixels.values()) {
+        if (pixel.accessToken === accessToken) {
+          return pixel;
+        }
+      }
+      return undefined;
+    },
+
+    savePixel(pixel) {
+      if (pixel.isDefault) {
+        for (const existing of pixels.values()) {
+          if (existing.id !== pixel.id) {
+            existing.isDefault = false;
+          }
+        }
+      }
+      pixels.set(pixel.id, pixel);
+    },
+
+    deletePixel(pixelId) {
+      pixels.delete(pixelId);
     },
 
     toCampaignDetail(campaign) {

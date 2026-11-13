@@ -128,7 +128,7 @@ No auth. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` / `emu.failNext
 | `end`                     | → `ended` + refund                                   |
 | `POST /__emulator/wallet` | `{ balance }` — top-up without clearing campaigns    |
 | `POST /__emulator/reset`  | wipe campaigns, idempotency, restore initial balance |
-| `POST /__emulator/fault`  | fail the next authenticated `/v1` call once          |
+| `POST /__emulator/fault`  | fail the next authenticated `/v1` calls              |
 
 ```http
 POST /__emulator/campaigns/{campaignId}/transition
@@ -137,7 +137,7 @@ Content-Type: application/json
 { "action": "set_spend", "mediaSpendUsd": 40 }
 ```
 
-`failNext` (or `POST /__emulator/fault` with `{ "fault" }`) accepts `timeout`, `conflict`, or `server_error`. `conflict` is `409 idempotency_key_conflict`. `server_error` is `500 internal_error`. `timeout` writes nothing; the client must abort. The fault runs once, does not change the wallet, and `reset` clears it. A missing API key is still `401` and leaves the fault armed.
+`failNext` (or `POST /__emulator/fault` with `{ "fault" }`) accepts `timeout`, `conflict`, or `server_error`. `conflict` is one `409 idempotency_key_conflict`. `server_error` is `500 internal_error` for the call plus `maxRetries` (omit it to use the SDK default), then the next call succeeds. Pass the same `maxRetries` the client uses. `timeout` writes nothing on `listen`; in-process `dispatch` returns `hang: true` and status `408`, which is not sent on the socket. A second arm while one is pending is rejected (`failNext` throws; the HTTP route returns `400`). The fault does not change the wallet, and `reset` clears it. A missing API key is still `401` and leaves the fault armed.
 
 ## Options
 
@@ -216,4 +216,5 @@ Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` rel
 - `reject_meta` does not refund; public `stop` / harness `end` do.
 - Create `402` releases the key (unlike some budget-increase replay paths). Retry with a new key anyway.
 - Genre, Spotify URL shape, and `strategyType` are not validated, so a value production would reject with `422` can return `201` here.
-- Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview).
+- Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview, pixels list/save/delete/test-events).
+- Pixel test-events do not call Meta. A saved pixel returns `200` with `status: "sent"`. Send health stays `ok`. `meta_pixel_conflict` and `pixel_in_use` are not returned: one organization, and soundlinks are not stored. Custom pixels are enabled.
