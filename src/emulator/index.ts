@@ -54,8 +54,8 @@ export interface ApiEmulator {
   /** Sets wallet balance without deleting campaigns (402 retry path). */
   setWallet(balance: number): WalletData;
   /**
-   * Fails the next authenticated `/v1` request once.
-   * `timeout` only hangs on `listen`. In-process `dispatch` returns `hang: true`.
+   * `timeout` hangs on `listen`. `dispatch` returns `hang: true` and status 408, which is not written.
+   * `server_error` repeats for the SDK default retries. Throws if a fault is already armed.
    */
   failNext(fault: EmulatorFault): void;
   /** Same logic as `POST /__emulator/campaigns/{id}/transition`. */
@@ -105,7 +105,9 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
       return store.setWalletBalance(balance);
     },
     failNext(fault) {
-      store.armFault(fault);
+      if (!store.armFault(fault)) {
+        throw new Error('A fault is already armed.');
+      }
     },
     transition(campaignId, action, mediaSpendUsd) {
       return applyTransition(store, campaignId, action, mediaSpendUsd);

@@ -6,14 +6,23 @@ import type {
   StrategyType,
   WalletData,
 } from '../types/api.js';
+import { DEFAULT_MAX_RETRIES } from '../constants/defaults.js';
 import { computeCommittedUsd } from './money.js';
 
 export const ORG_EMULATOR_ID = 'org_emulator';
 
 export type EmulatorTransitionAction = 'activate' | 'reject_meta' | 'set_spend' | 'end';
 
-/** One-shot failure for the next authenticated `/v1` request. */
 export type EmulatorFault = 'timeout' | 'conflict' | 'server_error';
+
+/** Authenticated responses a `server_error` covers: the call plus the SDK's default retries. */
+export const SERVER_ERROR_FAULT_RESPONSES = DEFAULT_MAX_RETRIES + 1;
+
+export interface EmulatorPixelRecord {
+  id: string;
+  accessToken: string;
+  isDefault: boolean;
+}
 
 export interface EmulatorCampaignRecord {
   campaignId: string;
@@ -76,8 +85,14 @@ export interface EmulatorStore {
   getIdempotency(key: string): IdempotencyRecord | undefined;
   setIdempotency(key: string, record: IdempotencyRecord): void;
   deleteIdempotency(key: string): void;
-  armFault(fault: EmulatorFault): void;
+  /** Returns false when a fault is already armed. */
+  armFault(fault: EmulatorFault): boolean;
   takeFault(): EmulatorFault | null;
+  listPixels(): EmulatorPixelRecord[];
+  getPixel(pixelId: string): EmulatorPixelRecord | undefined;
+  findPixelByAccessToken(accessToken: string): EmulatorPixelRecord | undefined;
+  savePixel(pixel: EmulatorPixelRecord): void;
+  deletePixel(pixelId: string): void;
   toCampaignDetail(campaign: EmulatorCampaignRecord): CampaignDetail;
   buildOverview(campaign: EmulatorCampaignRecord): MetricsOverview;
 }
@@ -162,7 +177,9 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   let updatedAt: string | null = nowIso();
   const campaigns = new Map<string, EmulatorCampaignRecord>();
   const idempotency = new Map<string, IdempotencyRecord>();
+  const pixels = new Map<string, EmulatorPixelRecord>();
   let pendingFault: EmulatorFault | null = null;
+  let faultRemaining = 0;
 
   const store: EmulatorStore = {
     apiKey: options.apiKey,
@@ -175,7 +192,9 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       updatedAt = nowIso();
       campaigns.clear();
       idempotency.clear();
+      pixels.clear();
       pendingFault = null;
+      faultRemaining = 0;
     },
 
     getWallet() {
@@ -269,14 +288,57 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       idempotency.delete(key);
     },
 
-    armFault(fault: EmulatorFault) {
+    armFault(fault) {
+      if (pendingFault) {
+        return false;
+      }
       pendingFault = fault;
+      faultRemaining = fault === 'server_error' ? SERVER_ERROR_FAULT_RESPONSES : 1;
+      return true;
     },
 
     takeFault() {
+      if (!pendingFault || faultRemaining <= 0) {
+        return null;
+      }
       const fault = pendingFault;
-      pendingFault = null;
+      faultRemaining -= 1;
+      if (faultRemaining === 0) {
+        pendingFault = null;
+      }
       return fault;
+    },
+
+    listPixels() {
+      return [...pixels.values()];
+    },
+
+    getPixel(pixelId) {
+      return pixels.get(pixelId);
+    },
+
+    findPixelByAccessToken(accessToken) {
+      for (const pixel of pixels.values()) {
+        if (pixel.accessToken === accessToken) {
+          return pixel;
+        }
+      }
+      return undefined;
+    },
+
+    savePixel(pixel) {
+      if (pixel.isDefault) {
+        for (const existing of pixels.values()) {
+          if (existing.id !== pixel.id) {
+            existing.isDefault = false;
+          }
+        }
+      }
+      pixels.set(pixel.id, pixel);
+    },
+
+    deletePixel(pixelId) {
+      pixels.delete(pixelId);
     },
 
     toCampaignDetail(campaign) {

@@ -98,6 +98,11 @@ export function listen(
         }
 
         const response = dispatch(store, { method, path, headers, body });
+        if (response.status === 204) {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
         if (response.hang) {
           req.on('close', () => {
             if (!res.writableEnded) {

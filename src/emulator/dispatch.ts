@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   BuiltInStrategyType,
   CreateCampaignRequest,
+  Pixel,
   StrategyType,
 } from '../types/api.js';
 import { computeCommittedUsd } from './money.js';
@@ -259,7 +260,7 @@ export function dispatch(
 
   const fault = store.takeFault();
   if (fault === 'timeout') {
-    return { status: 0, json: null, hang: true };
+    return { status: 408, json: null, hang: true };
   }
   if (fault === 'conflict') {
     return failure(
@@ -290,6 +291,11 @@ export function dispatch(
         { strategyType: 'custom' as StrategyType, tierTargetingAllowed: true },
       ],
     });
+  }
+
+  const pixelResponse = dispatchPixel(store, method, pathname, request.body);
+  if (pixelResponse) {
+    return pixelResponse;
   }
 
   if (method === 'GET' && pathname === '/v1/campaigns') {
@@ -476,6 +482,164 @@ function handleStopCampaign(
   return success(200, responseBody);
 }
 
+function toPublicPixel(pixel: { id: string; isDefault: boolean }): Pixel {
+  return {
+    id: pixel.id,
+    platform: 'meta',
+    isDefault: pixel.isDefault,
+    status: 'ok',
+    lastErrorCode: null,
+    errorSince: null,
+  };
+}
+
+function decodePixelId(raw: string): string {
+  try {
+    return decodeURIComponent(raw).trim();
+  } catch {
+    return raw.trim();
+  }
+}
+
+function parsePixelBody(
+  body: unknown,
+):
+  | { ok: true; accessToken?: string; isDefault?: boolean }
+  | { ok: false; message: string } {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, message: 'Request body must be a JSON object.' };
+  }
+  const record = body as Record<string, unknown>;
+  const extra = Object.keys(record).filter(
+    (key) => key !== 'platform' && key !== 'accessToken' && key !== 'isDefault',
+  );
+  const unknownKey = extra[0];
+  if (unknownKey) {
+    return {
+      ok: false,
+      message: `Invalid request body at body: Unrecognized key(s) in object: '${unknownKey}'.`,
+    };
+  }
+  if (!('platform' in record)) {
+    return { ok: false, message: 'Invalid request body at platform: Required.' };
+  }
+  if (record.platform !== 'meta') {
+    return {
+      ok: false,
+      message:
+        'Invalid request body at platform: Invalid literal value, expected "meta".',
+    };
+  }
+  let accessToken: string | undefined;
+  if ('accessToken' in record) {
+    if (typeof record.accessToken !== 'string') {
+      return {
+        ok: false,
+        message: `Invalid request body at accessToken: Expected string, received ${typeof record.accessToken}.`,
+      };
+    }
+    accessToken = record.accessToken.trim();
+    if (!accessToken) {
+      return {
+        ok: false,
+        message:
+          'Invalid request body at accessToken: String must contain at least 1 character(s).',
+      };
+    }
+  }
+  let isDefault: boolean | undefined;
+  if ('isDefault' in record) {
+    if (typeof record.isDefault !== 'boolean') {
+      return {
+        ok: false,
+        message: `Invalid request body at isDefault: Expected boolean, received ${typeof record.isDefault}.`,
+      };
+    }
+    isDefault = record.isDefault;
+  }
+  if (accessToken === undefined && isDefault === undefined) {
+    return {
+      ok: false,
+      message:
+        'Invalid request body at accessToken: accessToken or isDefault is required.',
+    };
+  }
+  return { ok: true, accessToken, isDefault };
+}
+
+function dispatchPixel(
+  store: EmulatorStore,
+  method: string,
+  pathname: string,
+  body: unknown,
+): EmulatorResponse | null {
+  if (method === 'GET' && pathname === '/v1/pixels') {
+    return success(200, {
+      pixels: store.listPixels().map(toPublicPixel),
+    });
+  }
+
+  const testPixelId = matchPathGroup(pathname, /^\/v1\/pixels\/([^/]+)\/test-events$/);
+  if (testPixelId !== undefined) {
+    if (method !== 'POST') {
+      return failure(404, 'not_found', 'Not found.');
+    }
+    const pixelId = decodePixelId(testPixelId);
+    const pixel = pixelId ? store.getPixel(pixelId) : undefined;
+    if (!pixel) {
+      return failure(404, 'not_found', 'Pixel not found.');
+    }
+    return success(200, { status: 'sent', pixelId: pixel.id });
+  }
+
+  const rawPixelId = matchPathGroup(pathname, /^\/v1\/pixels\/([^/]+)$/);
+  if (rawPixelId === undefined) {
+    return null;
+  }
+  const pixelId = decodePixelId(rawPixelId);
+  if (!pixelId) {
+    return failure(400, 'invalid_request', 'pixelId is required.');
+  }
+
+  if (method === 'PUT') {
+    const parsed = parsePixelBody(body);
+    if (!parsed.ok) {
+      return failure(400, 'invalid_request', parsed.message);
+    }
+    const existing = store.getPixel(pixelId);
+    if (!existing && parsed.accessToken === undefined) {
+      return failure(404, 'not_found', 'Pixel not found.');
+    }
+    if (parsed.accessToken !== undefined) {
+      const owner = store.findPixelByAccessToken(parsed.accessToken);
+      if (owner && owner.id !== pixelId) {
+        return failure(
+          400,
+          'invalid_request',
+          'Access token is already in use with another pixel ID',
+        );
+      }
+    }
+    const saved = {
+      id: pixelId,
+      accessToken: parsed.accessToken ?? existing?.accessToken ?? '',
+      isDefault: parsed.isDefault ?? existing?.isDefault ?? false,
+    };
+    store.savePixel(saved);
+    return success(200, toPublicPixel(saved));
+  }
+
+  if (method === 'DELETE') {
+    if (!store.getPixel(pixelId)) {
+      return failure(404, 'not_found', 'Pixel not found.');
+    }
+    store.deletePixel(pixelId);
+    return { status: 204, json: null };
+  }
+
+  return failure(404, 'not_found', 'Not found.');
+}
+
 function isFault(value: unknown): value is EmulatorFault {
   return value === 'timeout' || value === 'conflict' || value === 'server_error';
 }
@@ -498,7 +662,9 @@ function dispatchHarness(
         'fault must be timeout | conflict | server_error.',
       );
     }
-    store.armFault(fault);
+    if (!store.armFault(fault)) {
+      return failure(400, 'invalid_request', 'A fault is already armed.');
+    }
     return success(200, { fault });
   }
 
