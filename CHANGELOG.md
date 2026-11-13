@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.13.0
+
+### Minor Changes
+
+- [#50](https://github.com/Fan-ID/typescript-sdk/pull/50) [`2cefa2f`](https://github.com/Fan-ID/typescript-sdk/commit/2cefa2fa7f0b21557622dde3c19a4da852a19851) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add emulator pixel list, save, delete, and test-events. Keep `server_error` through the SDK default retries.
+
 ## 2.12.0
 
 ### Minor Changes
