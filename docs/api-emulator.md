@@ -118,7 +118,7 @@ Wallet after settle: `reserved === 0`, `available === balance`.
 
 ## Harness
 
-No auth. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` in-process when you own the Node process.
+No auth. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` / `emu.failNext` in-process when you own the Node process.
 
 | Action                    | Effect                                               |
 | ------------------------- | ---------------------------------------------------- |
@@ -128,6 +128,7 @@ No auth. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` in-process when
 | `end`                     | → `ended` + refund                                   |
 | `POST /__emulator/wallet` | `{ balance }` — top-up without clearing campaigns    |
 | `POST /__emulator/reset`  | wipe campaigns, idempotency, restore initial balance |
+| `POST /__emulator/fault`  | fail the next authenticated `/v1` call once          |
 
 ```http
 POST /__emulator/campaigns/{campaignId}/transition
@@ -135,6 +136,8 @@ Content-Type: application/json
 
 { "action": "set_spend", "mediaSpendUsd": 40 }
 ```
+
+`failNext` (or `POST /__emulator/fault` with `{ "fault" }`) accepts `timeout`, `conflict`, or `server_error`. `conflict` is `409 idempotency_key_conflict`. `server_error` is `500 internal_error`. `timeout` writes nothing; the client must abort. The fault runs once, does not change the wallet, and `reset` clears it. A missing API key is still `401` and leaves the fault armed.
 
 ## Options
 

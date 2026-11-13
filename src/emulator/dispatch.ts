@@ -7,6 +7,7 @@ import type {
 import { computeCommittedUsd } from './money.js';
 import {
   hashPayload,
+  type EmulatorFault,
   type EmulatorStore,
   type EmulatorTransitionAction,
 } from './store.js';
@@ -22,6 +23,8 @@ export interface EmulatorRequest {
 export interface EmulatorResponse {
   status: number;
   json: unknown;
+  /** HTTP listen leaves the socket open until the client aborts. */
+  hang?: boolean;
 }
 
 function parsePathname(path: string): string {
@@ -254,6 +257,21 @@ export function dispatch(
     return authError;
   }
 
+  const fault = store.takeFault();
+  if (fault === 'timeout') {
+    return { status: 0, json: null, hang: true };
+  }
+  if (fault === 'conflict') {
+    return failure(
+      409,
+      'idempotency_key_conflict',
+      'This Idempotency-Key was already used with a different request body.',
+    );
+  }
+  if (fault === 'server_error') {
+    return failure(500, 'internal_error', 'Emulator fault.');
+  }
+
   if (method === 'GET' && pathname === '/v1/ping') {
     return success(200, { status: 'ok' });
   }
@@ -458,12 +476,32 @@ function handleStopCampaign(
   return success(200, responseBody);
 }
 
+function isFault(value: unknown): value is EmulatorFault {
+  return value === 'timeout' || value === 'conflict' || value === 'server_error';
+}
+
 function dispatchHarness(
   store: EmulatorStore,
   method: string,
   pathname: string,
   body: unknown,
 ): EmulatorResponse {
+  if (method === 'POST' && pathname === '/__emulator/fault') {
+    const fault =
+      body && typeof body === 'object'
+        ? (body as { fault?: unknown }).fault
+        : undefined;
+    if (!isFault(fault)) {
+      return failure(
+        400,
+        'invalid_request',
+        'fault must be timeout | conflict | server_error.',
+      );
+    }
+    store.armFault(fault);
+    return success(200, { fault });
+  }
+
   if (method === 'POST' && pathname === '/__emulator/reset') {
     store.reset();
     return success(200, { ok: true });
