@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.12.0
+
+### Minor Changes
+
+- [#48](https://github.com/Fan-ID/typescript-sdk/pull/48) [`a67f133`](https://github.com/Fan-ID/typescript-sdk/commit/a67f133502a50a8bfd7e1b79ce98c72f97021c0b) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Fail the next emulator request on demand with timeout, 409, or 500.
+
 ## 2.11.0
 
 ### Minor Changes
