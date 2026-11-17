@@ -136,9 +136,12 @@ function isTransitionAction(value: unknown): value is EmulatorTransitionAction {
     value === 'activate' ||
     value === 'reject_meta' ||
     value === 'set_spend' ||
-    value === 'end'
+    value === 'end' ||
+    value === 'disapprove_creatives'
   );
 }
+
+const CREATIVES_BATCH_MAX_IDS = 50;
 
 const BUILT_IN_STRATEGIES: BuiltInStrategyType[] = [
   'maximum_growth',
@@ -351,6 +354,55 @@ export function dispatch(
       return failure(404, 'campaign_not_found', 'Campaign not found.');
     }
     return success(200, store.buildOverview(campaign));
+  }
+
+  const creativesCampaignId = matchPathGroup(
+    pathname,
+    /^\/v1\/campaigns\/([^/]+)\/metrics\/creatives$/,
+  );
+  if (method === 'GET' && creativesCampaignId) {
+    const campaign = store.getCampaign(decodeURIComponent(creativesCampaignId));
+    if (!campaign) {
+      return failure(404, 'campaign_not_found', 'Campaign not found.');
+    }
+    return success(200, store.buildCreatives(campaign));
+  }
+
+  if (method === 'POST' && pathname === '/v1/campaigns/metrics/creatives/batch') {
+    const campaignIds =
+      request.body && typeof request.body === 'object'
+        ? (request.body as { campaignIds?: unknown }).campaignIds
+        : undefined;
+    if (!Array.isArray(campaignIds) || campaignIds.length === 0) {
+      return failure(400, 'invalid_request', 'campaignIds must be a non-empty array.');
+    }
+    if (campaignIds.length > CREATIVES_BATCH_MAX_IDS) {
+      return failure(
+        400,
+        'invalid_request',
+        `campaignIds must contain at most ${String(CREATIVES_BATCH_MAX_IDS)} ids.`,
+      );
+    }
+    if (campaignIds.some((id) => typeof id !== 'string' || !id.trim())) {
+      return failure(
+        400,
+        'invalid_request',
+        'campaignIds must contain non-empty strings.',
+      );
+    }
+    const items = (campaignIds as string[]).flatMap((campaignId) => {
+      const campaign = store.getCampaign(campaignId);
+      if (!campaign) {
+        return [];
+      }
+      return [
+        {
+          campaignId,
+          creatives: store.buildCreatives(campaign).creatives,
+        },
+      ];
+    });
+    return success(200, { items });
   }
 
   if (method === 'POST' && pathname === '/v1/campaigns') {
@@ -710,7 +762,7 @@ function dispatchHarness(
       return failure(
         400,
         'invalid_request',
-        'action must be activate | reject_meta | set_spend | end.',
+        'action must be activate | reject_meta | set_spend | end | disapprove_creatives.',
       );
     }
 

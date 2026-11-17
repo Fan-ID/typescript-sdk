@@ -391,6 +391,9 @@ export interface PixelTestEventData {
   pixelId: string;
 }
 
+/** Partner-upload Meta rejection on a creative child (`GET .../metrics/creatives`). */
+export type CreativeDeliveryState = 'disapproved';
+
 /** One variant under a creative group (`GET .../metrics/creatives`). */
 export interface CreativeMetricsChild {
   caption: string | null;
@@ -407,6 +410,20 @@ export interface CreativeMetricsChild {
   cpf: number | null;
   cpc_linkclick: number | null;
   frequency: number | null;
+  /**
+   * Always present. `disapproved` for partner-upload Meta DISAPPROVED ads;
+   * otherwise `null` (including catalog videos).
+   */
+  delivery_state: CreativeDeliveryState | null;
+}
+
+export interface CreativeMetricsBatchItem {
+  campaignId: string;
+  creatives: CreativeMetricsGroup[];
+}
+
+export interface CreativeMetricsBatch {
+  items: CreativeMetricsBatchItem[];
 }
 
 /** Background-video group from `GET .../metrics/creatives`. */

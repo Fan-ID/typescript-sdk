@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type {
   CampaignDetail,
   CampaignStatus,
+  CreativeMetrics,
   MetricsOverview,
   StrategyType,
   WalletData,
@@ -11,7 +12,12 @@ import { computeCommittedUsd } from './money.js';
 
 export const ORG_EMULATOR_ID = 'org_emulator';
 
-export type EmulatorTransitionAction = 'activate' | 'reject_meta' | 'set_spend' | 'end';
+export type EmulatorTransitionAction =
+  | 'activate'
+  | 'reject_meta'
+  | 'set_spend'
+  | 'end'
+  | 'disapprove_creatives';
 
 export type EmulatorFault = 'timeout' | 'conflict' | 'server_error';
 
@@ -68,6 +74,8 @@ export interface EmulatorCampaignRecord {
   createdAt: string;
   updatedAt: string;
   overview: MetricsOverview | null;
+  /** When true, creatives children report `delivery_state: disapproved`. */
+  partnerUploadDisapproved: boolean;
 }
 
 export interface IdempotencyRecord {
@@ -117,6 +125,7 @@ export interface EmulatorStore {
   deletePixel(pixelId: string): void;
   toCampaignDetail(campaign: EmulatorCampaignRecord): CampaignDetail;
   buildOverview(campaign: EmulatorCampaignRecord): MetricsOverview;
+  buildCreatives(campaign: EmulatorCampaignRecord): CreativeMetrics;
 }
 
 function nowIso(): string {
@@ -271,6 +280,7 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
         createdAt: timestamp,
         updatedAt: timestamp,
         overview: null,
+        partnerUploadDisapproved: false,
       };
       campaigns.set(campaignId, record);
       return record;
@@ -405,6 +415,50 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
         fees,
         cpl: listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0,
         cpf: followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0,
+      };
+    },
+
+    buildCreatives(campaign) {
+      const overview = store.buildOverview(campaign);
+      const listeners = overview.listeners;
+      const followers = overview.followers;
+      const linkClicks = overview.link_clicks ?? 0;
+      const spendMedia = overview.spend_media;
+      return {
+        creatives: [
+          {
+            video_id: 'emu_partner_upload_video',
+            caption: 'Emulator partner upload',
+            listeners,
+            followers,
+            link_clicks: linkClicks,
+            cpl: listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0,
+            cpf: followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0,
+            cpc_linkclick:
+              linkClicks > 0 ? Number((spendMedia / linkClicks).toFixed(4)) : 0,
+            frequency: 1,
+            children: [
+              {
+                caption: 'Emulator partner upload',
+                language: 'en',
+                spotify_track_id: campaign.trackId ?? 'emulator_track',
+                timestamp_start_ms: null,
+                timestamp_end_ms: null,
+                listeners,
+                followers,
+                link_clicks: linkClicks,
+                cpl: listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0,
+                cpf: followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0,
+                cpc_linkclick:
+                  linkClicks > 0 ? Number((spendMedia / linkClicks).toFixed(4)) : 0,
+                frequency: 1,
+                delivery_state: campaign.partnerUploadDisapproved
+                  ? 'disapproved'
+                  : null,
+              },
+            ],
+          },
+        ],
       };
     },
   };

@@ -567,6 +567,7 @@ describe('Metrics resource', () => {
                       cpf: 1.5,
                       cpc_linkclick: 0.5,
                       frequency: 2,
+                      delivery_state: null,
                     },
                   ],
                 },
@@ -587,7 +588,84 @@ describe('Metrics resource', () => {
         creatives: [
           {
             video_id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
-            children: [{ spotify_track_id: '11dFghVXANMlKmJXsNCbNl' }],
+            children: [
+              {
+                spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+                delivery_state: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it('posts creative metrics batch', async () => {
+    let requestBody: unknown;
+
+    server.use(
+      http.post(
+        `${BASE_URL}/v1/campaigns/metrics/creatives/batch`,
+        async ({ request }) => {
+          requestBody = await request.json();
+          return HttpResponse.json({
+            data: {
+              items: [
+                {
+                  campaignId: 'camp_a',
+                  creatives: [
+                    {
+                      video_id: 'video-a',
+                      caption: null,
+                      listeners: 1,
+                      followers: 0,
+                      link_clicks: 1,
+                      cpl: 1,
+                      cpf: null,
+                      cpc_linkclick: 1,
+                      frequency: 1,
+                      children: [
+                        {
+                          caption: null,
+                          language: 'en',
+                          spotify_track_id: 'track-a',
+                          timestamp_start_ms: null,
+                          timestamp_end_ms: null,
+                          listeners: 1,
+                          followers: 0,
+                          link_clicks: 1,
+                          cpl: 1,
+                          cpf: null,
+                          cpc_linkclick: 1,
+                          frequency: 1,
+                          delivery_state: 'disapproved',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          });
+        },
+      ),
+    );
+
+    const response = await soundlink.metrics.creativesBatch(['camp_a', 'camp_b']);
+
+    expect(requestBody).toEqual({ campaignIds: ['camp_a', 'camp_b'] });
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [
+          {
+            campaignId: 'camp_a',
+            creatives: [
+              {
+                children: [{ delivery_state: 'disapproved' }],
+              },
+            ],
           },
         ],
       },

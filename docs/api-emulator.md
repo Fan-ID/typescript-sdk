@@ -120,15 +120,16 @@ Wallet after settle: `reserved === 0`, `available === balance`.
 
 No auth. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` / `emu.failNext` in-process when you own the Node process.
 
-| Action                    | Effect                                               |
-| ------------------------- | ---------------------------------------------------- |
-| `activate`                | `creating` → `active`; seeds overview listeners      |
-| `reject_meta`             | → `inactive` **without** refund                      |
-| `set_spend`               | sets media spend (before refund)                     |
-| `end`                     | → `ended` + refund                                   |
-| `POST /__emulator/wallet` | `{ balance }` — top-up without clearing campaigns    |
-| `POST /__emulator/reset`  | wipe campaigns, idempotency, restore initial balance |
-| `POST /__emulator/fault`  | fail the next authenticated `/v1` calls              |
+| Action                    | Effect                                                  |
+| ------------------------- | ------------------------------------------------------- |
+| `activate`                | `creating` → `active`; seeds overview listeners         |
+| `reject_meta`             | → `inactive` **without** refund                         |
+| `set_spend`               | sets media spend (before refund)                        |
+| `end`                     | → `ended` + refund                                      |
+| `disapprove_creatives`    | creatives children report `delivery_state: disapproved` |
+| `POST /__emulator/wallet` | `{ balance }` — top-up without clearing campaigns       |
+| `POST /__emulator/reset`  | wipe campaigns, idempotency, restore initial balance    |
+| `POST /__emulator/fault`  | fail the next authenticated `/v1` calls                 |
 
 ```http
 POST /__emulator/campaigns/{campaignId}/transition
@@ -183,6 +184,15 @@ await emu.transition(id, 'reject_meta'); // inactive, balance unchanged
 await soundlink.campaigns.stop(id, { idempotencyKey: 'stop-reject' }); // full refund
 ```
 
+**Partner-upload creative disapproval** (`delivery_state`):
+
+```ts
+await emu.transition(id, 'activate');
+await emu.transition(id, 'disapprove_creatives');
+const { data } = await soundlink.metrics.creatives(id);
+// data.creatives[0].children[0].delivery_state === 'disapproved'
+```
+
 **Partial spend + fee**:
 
 ```ts
@@ -216,5 +226,5 @@ Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` rel
 - `reject_meta` does not refund; public `stop` / harness `end` do.
 - Create `402` releases the key (unlike some budget-increase replay paths). Retry with a new key anyway.
 - Genre, Spotify URL shape, and `strategyType` are not validated, so a value production would reject with `422` can return `201` here.
-- Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview, pixels list/save/delete/test-events).
+- Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview/creatives/creatives batch, pixels list/save/delete/test-events).
 - Pixel test-events do not call Meta. A saved pixel returns `200` with `status: "sent"`. Send health stays `ok`. `meta_pixel_conflict` and `pixel_in_use` are not returned: one organization, and soundlinks are not stored. Custom pixels are enabled.
