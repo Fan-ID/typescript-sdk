@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.15.0
+
+### Minor Changes
+
+- [#54](https://github.com/Fan-ID/typescript-sdk/pull/54) [`12ace94`](https://github.com/Fan-ID/typescript-sdk/commit/12ace946f1a2d33cc168e3c11e4ff4c300103add) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add optional `delivery_state` on creative metrics children (`disapproved` | `null`, omitted on older APIs). Expose `metrics.creativesBatch`, and teach the local API emulator `GET/POST` creatives metrics plus a `disapprove_creatives` harness transition for integrator tests. Prefer `== null` until every environment returns the field.
+
 ## 2.14.0
 
 ### Minor Changes
