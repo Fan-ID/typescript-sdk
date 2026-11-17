@@ -940,8 +940,14 @@ export interface EngagementExportParams extends DateRangeParams {
 /** Query params for breakdown JSONL export. Max **90 days** per request. */
 export type BreakdownExportParams = DateRangeParams;
 
+/** Query params for campaign/soundlink `metrics/retention`. */
+export interface CohortRetentionParams extends DateRangeParams {
+  /** Split rows by acquisition country. Omit for the global rollup. */
+  groupBy?: 'country';
+}
+
 /**
- * One row of the `soundlink_cohort_retention_daily` v1.0 schema.
+ * One row of the `soundlink_cohort_retention_daily` v1.1 schema.
  * Day-N fields are `null` until that day has passed for the cohort date.
  */
 export interface CohortRetentionDailyRow {
@@ -958,26 +964,37 @@ export interface CohortRetentionDailyRow {
   soundlink_target_isrc?: string | null;
   soundlink_target_spotify_track_id?: string | null;
   soundlink_target_playlist_id?: string | null;
+  /** `null` on the global rollup. `XX` when unknown in country mode. */
+  country_code: string | null;
   cohort_size: number;
   returned_on_day_1: number | null;
   retention_by_day_1: number | null;
+  streams_on_day_1: number | null;
   returned_on_day_2: number | null;
   retention_by_day_2: number | null;
+  streams_on_day_2: number | null;
   returned_on_day_3: number | null;
   retention_by_day_3: number | null;
+  streams_on_day_3: number | null;
   returned_on_day_4: number | null;
   retention_by_day_4: number | null;
+  streams_on_day_4: number | null;
   returned_on_day_5: number | null;
   retention_by_day_5: number | null;
+  streams_on_day_5: number | null;
   returned_on_day_6: number | null;
   retention_by_day_6: number | null;
+  streams_on_day_6: number | null;
   returned_on_day_7: number | null;
   retention_by_day_7: number | null;
+  streams_on_day_7: number | null;
 }
 
 /** Payload from campaign/soundlink `metrics/retention`. */
 export interface CohortRetentionListData {
   schemaVersion: string;
+  /** `null` when `groupBy` was omitted; `"country"` when grouped. */
+  groupBy: 'country' | null;
   items: CohortRetentionDailyRow[];
 }
 

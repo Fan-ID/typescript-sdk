@@ -259,6 +259,7 @@ const { data: breakdown } = await soundlink.metrics.breakdown.list('camp_abc123'
 const { data: retention } = await soundlink.metrics.retention('camp_abc123', {
   startDate: '2026-08-01',
   endDate: '2026-08-31',
+  groupBy: 'country', // optional; omit for the global rollup
 });
 
 // Listening insights — premium; SDK uses a 120s timeout (API often takes 30–50s)

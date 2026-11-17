@@ -640,16 +640,46 @@ describe('Metrics resource', () => {
   });
 
   it('fetches cohort retention for a campaign', async () => {
+    let requestUrl = '';
+
+    server.use(
+      http.get(
+        `${BASE_URL}/v1/campaigns/:campaignId/metrics/retention`,
+        ({ request }) => {
+          requestUrl = request.url;
+          return HttpResponse.json({
+            data: {
+              schemaVersion: '1.1',
+              groupBy: 'country',
+              items: [
+                {
+                  cohort_date: '2026-08-01',
+                  country_code: 'US',
+                  cohort_size: 80,
+                  streams_on_day_1: 40,
+                },
+              ],
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          });
+        },
+      ),
+    );
+
     const response = await soundlink.metrics.retention('camp_abc123', {
       startDate: '2026-08-01',
       endDate: '2026-08-31',
+      groupBy: 'country',
     });
 
+    const params = new URL(requestUrl).searchParams;
+    expect(params.get('groupBy')).toBe('country');
     expect(response).toMatchObject({
       error: null,
       data: {
-        schemaVersion: '1.0',
-        items: [{ cohort_date: '2026-08-01', cohort_size: 120 }],
+        schemaVersion: '1.1',
+        groupBy: 'country',
+        items: [{ country_code: 'US', streams_on_day_1: 40 }],
       },
     });
   });
@@ -1006,8 +1036,16 @@ describe('Soundlinks resource', () => {
     expect(response).toMatchObject({
       error: null,
       data: {
-        schemaVersion: '1.0',
-        items: [{ soundlink_id: 'sl_abc123', cohort_size: 90 }],
+        schemaVersion: '1.1',
+        groupBy: null,
+        items: [
+          {
+            soundlink_id: 'sl_abc123',
+            country_code: null,
+            cohort_size: 90,
+            streams_on_day_1: 48,
+          },
+        ],
       },
     });
   });
