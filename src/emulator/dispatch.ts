@@ -395,14 +395,18 @@ export function dispatch(
         `campaignIds must contain at most ${String(CREATIVES_BATCH_MAX_IDS)} ids.`,
       );
     }
-    if (campaignIds.some((id) => typeof id !== 'string' || !id.trim())) {
+    if (
+      !campaignIds.every(
+        (id): id is string => typeof id === 'string' && id.trim().length > 0,
+      )
+    ) {
       return failure(
         400,
         'invalid_request',
         'campaignIds must contain non-empty strings.',
       );
     }
-    const uniqueIds = [...new Set(campaignIds as string[])];
+    const uniqueIds = [...new Set(campaignIds)];
     const items = uniqueIds.flatMap((campaignId) => {
       const campaign = store.getCampaign(campaignId);
       if (!campaign) {

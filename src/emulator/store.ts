@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import type {
   CampaignDetail,
   CampaignStatus,
+  CreativeDeliveryState,
   CreativeMetrics,
   MetricsOverview,
   StrategyType,
@@ -424,39 +425,40 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       const followers = overview.followers;
       const linkClicks = overview.link_clicks ?? 0;
       const spendMedia = overview.spend_media;
+      const cpl = listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0;
+      const cpf = followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0;
+      const cpcLinkclick =
+        linkClicks > 0 ? Number((spendMedia / linkClicks).toFixed(4)) : 0;
+      const deliveryState: CreativeDeliveryState | null =
+        campaign.partnerUploadDisapproved ? 'disapproved' : null;
+      const child = {
+        caption: 'Emulator partner upload',
+        language: 'en',
+        spotify_track_id: campaign.trackId ?? 'emulator_track',
+        timestamp_start_ms: null,
+        timestamp_end_ms: null,
+        listeners,
+        followers,
+        link_clicks: linkClicks,
+        cpl,
+        cpf,
+        cpc_linkclick: cpcLinkclick,
+        frequency: 1,
+        delivery_state: deliveryState,
+      };
       return {
         creatives: [
           {
             video_id: 'emu_partner_upload_video',
-            caption: 'Emulator partner upload',
+            caption: child.caption,
             listeners,
             followers,
             link_clicks: linkClicks,
-            cpl: listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0,
-            cpf: followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0,
-            cpc_linkclick:
-              linkClicks > 0 ? Number((spendMedia / linkClicks).toFixed(4)) : 0,
+            cpl,
+            cpf,
+            cpc_linkclick: cpcLinkclick,
             frequency: 1,
-            children: [
-              {
-                caption: 'Emulator partner upload',
-                language: 'en',
-                spotify_track_id: campaign.trackId ?? 'emulator_track',
-                timestamp_start_ms: null,
-                timestamp_end_ms: null,
-                listeners,
-                followers,
-                link_clicks: linkClicks,
-                cpl: listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0,
-                cpf: followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0,
-                cpc_linkclick:
-                  linkClicks > 0 ? Number((spendMedia / linkClicks).toFixed(4)) : 0,
-                frequency: 1,
-                delivery_state: campaign.partnerUploadDisapproved
-                  ? 'disapproved'
-                  : null,
-              },
-            ],
+            children: [child],
           },
         ],
       };

@@ -411,8 +411,8 @@ export interface CreativeMetricsChild {
   cpc_linkclick: number | null;
   frequency: number | null;
   /**
-   * Always present. `disapproved` for partner-upload Meta DISAPPROVED ads;
-   * otherwise `null` (including catalog videos).
+   * `disapproved` for partner-upload Meta DISAPPROVED ads; otherwise `null`
+   * (including catalog videos).
    */
   delivery_state: CreativeDeliveryState | null;
 }
