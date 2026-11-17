@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.14.0
+
+### Minor Changes
+
+- [#52](https://github.com/Fan-ID/typescript-sdk/pull/52) [`e31f085`](https://github.com/Fan-ID/typescript-sdk/commit/e31f085287d53ae1484e454dd21f6950a58fd36a) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Support daily cohort retention schema 1.1: optional `groupBy: 'country'`, `country_code`, and `streams_on_day_N` on campaign and soundlink `retention()`. Release only after backend SOU-7646 is deployed — older APIs ignore `groupBy` and omit the new fields.
+
 ## 2.13.0
 
 ### Minor Changes
