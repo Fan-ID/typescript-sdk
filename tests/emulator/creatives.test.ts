@@ -100,4 +100,52 @@ describe('emulator creative metrics', () => {
     expect(response.status).toBe(400);
     expect(envelopeError(response.json).code).toBe('invalid_request');
   });
+
+  it('deduplicates creatives batch campaignIds', () => {
+    const campaignId = asCampaignCreate(
+      envelopeData(createCampaign('creatives-batch-dedupe').json),
+    ).campaignId;
+    emu.transition(campaignId, 'activate');
+
+    const response = emu.dispatch({
+      method: 'POST',
+      path: '/v1/campaigns/metrics/creatives/batch',
+      headers: authHeaders(),
+      body: { campaignIds: [campaignId, campaignId] },
+    });
+
+    expect(response.status).toBe(200);
+    const data = envelopeData(response.json) as CreativeMetricsBatch;
+    expect(data.items).toHaveLength(1);
+    expect(data.items[0]?.campaignId).toBe(campaignId);
+  });
+
+  it('rejects creatives batch with more than 50 campaignIds', () => {
+    const response = emu.dispatch({
+      method: 'POST',
+      path: '/v1/campaigns/metrics/creatives/batch',
+      headers: authHeaders(),
+      body: {
+        campaignIds: Array.from({ length: 51 }, (_, index) => `camp_${String(index)}`),
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect(envelopeError(response.json).message).toMatch(/at most 50/);
+  });
+
+  it('rejects creatives batch startDate and endDate', () => {
+    const response = emu.dispatch({
+      method: 'POST',
+      path: '/v1/campaigns/metrics/creatives/batch',
+      headers: authHeaders(),
+      body: {
+        campaignIds: ['camp_a'],
+        startDate: '2026-01-01',
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect(envelopeError(response.json).message).toMatch(/startDate and endDate/);
+  });
 });

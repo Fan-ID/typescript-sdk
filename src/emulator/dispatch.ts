@@ -369,10 +369,22 @@ export function dispatch(
   }
 
   if (method === 'POST' && pathname === '/v1/campaigns/metrics/creatives/batch') {
-    const campaignIds =
-      request.body && typeof request.body === 'object'
-        ? (request.body as { campaignIds?: unknown }).campaignIds
-        : undefined;
+    if (
+      request.body === null ||
+      typeof request.body !== 'object' ||
+      Array.isArray(request.body)
+    ) {
+      return failure(400, 'invalid_request', 'Request body must be a JSON object.');
+    }
+    const body = request.body as Record<string, unknown>;
+    if (body.startDate !== undefined || body.endDate !== undefined) {
+      return failure(
+        400,
+        'invalid_request',
+        'startDate and endDate are not supported. This endpoint returns a lifetime snapshot.',
+      );
+    }
+    const campaignIds = body.campaignIds;
     if (!Array.isArray(campaignIds) || campaignIds.length === 0) {
       return failure(400, 'invalid_request', 'campaignIds must be a non-empty array.');
     }
@@ -390,7 +402,8 @@ export function dispatch(
         'campaignIds must contain non-empty strings.',
       );
     }
-    const items = (campaignIds as string[]).flatMap((campaignId) => {
+    const uniqueIds = [...new Set(campaignIds as string[])];
+    const items = uniqueIds.flatMap((campaignId) => {
       const campaign = store.getCampaign(campaignId);
       if (!campaign) {
         return [];
