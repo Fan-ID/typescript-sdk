@@ -412,9 +412,10 @@ export interface CreativeMetricsChild {
   frequency: number | null;
   /**
    * `disapproved` for partner-upload Meta DISAPPROVED ads; otherwise `null`
-   * (including catalog videos).
+   * (including catalog videos). Omitted by older API responses — prefer
+   * `== null` / `?? null` over `=== null` until every environment ships it.
    */
-  delivery_state: CreativeDeliveryState | null;
+  delivery_state?: CreativeDeliveryState | null;
 }
 
 export interface CreativeMetricsBatchItem {
