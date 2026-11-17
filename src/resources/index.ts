@@ -650,7 +650,7 @@ export class SoundlinksResource {
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/retention`.
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
-   * One row per cohort date that has first plays. Pass `groupBy: 'country'` for acquisition-country rows.
+   * `groupBy: 'country'` needs API schema 1.1+ (backend SOU-7646); older APIs ignore it.
    */
   retention(
     soundlinkId: string,
@@ -882,7 +882,7 @@ export class MetricsResource {
    *
    * Maps to `GET /v1/campaigns/{campaignId}/metrics/retention`.
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
-   * One row per cohort date that has first plays. Pass `groupBy: 'country'` for acquisition-country rows.
+   * `groupBy: 'country'` needs API schema 1.1+ (backend SOU-7646); older APIs ignore it.
    */
   retention(
     campaignId: string,
