@@ -1280,6 +1280,9 @@ paths:
         of the same track stay separate. This is a snapshot, not a date range.
         `startDate` and `endDate` are rejected.
 
+        Children include `delivery_state` for partner-upload Meta disapproval
+        (not on parent groups). See `CreativeMetricsChild`.
+
         Spend is omitted until media spend and fees can be split. Ratios use
         the same lifetime basis as the Creatives tab.
 
@@ -1323,6 +1326,7 @@ paths:
                           cpf: 1.5
                           cpc_linkclick: 0.5
                           frequency: 2
+                          delivery_state: null
                         - caption: Daytime version
                           language: en
                           spotify_track_id: 11dFghVXANMlKmJXsNCbNl
@@ -1335,6 +1339,7 @@ paths:
                           cpf: 1
                           cpc_linkclick: 0.25
                           frequency: 1.5
+                          delivery_state: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -4332,6 +4337,7 @@ components:
         - cpf
         - cpc_linkclick
         - frequency
+        - delivery_state
       properties:
         caption:
           type: string
@@ -4377,6 +4383,15 @@ components:
         frequency:
           type: number
           nullable: true
+        delivery_state:
+          type: string
+          nullable: true
+          enum: [disapproved]
+          description: |
+            `disapproved` when this child uses a partner-uploaded
+            (`user_upload`) background video and at least one linked Meta ad
+            has `effective_status` DISAPPROVED. Otherwise `null` (catalog
+            videos, non-disapproved ads, or status not yet synced).
 
     CreativeMetricsGroup:
       type: object

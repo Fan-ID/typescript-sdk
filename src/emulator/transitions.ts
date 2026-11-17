@@ -126,6 +126,11 @@ export function applyTransition(
       store.updateCampaign(campaign);
       break;
     }
+    case 'disapprove_creatives': {
+      campaign.partnerUploadDisapproved = true;
+      store.updateCampaign(campaign);
+      break;
+    }
     default: {
       const _exhaustive: never = action;
       throw new TransitionError(

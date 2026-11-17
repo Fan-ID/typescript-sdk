@@ -24,6 +24,7 @@ import type {
   CreativeDailyData,
   CreativeDailyParams,
   CreativeMetrics,
+  CreativeMetricsBatch,
   DateRangeParams,
   DecreaseCampaignBudgetData,
   DecreaseCampaignBudgetRequest,
@@ -852,6 +853,19 @@ export class MetricsResource {
   creatives(campaignId: string): Promise<ApiResponse<CreativeMetrics>> {
     return this.http.get<CreativeMetrics>({
       path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/creatives`,
+    });
+  }
+
+  /**
+   * Lifetime creative metrics for up to 50 campaigns.
+   *
+   * Maps to `POST /v1/campaigns/metrics/creatives/batch`.
+   * Same snapshot shape as {@link creatives}. Requires the org batch feature.
+   */
+  creativesBatch(campaignIds: string[]): Promise<ApiResponse<CreativeMetricsBatch>> {
+    return this.http.post<CreativeMetricsBatch>({
+      path: '/campaigns/metrics/creatives/batch',
+      body: { campaignIds },
     });
   }
 

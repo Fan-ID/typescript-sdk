@@ -338,6 +338,7 @@ export const handlers: HttpHandler[] = [
               cpf: 1.5,
               cpc_linkclick: 0.5,
               frequency: 2,
+              delivery_state: null,
             },
           ],
         },
