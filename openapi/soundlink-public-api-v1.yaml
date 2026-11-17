@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Soundlink Public API
-  version: 0.0.1-draft
+  version: 1.0.0
   description: |
     Campaign listing, metrics, and write operations for Soundlink partner organizations.
 
@@ -326,11 +326,13 @@ paths:
   /v1/pixels/{pixelId}/test-events:
     post:
       operationId: sendPixelTestEvents
-      summary: Send a test conversion event to a pixel
+      summary: Send test conversion events to a pixel
       description: |
-        Sends a live Meta Conversions API event named `Soundlink Stream` to
-        `pixelId` with its stored access token. This is not a sandbox event:
-        it appears in the pixel's Events Manager as a regular event. This
+        Sends live Meta Conversions API events named `Soundlink Auth`,
+        `Soundlink Stream`, `Soundlink Stream Value` (value 0 USD),
+        `Soundlink Follower`, and `Soundlink Artist Follower` to `pixelId` in
+        one request with its stored access token. These are not sandbox
+        events: they appear in the pixel's Events Manager as regular events. This
         request has no body.
 
         Returns `404 not_found` when the pixel is not configured for the
@@ -998,17 +1000,66 @@ paths:
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
+  /v1/campaigns/activity/batch:
+    post:
+      operationId: batchCampaignActivity
+      summary: Batch campaign activity
+      description: |
+        Same activity page as `GET /v1/campaigns/{campaignId}/activity`, for up
+        to 50 campaign IDs in one request (counts as one rate-limit unit).
+
+        Shared `page`, `pageSize`, and `startDate` apply to every authorized
+        campaign. Unauthorized or unknown IDs are omitted from `data.items`
+        (not errors). Requires org feature flag `public_api_campaign_batch`
+        (404 when off).
+
+        Requires the `campaigns:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Campaigns]
+      x-required-scope: campaigns:read
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignActivityBatchRequest'
+            example:
+              campaignIds:
+                - f1e28d31-c358-4284-9bef-00a2334625fd
+                - a2b39e42-d469-5395-ac0f-11b3445736fe
+              page: 1
+              pageSize: 20
+              startDate: '2026-03-01T00:00:00.000Z'
+      responses:
+        '200':
+          description: Activity page per authorized campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignActivityBatchResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
   /v1/campaigns/{campaignId}/activity:
     get:
       operationId: getCampaignActivity
       summary: List campaign activity
       description: |
-        Returns a page of creative adds, budget changes, tier updates, country
-        updates, playlist redirect heals, and auto-renew changes for one campaign.
+        Returns a page of creative adds, creative pause/resume (user request or
+        Meta sync), budget changes, tier updates, country updates, playlist
+        redirect heals, and auto-renew changes for one campaign.
 
-        Each item is an event type, a timestamp, and a short summary. The list
-        does not include campaign creation or pausing an old creative. Fee amounts,
-        Stripe ids, and internal file URIs are omitted.
+        Each item is an event type, a timestamp, and a short summary. Replacing
+        a creative appears as a pause of the old creative plus
+        `CAMPAIGN_AD_CREATIVES_ADDED` for the new one. The list does not include
+        campaign creation. Fee amounts, Stripe ids, and internal file URIs are
+        omitted.
 
         `startDate` keeps events at or after that moment. A calendar date starts
         at 00:00:00Z. Omit it to page through the full history. Any waiting rule,
@@ -1054,6 +1105,9 @@ paths:
               example:
                 data:
                   items:
+                    - event_type: CAMPAIGN_CREATIVE_STATUS_UPDATE_REQUESTED
+                      timestamp: '2026-03-03T12:00:00.000Z'
+                      summary: Creative paused by user
                     - event_type: CAMPAIGN_AD_CREATIVES_ADDED
                       timestamp: '2026-03-02T15:04:05.000Z'
                       summary: Creatives added (2)
@@ -1063,10 +1117,53 @@ paths:
                   pagination:
                     page: 1
                     pageSize: 20
-                    totalCount: 2
+                    totalCount: 3
                     totalPages: 1
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/metrics/overview/batch:
+    post:
+      operationId: batchCampaignMetricsOverview
+      summary: Batch campaign metrics overview
+      description: |
+        Same totals as `GET /v1/campaigns/{campaignId}/metrics/overview`, for
+        up to 50 campaign IDs in one request (counts as one rate-limit unit).
+
+        Unauthorized or unknown IDs are omitted from `data.items` (not errors).
+        Requires org feature flag `public_api_campaign_batch` (404 when off).
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignMetricsOverviewBatchRequest'
+            example:
+              campaignIds:
+                - f1e28d31-c358-4284-9bef-00a2334625fd
+                - a2b39e42-d469-5395-ac0f-11b3445736fe
+              startDate: '2026-04-01'
+              endDate: '2026-04-08'
+      responses:
+        '200':
+          description: Overview totals per authorized campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignMetricsOverviewBatchResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1121,6 +1218,49 @@ paths:
                   streams_per_listener: 1.83
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/metrics/creatives/batch:
+    post:
+      operationId: batchCampaignCreativeMetrics
+      summary: Batch campaign creative metrics
+      description: |
+        Same lifetime creative snapshot as
+        `GET /v1/campaigns/{campaignId}/metrics/creatives`, for up to 50
+        campaign IDs in one request (counts as one rate-limit unit).
+
+        Unauthorized or unknown IDs are omitted from `data.items` (not errors).
+        Requires org feature flag `public_api_campaign_batch` (404 when off).
+        `startDate` and `endDate` are rejected on the body.
+
+        Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignMetricsCreativesBatchRequest'
+            example:
+              campaignIds:
+                - f1e28d31-c358-4284-9bef-00a2334625fd
+                - a2b39e42-d469-5395-ac0f-11b3445736fe
+      responses:
+        '200':
+          description: Creative metrics per authorized campaign
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignMetricsCreativesBatchResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -1650,10 +1790,9 @@ paths:
         that has first plays (dates with no first plays have no row), where the
         cohort date is the UTC date listeners first played via the campaign soundlink.
         A listener's cohort date is their earliest first play across all countries.
-        Conforms to the `soundlink_cohort_retention_daily` v1.0 schema (same row
+        Conforms to the `soundlink_cohort_retention_daily` v1.1 schema (same row
         shape as `GET /v1/soundlinks/{soundlinkId}/metrics/retention`). All rows
-        are returned in `data.items` (one per cohort date), so there is no
-        pagination.
+        are returned in `data.items`, so there is no pagination.
 
         The campaign's `smart_link_id` is resolved from `dim_campaigns_current`
         before the retention query runs.
@@ -1664,7 +1803,12 @@ paths:
         - `retention_by_day_N`: share of the cohort (`cohort_size`) who played again on any
           day from 1 to N (end-day, cumulative). Each listener is counted once, so the
           by-day rate never decreases within a row.
+        - `streams_on_day_N`: attributed plays on exactly day N after first play.
         - A day-N value is `null` until day N has passed for that cohort date.
+
+        Omit `groupBy` for the global rollup (`country_code` is `null`; counts are summed
+        over acquisition countries and rates are recomputed). `groupBy=country` returns one
+        item per cohort date and acquisition country (`XX` when unknown).
 
         **Known limitation:** end-day rates are cumulative per listener, so whether
         day-3 returners also returned on day 2 is not recoverable from the end-day
@@ -1693,13 +1837,78 @@ paths:
         - $ref: '#/components/parameters/campaignId'
         - $ref: '#/components/parameters/startDate'
         - $ref: '#/components/parameters/endDate'
+        - name: groupBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [country]
       responses:
         '200':
-          description: Cohort retention rows (`soundlink_cohort_retention_daily` schema), sorted by `cohort_date` ascending.
+          description: Cohort retention rows (`soundlink_cohort_retention_daily` schema), sorted by `cohort_date` (then `country_code` when grouped).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SoundlinkCohortRetentionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/campaigns/{campaignId}/metrics/retention-weekly:
+    get:
+      operationId: getCampaignRetentionWeekly
+      summary: Campaign weekly cohort retention
+      description: |
+        Weekly cohort retention for attributed plays (listeners who reached the campaign
+        soundlink), read from `api_campaign_cohort_retention_weekly_by_country`. Cohort
+        weeks are UTC and anchored on the campaign start, not calendar Mondays. Each
+        listener has one acquisition country.
+
+        `days` covers relative days 0 to 7. `weeks` covers relative weeks 0 to 26; week N
+        spans days `7N` to `7N+6` (week 0 `streams` includes day 0). Week 0 `pct` is the
+        share of the cohort active on days 1 to 6 (day 0 excluded).
+
+        Only fully observed days and weeks are returned. Young cohorts have shorter,
+        possibly empty arrays, and cells are never padded.
+
+        Omit `groupBy` for the global rollup (`country_code` is `null`; counts are summed
+        over countries and `pct` is recomputed). `groupBy=country` returns one item per
+        cohort week and country (`XX` when unknown).
+
+        `startDate` / `endDate` filter `cohort_week` (inclusive) and default to a recent
+        window. A range that is too wide returns `400 invalid_query_parameter`.
+
+        **Plan requirement:** Label, Enterprise, committed, and self-serve plans.
+        Organizations on a lower plan receive `403 premium_plan_required`.
+
+        Requires the `metrics:read` scope. A campaign outside the organization returns
+        `404 campaign_not_found`.
+      tags: [Metrics]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: metrics:read
+      x-premium-plan-level-min: 3
+      parameters:
+        - $ref: '#/components/parameters/campaignId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - name: groupBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [country]
+      responses:
+        '200':
+          description: Weekly cohort retention items, sorted by `cohort_week` (then `country_code` when grouped).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CohortRetentionWeeklyResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
@@ -2005,14 +2214,16 @@ paths:
   /v1/soundlinks/{soundlinkId}/test-events:
     post:
       operationId: sendSoundlinkTestEvents
-      summary: Send a test conversion event for a soundlink
+      summary: Send test conversion events for a soundlink
       description: |
         Sends the same test conversion event as the in-app "send test event"
         action. Pixels and tokens are read from the soundlink. This request
         has no body.
 
-        When the soundlink has a Meta pixel, a live Meta Conversions API event
-        named `Soundlink Stream` is sent to that pixel. When it has a TikTok
+        When the soundlink has a Meta pixel, live Meta Conversions API events
+        named `Soundlink Auth`, `Soundlink Stream`, `Soundlink Stream Value`
+        (value 0 USD), `Soundlink Follower`, and `Soundlink Artist Follower`
+        are sent to that pixel in one request. When it has a TikTok
         pixel, a live TikTok `ViewContent` event is sent as well. These are
         not sandbox events: they appear in the ad platform's events manager.
 
@@ -2462,9 +2673,8 @@ paths:
         plays (dates with no first plays have no row), where the cohort date is
         the UTC date listeners first played via the soundlink. A listener's
         cohort date is their earliest first play across all countries.
-        Conforms to the `soundlink_cohort_retention_daily` v1.0 schema. All rows
-        are returned in `data.items` (one per cohort date), so there is no
-        pagination.
+        Conforms to the `soundlink_cohort_retention_daily` v1.1 schema. All rows
+        are returned in `data.items`, so there is no pagination.
 
         **Retention definitions:**
         - `returned_on_day_N`: listeners from the cohort who played again on exactly day N
@@ -2472,7 +2682,12 @@ paths:
         - `retention_by_day_N`: share of the cohort (`cohort_size`) who played again on any
           day from 1 to N (end-day, cumulative). Each listener is counted once, so the
           by-day rate never decreases within a row.
+        - `streams_on_day_N`: attributed plays on exactly day N after first play.
         - A day-N value is `null` until day N has passed for that cohort date.
+
+        Omit `groupBy` for the global rollup (`country_code` is `null`; counts are summed
+        over acquisition countries and rates are recomputed). `groupBy=country` returns one
+        item per cohort date and acquisition country (`XX` when unknown).
 
         **Known limitation:** end-day rates are cumulative per listener, so whether
         day-3 returners also returned on day 2 is not recoverable from the end-day
@@ -2498,13 +2713,78 @@ paths:
         - $ref: '#/components/parameters/soundlinkId'
         - $ref: '#/components/parameters/startDate'
         - $ref: '#/components/parameters/endDate'
+        - name: groupBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [country]
       responses:
         '200':
-          description: Cohort retention rows (`soundlink_cohort_retention_daily` schema), sorted by `cohort_date` ascending.
+          description: Cohort retention rows (`soundlink_cohort_retention_daily` schema), sorted by `cohort_date` (then `country_code` when grouped).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SoundlinkCohortRetentionResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/{soundlinkId}/metrics/retention-weekly:
+    get:
+      operationId: getSoundlinkRetentionWeekly
+      summary: Soundlink weekly cohort retention
+      description: |
+        Weekly cohort retention for attributed plays (listeners who reached the
+        soundlink), read from `api_smart_link_cohort_retention_weekly_by_country`. Cohort
+        weeks are UTC and anchored on the soundlink creation date, not calendar Mondays.
+        Each listener has one acquisition country.
+
+        `days` covers relative days 0 to 7. `weeks` covers relative weeks 0 to 26; week N
+        spans days `7N` to `7N+6` (week 0 `streams` includes day 0). Week 0 `pct` is the
+        share of the cohort active on days 1 to 6 (day 0 excluded).
+
+        Only fully observed days and weeks are returned. Young cohorts have shorter,
+        possibly empty arrays, and cells are never padded.
+
+        Omit `groupBy` for the global rollup (`country_code` is `null`; counts are summed
+        over countries and `pct` is recomputed). `groupBy=country` returns one item per
+        cohort week and country (`XX` when unknown).
+
+        `startDate` / `endDate` filter `cohort_week` (inclusive) and default to a recent
+        window. A range that is too wide returns `400 invalid_query_parameter`.
+
+        **Plan requirement:** Label, Enterprise, committed, and self-serve plans.
+        Organizations on a lower plan receive `403 premium_plan_required`.
+
+        Requires the `soundlinks:read` scope. A soundlink outside the organization returns
+        `404 not_found`.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      x-premium-plan-level-min: 3
+      parameters:
+        - $ref: '#/components/parameters/soundlinkId'
+        - $ref: '#/components/parameters/startDate'
+        - $ref: '#/components/parameters/endDate'
+        - name: groupBy
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [country]
+      responses:
+        '200':
+          description: Weekly cohort retention items, sorted by `cohort_week` (then `country_code` when grouped).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CohortRetentionWeeklyResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
@@ -3121,7 +3401,6 @@ components:
             - wallet_not_enabled
             - premium_plan_required
             - soundlink_plan_required
-            - stream_value_not_enabled
             - custom_pixel_not_enabled
             - meta_pixel_conflict
             - pixel_in_use
@@ -3401,6 +3680,64 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/CampaignActivityData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignActivityBatchRequest:
+      type: object
+      required: [campaignIds]
+      properties:
+        campaignIds:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+          description: Campaign IDs to fetch. Duplicates are ignored. Max 50.
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: Page number (1-indexed). Applied to every campaign.
+        pageSize:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 20
+          description: Items per page (max 100). Applied to every campaign.
+        startDate:
+          type: string
+          description: |
+            Return events at or after this moment for every campaign.
+            `YYYY-MM-DD` starts at 00:00:00Z. An ISO-8601 timestamp uses that
+            instant.
+
+    CampaignActivityBatchItem:
+      type: object
+      required: [campaignId, items, pagination]
+      properties:
+        campaignId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignActivityItem'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    CampaignActivityBatchResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CampaignActivityBatchItem'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -3935,6 +4272,51 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    CampaignMetricsOverviewBatchRequest:
+      type: object
+      required: [campaignIds]
+      properties:
+        campaignIds:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+          description: Campaign IDs to fetch. Duplicates are ignored. Max 50.
+        startDate:
+          type: string
+          format: date
+          description: Inclusive start date (YYYY-MM-DD). Optional.
+        endDate:
+          type: string
+          format: date
+          description: Inclusive end date (YYYY-MM-DD). Optional.
+
+    MetricsOverviewBatchItem:
+      allOf:
+        - type: object
+          required: [campaignId]
+          properties:
+            campaignId:
+              type: string
+        - $ref: '#/components/schemas/MetricsOverview'
+
+    CampaignMetricsOverviewBatchResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MetricsOverviewBatchItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     CreativeMetricsChild:
       type: object
       required:
@@ -4059,6 +4441,45 @@ components:
       properties:
         data:
           $ref: '#/components/schemas/CreativeMetrics'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignMetricsCreativesBatchRequest:
+      type: object
+      required: [campaignIds]
+      properties:
+        campaignIds:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+          description: Campaign IDs to fetch. Duplicates are ignored. Max 50.
+
+    CreativeMetricsBatchItem:
+      type: object
+      required: [campaignId, creatives]
+      properties:
+        campaignId:
+          type: string
+        creatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreativeMetricsGroup'
+
+    CampaignMetricsCreativesBatchResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CreativeMetricsBatchItem'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -4574,7 +4995,7 @@ components:
           description: |
             Meta pixel ID. Send with `metaConversionAccessToken` to save or
             rotate the token (unchanged). Or send `metaPixelId` alone to reuse
-            a pixel the organization already saved (requires pixel settings).
+            a pixel the organization already saved.
             Omit both to skip Meta tracking. Never applies an org default.
         metaConversionAccessToken:
           type: string
@@ -5104,12 +5525,19 @@ components:
       properties:
         data:
           type: object
-          required: [schemaVersion, items]
+          required: [schemaVersion, groupBy, items]
           properties:
             schemaVersion:
               type: string
               description: Version of the `soundlink_cohort_retention_daily` row schema. Pin your ingest pipeline to this.
-              example: '1.0'
+              example: '1.1'
+            groupBy:
+              type: string
+              nullable: true
+              enum: [country]
+              description: |
+                `null` when `groupBy` is omitted (global rollup). `country` when
+                `groupBy=country`.
             items:
               type: array
               items:
@@ -5117,11 +5545,106 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    CohortRetentionWeeklyResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [schemaVersion, granularity, scope, groupBy, items]
+          properties:
+            schemaVersion:
+              type: string
+              example: '1.0'
+            granularity:
+              type: string
+              enum: [week]
+            scope:
+              type: string
+              enum: [attributed]
+            groupBy:
+              type: string
+              nullable: true
+              enum: [country]
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/CohortRetentionWeeklyItem'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CohortRetentionWeeklyItem:
+      type: object
+      required:
+        [
+          soundlink_id,
+          cohort_week,
+          cohort_week_timezone,
+          country_code,
+          cohort_size,
+          days,
+          weeks,
+        ]
+      properties:
+        soundlink_id:
+          type: string
+        cohort_week:
+          type: string
+          format: date
+        cohort_week_timezone:
+          type: string
+          enum: [UTC]
+        country_code:
+          type: string
+          nullable: true
+          description: Acquisition country (`XX` if unknown). `null` for the global rollup.
+        cohort_size:
+          type: integer
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/CohortRetentionWeeklyDayCell'
+        weeks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CohortRetentionWeeklyWeekCell'
+
+    CohortRetentionWeeklyDayCell:
+      type: object
+      required: [day, active_users, pct, streams]
+      properties:
+        day:
+          type: integer
+          minimum: 0
+          maximum: 7
+        active_users:
+          type: integer
+        pct:
+          type: number
+        streams:
+          type: integer
+
+    CohortRetentionWeeklyWeekCell:
+      type: object
+      required: [week, active_users, pct, streams]
+      properties:
+        week:
+          type: integer
+          minimum: 0
+          maximum: 26
+        active_users:
+          type: integer
+        pct:
+          type: number
+        streams:
+          type: integer
+
     SoundlinkCohortRetentionDailyRow:
       type: object
       description: |
-        One row of the `soundlink_cohort_retention_daily` v1.0 schema.
-        Primary key: `(provider, account_id, cohort_date, soundlink_id)`.
+        One row of the `soundlink_cohort_retention_daily` v1.1 schema.
+        Primary key (global): `(provider, account_id, cohort_date, soundlink_id)`.
+        Primary key (`groupBy=country`): add `country_code`.
         Rows are idempotent. Re-ingesting on the primary key is safe.
         A day-N value is final once day N has passed for the cohort date.
         Until then it is `null`.
@@ -5135,21 +5658,29 @@ components:
         - soundlink_id
         - soundlink_name
         - soundlink_target_type
+        - country_code
         - cohort_size
         - returned_on_day_1
         - retention_by_day_1
+        - streams_on_day_1
         - returned_on_day_2
         - retention_by_day_2
+        - streams_on_day_2
         - returned_on_day_3
         - retention_by_day_3
+        - streams_on_day_3
         - returned_on_day_4
         - retention_by_day_4
+        - streams_on_day_4
         - returned_on_day_5
         - retention_by_day_5
+        - streams_on_day_5
         - returned_on_day_6
         - retention_by_day_6
+        - streams_on_day_6
         - returned_on_day_7
         - retention_by_day_7
+        - streams_on_day_7
       properties:
         provider:
           type: string
@@ -5161,7 +5692,7 @@ components:
         schema_version:
           type: string
           description: Schema version string. Pin your ingest pipeline to this value.
-          example: '1.0'
+          example: '1.1'
         cohort_date:
           type: string
           format: date
@@ -5198,6 +5729,12 @@ components:
           type: string
           nullable: true
           description: Spotify playlist ID. Populated when `soundlink_target_type = playlist`; otherwise `null`.
+        country_code:
+          type: string
+          nullable: true
+          description: |
+            Acquisition country (country of the listener's earliest first play).
+            `null` on the global rollup. `XX` when unknown in country mode.
         cohort_size:
           type: integer
           minimum: 0
@@ -5213,6 +5750,11 @@ components:
           minimum: 0
           maximum: 1
           description: Share of `cohort_size` who played again on any day from 1 to 1 (end-day, cumulative), rounded to 4 decimals. `null` until day 1 has passed.
+        streams_on_day_1:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Attributed plays on exactly day 1 after first play. `null` until day 1 has passed.
         returned_on_day_2:
           type: integer
           nullable: true
@@ -5224,6 +5766,11 @@ components:
           minimum: 0
           maximum: 1
           description: Share of `cohort_size` who played again on any day from 1 to 2 (end-day, cumulative), rounded to 4 decimals. `null` until day 2 has passed.
+        streams_on_day_2:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Attributed plays on exactly day 2 after first play. `null` until day 2 has passed.
         returned_on_day_3:
           type: integer
           nullable: true
@@ -5235,6 +5782,11 @@ components:
           minimum: 0
           maximum: 1
           description: Share of `cohort_size` who played again on any day from 1 to 3 (end-day, cumulative), rounded to 4 decimals. `null` until day 3 has passed.
+        streams_on_day_3:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Attributed plays on exactly day 3 after first play. `null` until day 3 has passed.
         returned_on_day_4:
           type: integer
           nullable: true
@@ -5246,6 +5798,11 @@ components:
           minimum: 0
           maximum: 1
           description: Share of `cohort_size` who played again on any day from 1 to 4 (end-day, cumulative), rounded to 4 decimals. `null` until day 4 has passed.
+        streams_on_day_4:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Attributed plays on exactly day 4 after first play. `null` until day 4 has passed.
         returned_on_day_5:
           type: integer
           nullable: true
@@ -5257,6 +5814,11 @@ components:
           minimum: 0
           maximum: 1
           description: Share of `cohort_size` who played again on any day from 1 to 5 (end-day, cumulative), rounded to 4 decimals. `null` until day 5 has passed.
+        streams_on_day_5:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Attributed plays on exactly day 5 after first play. `null` until day 5 has passed.
         returned_on_day_6:
           type: integer
           nullable: true
@@ -5268,6 +5830,11 @@ components:
           minimum: 0
           maximum: 1
           description: Share of `cohort_size` who played again on any day from 1 to 6 (end-day, cumulative), rounded to 4 decimals. `null` until day 6 has passed.
+        streams_on_day_6:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Attributed plays on exactly day 6 after first play. `null` until day 6 has passed.
         returned_on_day_7:
           type: integer
           nullable: true
@@ -5279,6 +5846,11 @@ components:
           minimum: 0
           maximum: 1
           description: Share of `cohort_size` who played again on any day from 1 to 7 (end-day, cumulative), rounded to 4 decimals. `null` until day 7 has passed.
+        streams_on_day_7:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Attributed plays on exactly day 7 after first play. `null` until day 7 has passed.
 
     # --- Videos ---
 

@@ -941,8 +941,19 @@ export interface EngagementExportParams extends DateRangeParams {
 export type BreakdownExportParams = DateRangeParams;
 
 /**
- * One row of the `soundlink_cohort_retention_daily` v1.0 schema.
+ * Query params for campaign/soundlink `metrics/retention`.
+ * `groupBy` requires Public API daily retention schema 1.1+ (backend SOU-7646);
+ * older deployments ignore the param and always return the global rollup.
+ */
+export interface CohortRetentionParams extends DateRangeParams {
+  /** Split rows by acquisition country. Omit for the global rollup. */
+  groupBy?: 'country';
+}
+
+/**
+ * One row of the `soundlink_cohort_retention_daily` v1.1 schema.
  * Day-N fields are `null` until that day has passed for the cohort date.
+ * Schema 1.1 fields (`country_code`, `streams_on_day_*`) may be absent on older APIs.
  */
 export interface CohortRetentionDailyRow {
   provider: 'soundlink';
@@ -958,26 +969,37 @@ export interface CohortRetentionDailyRow {
   soundlink_target_isrc?: string | null;
   soundlink_target_spotify_track_id?: string | null;
   soundlink_target_playlist_id?: string | null;
+  /** `null` on the global rollup. `XX` when unknown in country mode. */
+  country_code?: string | null;
   cohort_size: number;
   returned_on_day_1: number | null;
   retention_by_day_1: number | null;
+  streams_on_day_1?: number | null;
   returned_on_day_2: number | null;
   retention_by_day_2: number | null;
+  streams_on_day_2?: number | null;
   returned_on_day_3: number | null;
   retention_by_day_3: number | null;
+  streams_on_day_3?: number | null;
   returned_on_day_4: number | null;
   retention_by_day_4: number | null;
+  streams_on_day_4?: number | null;
   returned_on_day_5: number | null;
   retention_by_day_5: number | null;
+  streams_on_day_5?: number | null;
   returned_on_day_6: number | null;
   retention_by_day_6: number | null;
+  streams_on_day_6?: number | null;
   returned_on_day_7: number | null;
   retention_by_day_7: number | null;
+  streams_on_day_7?: number | null;
 }
 
 /** Payload from campaign/soundlink `metrics/retention`. */
 export interface CohortRetentionListData {
   schemaVersion: string;
+  /** Present on schema 1.1+: `null` when omitted; `"country"` when grouped. */
+  groupBy?: 'country' | null;
   items: CohortRetentionDailyRow[];
 }
 

@@ -41,6 +41,7 @@ export type {
   CatalogDigInListeningInsight,
   CohortRetentionDailyRow,
   CohortRetentionListData,
+  CohortRetentionParams,
   CreateCampaignRequest,
   CreateCampaignRequestBase,
   CreateCampaignRequestBuiltIn,

@@ -18,6 +18,7 @@ import type {
   CampaignStopData,
   CampaignTiersData,
   CohortRetentionListData,
+  CohortRetentionParams,
   CreateCampaignRequest,
   CreateSoundlinkRequest,
   CreativeDailyData,
@@ -645,21 +646,22 @@ export class SoundlinksResource {
   }
 
   /**
-   * Cohort retention for a soundlink (`soundlink_cohort_retention_daily`).
+   * Cohort retention for a soundlink (`soundlink_cohort_retention_daily` v1.1).
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/retention`.
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
-   * One row per cohort date that has first plays. Day-N fields stay `null` until that day has passed.
+   * `groupBy: 'country'` needs API schema 1.1+ (backend SOU-7646); older APIs ignore it.
    */
   retention(
     soundlinkId: string,
-    params: DateRangeParams = {},
+    params: CohortRetentionParams = {},
   ): Promise<ApiResponse<CohortRetentionListData>> {
     return this.http.get<CohortRetentionListData>({
       path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/retention`,
       query: {
         startDate: params.startDate,
         endDate: params.endDate,
+        groupBy: params.groupBy,
       },
     });
   }
@@ -876,21 +878,22 @@ export class MetricsResource {
   }
 
   /**
-   * Cohort retention for the campaign's linked soundlink (`soundlink_cohort_retention_daily`).
+   * Cohort retention for the campaign's linked soundlink (`soundlink_cohort_retention_daily` v1.1).
    *
    * Maps to `GET /v1/campaigns/{campaignId}/metrics/retention`.
    * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
-   * One row per cohort date that has first plays. Day-N fields stay `null` until that day has passed.
+   * `groupBy: 'country'` needs API schema 1.1+ (backend SOU-7646); older APIs ignore it.
    */
   retention(
     campaignId: string,
-    params: DateRangeParams = {},
+    params: CohortRetentionParams = {},
   ): Promise<ApiResponse<CohortRetentionListData>> {
     return this.http.get<CohortRetentionListData>({
       path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/retention`,
       query: {
         startDate: params.startDate,
         endDate: params.endDate,
+        groupBy: params.groupBy,
       },
     });
   }
