@@ -129,7 +129,9 @@ export function applyTransition(
     }
     case 'disapprove_creatives': {
       campaign.partnerUploadDisapproved = true;
-      campaign.partnerUploadDisapprovalReason = reason ?? null;
+      if (reason !== undefined) {
+        campaign.partnerUploadDisapprovalReason = reason.trim() || null;
+      }
       store.updateCampaign(campaign);
       break;
     }
