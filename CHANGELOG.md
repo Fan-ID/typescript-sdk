@@ -1,5 +1,11 @@
 # soundlink
 
+## 2.16.0
+
+### Minor Changes
+
+- [#56](https://github.com/Fan-ID/typescript-sdk/pull/56) [`bcdd032`](https://github.com/Fan-ID/typescript-sdk/commit/bcdd0320b8706c5ec8e9dffebe5ebf1cca3fafdd) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add `delivery_reason` on creative metrics children: the Meta policy name when `delivery_state` is `disapproved`, otherwise `null`. The local API emulator's `disapprove_creatives` transition accepts an optional `reason` to set it.
+
 ## 2.15.0
 
 ### Minor Changes
