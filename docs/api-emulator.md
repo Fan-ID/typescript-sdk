@@ -184,14 +184,17 @@ await emu.transition(id, 'reject_meta'); // inactive, balance unchanged
 await soundlink.campaigns.stop(id, { idempotencyKey: 'stop-reject' }); // full refund
 ```
 
-**Partner-upload creative disapproval** (`delivery_state`):
+**Partner-upload creative disapproval** (`delivery_state`, `delivery_reason`):
 
 ```ts
 await emu.transition(id, 'activate');
-await emu.transition(id, 'disapprove_creatives');
+await emu.transition(id, 'disapprove_creatives', undefined, 'Spam');
 const { data } = await soundlink.metrics.creatives(id);
 // data.creatives[0].children[0].delivery_state === 'disapproved'
+// data.creatives[0].children[0].delivery_reason === 'Spam'
 ```
+
+Omit the reason to get `delivery_reason: null` while `delivery_state` stays `disapproved`. A later `disapprove_creatives` call without a reason keeps the reason already set. A blank reason (empty or only spaces) is stored as `null`, and surrounding spaces are trimmed.
 
 **Partial spend + fee**:
 

@@ -46,6 +46,7 @@ export function applyTransition(
   campaignId: string,
   action: EmulatorTransitionAction,
   mediaSpendUsd?: number,
+  reason?: string,
 ): TransitionResult {
   const campaign = store.getCampaign(campaignId);
   if (!campaign) {
@@ -128,6 +129,9 @@ export function applyTransition(
     }
     case 'disapprove_creatives': {
       campaign.partnerUploadDisapproved = true;
+      if (reason !== undefined) {
+        campaign.partnerUploadDisapprovalReason = reason.trim() || null;
+      }
       store.updateCampaign(campaign);
       break;
     }

@@ -77,6 +77,8 @@ export interface EmulatorCampaignRecord {
   overview: MetricsOverview | null;
   /** When true, creatives children report `delivery_state: disapproved`. */
   partnerUploadDisapproved: boolean;
+  /** Meta policy name reported as `delivery_reason` while disapproved. */
+  partnerUploadDisapprovalReason: string | null;
 }
 
 export interface IdempotencyRecord {
@@ -282,6 +284,7 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
         updatedAt: timestamp,
         overview: null,
         partnerUploadDisapproved: false,
+        partnerUploadDisapprovalReason: null,
       };
       campaigns.set(campaignId, record);
       return record;
@@ -445,6 +448,7 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
         cpc_linkclick: cpcLinkclick,
         frequency: 1,
         delivery_state: deliveryState,
+        delivery_reason: deliveryState ? campaign.partnerUploadDisapprovalReason : null,
       };
       return {
         creatives: [

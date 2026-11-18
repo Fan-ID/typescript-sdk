@@ -416,6 +416,12 @@ export interface CreativeMetricsChild {
    * `== null` / `?? null` over `=== null` until every environment ships it.
    */
   delivery_state?: CreativeDeliveryState | null;
+  /**
+   * Meta policy name when `delivery_state` is `disapproved`; otherwise `null`.
+   * Open list: values come from Meta and can change. Omitted by older API
+   * responses, so prefer `== null` until every environment ships it.
+   */
+  delivery_reason?: string | null;
 }
 
 export interface CreativeMetricsBatchItem {
