@@ -65,6 +65,7 @@ export interface ApiEmulator {
     campaignId: string,
     action: EmulatorTransitionAction,
     mediaSpendUsd?: number,
+    reason?: string,
   ): TransitionResult;
   /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
@@ -115,8 +116,8 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
         throw new Error('A fault is already armed.');
       }
     },
-    transition(campaignId, action, mediaSpendUsd) {
-      return applyTransition(store, campaignId, action, mediaSpendUsd);
+    transition(campaignId, action, mediaSpendUsd, reason) {
+      return applyTransition(store, campaignId, action, mediaSpendUsd, reason);
     },
     getWallet() {
       return store.getWallet();

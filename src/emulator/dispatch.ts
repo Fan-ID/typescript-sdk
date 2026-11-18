@@ -774,6 +774,10 @@ function dispatchHarness(
       body && typeof body === 'object'
         ? (body as { mediaSpendUsd?: unknown }).mediaSpendUsd
         : undefined;
+    const reason =
+      body && typeof body === 'object'
+        ? (body as { reason?: unknown }).reason
+        : undefined;
 
     if (!isTransitionAction(action)) {
       return failure(
@@ -789,6 +793,7 @@ function dispatchHarness(
         campaignId,
         action,
         typeof mediaSpendUsd === 'number' ? mediaSpendUsd : undefined,
+        typeof reason === 'string' ? reason : undefined,
       );
       return success(200, result);
     } catch (error) {

@@ -62,6 +62,83 @@ describe('emulator creative metrics', () => {
     expect(data.creatives[0]?.children[0]?.delivery_state).toBe('disapproved');
   });
 
+  it('returns delivery_reason null by default', () => {
+    const create = createCampaign('creatives-reason-default');
+    const campaignId = asCampaignCreate(envelopeData(create.json)).campaignId;
+    emu.transition(campaignId, 'activate');
+
+    const response = emu.dispatch({
+      method: 'GET',
+      path: `/v1/campaigns/${campaignId}/metrics/creatives`,
+      headers: authHeaders(),
+    });
+
+    const data = envelopeData(response.json) as CreativeMetrics;
+    expect(data.creatives[0]?.children[0]?.delivery_reason).toBeNull();
+  });
+
+  it('sets delivery_reason from disapprove_creatives', () => {
+    const create = createCampaign('creatives-reason-spam');
+    const campaignId = asCampaignCreate(envelopeData(create.json)).campaignId;
+    emu.transition(campaignId, 'activate');
+    emu.transition(campaignId, 'disapprove_creatives', undefined, 'Spam');
+
+    const response = emu.dispatch({
+      method: 'GET',
+      path: `/v1/campaigns/${campaignId}/metrics/creatives`,
+      headers: authHeaders(),
+    });
+
+    const child = (envelopeData(response.json) as CreativeMetrics).creatives[0]
+      ?.children[0];
+    expect(child?.delivery_state).toBe('disapproved');
+    expect(child?.delivery_reason).toBe('Spam');
+  });
+
+  it('keeps delivery_reason null when disapprove_creatives has no reason', () => {
+    const create = createCampaign('creatives-reason-missing');
+    const campaignId = asCampaignCreate(envelopeData(create.json)).campaignId;
+    emu.transition(campaignId, 'activate');
+    emu.transition(campaignId, 'disapprove_creatives');
+
+    const response = emu.dispatch({
+      method: 'GET',
+      path: `/v1/campaigns/${campaignId}/metrics/creatives`,
+      headers: authHeaders(),
+    });
+
+    const child = (envelopeData(response.json) as CreativeMetrics).creatives[0]
+      ?.children[0];
+    expect(child?.delivery_state).toBe('disapproved');
+    expect(child?.delivery_reason).toBeNull();
+  });
+
+  it('accepts reason on the harness transition route', () => {
+    const create = createCampaign('creatives-reason-harness');
+    const campaignId = asCampaignCreate(envelopeData(create.json)).campaignId;
+    emu.dispatch({
+      method: 'POST',
+      path: `/__emulator/campaigns/${campaignId}/transition`,
+      body: { action: 'activate' },
+    });
+
+    const transition = emu.dispatch({
+      method: 'POST',
+      path: `/__emulator/campaigns/${campaignId}/transition`,
+      body: { action: 'disapprove_creatives', reason: 'Spam' },
+    });
+    expect(transition.status).toBe(200);
+
+    const response = emu.dispatch({
+      method: 'GET',
+      path: `/v1/campaigns/${campaignId}/metrics/creatives`,
+      headers: authHeaders(),
+    });
+    const child = (envelopeData(response.json) as CreativeMetrics).creatives[0]
+      ?.children[0];
+    expect(child?.delivery_reason).toBe('Spam');
+  });
+
   it('batches creatives and omits unknown campaign ids', () => {
     const first = asCampaignCreate(
       envelopeData(createCampaign('creatives-batch-a').json),

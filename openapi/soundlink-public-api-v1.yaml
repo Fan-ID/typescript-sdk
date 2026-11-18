@@ -1280,8 +1280,8 @@ paths:
         of the same track stay separate. This is a snapshot, not a date range.
         `startDate` and `endDate` are rejected.
 
-        Children include `delivery_state` for partner-upload Meta disapproval
-        (not on parent groups). See `CreativeMetricsChild`.
+        Children include `delivery_state` and `delivery_reason` for partner-upload
+        Meta disapproval (not on parent groups). See `CreativeMetricsChild`.
 
         Spend is omitted until media spend and fees can be split. Ratios use
         the same lifetime basis as the Creatives tab.
@@ -1327,6 +1327,7 @@ paths:
                           cpc_linkclick: 0.5
                           frequency: 2
                           delivery_state: null
+                          delivery_reason: null
                         - caption: Daytime version
                           language: en
                           spotify_track_id: 11dFghVXANMlKmJXsNCbNl
@@ -1340,6 +1341,7 @@ paths:
                           cpc_linkclick: 0.25
                           frequency: 1.5
                           delivery_state: null
+                          delivery_reason: null
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -4338,6 +4340,7 @@ components:
         - cpc_linkclick
         - frequency
         - delivery_state
+        - delivery_reason
       properties:
         caption:
           type: string
@@ -4392,6 +4395,16 @@ components:
             (`user_upload`) background video and at least one linked Meta ad
             has `effective_status` DISAPPROVED. Otherwise `null` (catalog
             videos, non-disapproved ads, or status not yet synced).
+        delivery_reason:
+          type: string
+          nullable: true
+          example: Spam
+          description: |
+            Meta's policy name for the disapproval. Non-null only when
+            `delivery_state` is `disapproved`, and `null` when Meta sent no
+            review feedback. When Meta reports several policies, one is
+            returned. This is an open list: values come from Meta and can
+            change, so do not treat them as a closed enum.
 
     CreativeMetricsGroup:
       type: object
