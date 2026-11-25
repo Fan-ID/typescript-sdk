@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApiEmulator, type ApiEmulator } from '../../src/emulator/index.js';
-import type { CreativeMetrics, CreateCampaignRequest } from '../../src/types/api.js';
+import type { CreativeMetrics } from '../../src/types/api.js';
 import {
   asCampaignCreate,
   authHeaders,
@@ -13,15 +13,10 @@ import {
 const VIDEO_A = '11111111-1111-4111-8111-111111111111';
 const VIDEO_B = '22222222-2222-4222-8222-222222222222';
 
-function fullControlBody(
-  selectedCreatives: Array<Record<string, unknown>>,
-): CreateCampaignRequest {
+function fullControlBody(selectedCreatives: Array<Record<string, unknown>>) {
   return {
     ...DEFAULT_CREATE_BODY,
-    creativeDirection: {
-      type: 'full_control',
-      selectedCreatives: selectedCreatives as never,
-    },
+    creativeDirection: { type: 'full_control', selectedCreatives },
   };
 }
 

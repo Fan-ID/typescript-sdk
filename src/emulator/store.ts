@@ -173,7 +173,7 @@ function buildCreativeGroup(input: CreativeGroupInput) {
     cpc_linkclick: cpcLinkclick,
     frequency: 1,
     delivery_state: input.deliveryState,
-    delivery_reason: input.deliveryState ? input.deliveryReason : null,
+    delivery_reason: input.deliveryReason,
   };
   return {
     video_id: input.videoId,

@@ -509,12 +509,12 @@ function handleCreateCampaign(
   if (!parsed.ok) {
     return failure(parsed.status, parsed.code, parsed.message);
   }
-  const selectedCreatives = parseSelectedCreatives(parsed.value.creativeDirection);
-  if (!selectedCreatives.ok) {
+  const parsedCreatives = parseSelectedCreatives(parsed.value.creativeDirection);
+  if (!parsedCreatives.ok) {
     return failure(
-      selectedCreatives.status,
-      selectedCreatives.code,
-      selectedCreatives.message,
+      parsedCreatives.status,
+      parsedCreatives.code,
+      parsedCreatives.message,
     );
   }
 
@@ -557,7 +557,7 @@ function handleCreateCampaign(
     spotifyUrl,
     genre,
     campaignName: parsed.value.campaignName,
-    selectedCreatives: selectedCreatives.value,
+    selectedCreatives: parsedCreatives.value,
   });
 
   const responseBody = {
