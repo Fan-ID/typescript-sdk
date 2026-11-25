@@ -25,6 +25,24 @@ describe('Wallet resource', () => {
       },
     });
   });
+
+  it('lists wallet transactions', async () => {
+    const response = await soundlink.wallet.transactions({ page: 1, pageSize: 100 });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [
+          {
+            ChargeCategory: 'Purchase',
+            x_TransactionType: 'topup',
+            x_WalletAmount: 100,
+          },
+        ],
+        pagination: { totalCount: 1 },
+      },
+    });
+  });
 });
 
 describe('Pixels resource', () => {
@@ -1241,6 +1259,136 @@ describe('Soundlinks resource', () => {
       soundlink_id: 'sl_abc123',
       engagement_context: 'catalog',
       streams: 89,
+    });
+  });
+
+  it('fetches soundlink retention-weekly', async () => {
+    const response = await soundlink.soundlinks.retentionWeekly('sl_abc123');
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [{ soundlink_id: 'sl_abc123', cohort_week: '2026-08-03' }],
+      },
+    });
+  });
+
+  it('sends soundlink test events', async () => {
+    const response = await soundlink.soundlinks.sendTestEvent('sl_abc123');
+
+    expect(response).toMatchObject({
+      error: null,
+      data: { status: 'sent', soundlinkId: 'sl_abc123' },
+    });
+  });
+
+  it('streams soundlink breakdown batch export', async () => {
+    let requestBody: unknown;
+
+    server.use(
+      http.post(
+        `${BASE_URL}/v1/soundlinks/metrics/breakdown/export/batch`,
+        async ({ request }) => {
+          requestBody = await request.json();
+          const row = JSON.stringify({
+            provider: 'soundlink',
+            soundlink_id: 'sl_a',
+            country_code: 'US',
+          });
+          return new HttpResponse(`${row}\n`, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/x-ndjson',
+              'X-Row-Count': '1',
+            },
+          });
+        },
+      ),
+    );
+
+    const response = await soundlink.soundlinks.breakdown.exportBatch({
+      soundlinkIds: ['sl_a', 'sl_b'],
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+
+    expect(requestBody).toEqual({
+      soundlinkIds: ['sl_a', 'sl_b'],
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+    expect(response.error).toBeNull();
+
+    const rows: unknown[] = [];
+    if (response.data) {
+      for await (const row of response.data) {
+        rows.push(row);
+      }
+    }
+    expect(rows).toHaveLength(1);
+  });
+
+  it('collects soundlink retention batch export', async () => {
+    const response = await soundlink.soundlinks.retentionExportBatch.collect({
+      soundlinkIds: ['sl_abc123'],
+      groupBy: 'country',
+    });
+
+    expect(response.error).toBeNull();
+    expect(response.data?.rowCount).toBe(1);
+    expect(response.data?.rows[0]).toMatchObject({
+      soundlink_id: 'sl_abc123',
+      country_code: 'us',
+      schema_version: '1.1',
+    });
+  });
+});
+
+describe('Campaign batch and retention-weekly', () => {
+  let soundlink: Soundlink;
+
+  beforeEach(() => {
+    soundlink = new Soundlink({ apiKey: TEST_API_KEY, baseUrl: BASE_URL });
+  });
+
+  it('batches campaign activity', async () => {
+    const response = await soundlink.campaigns.activityBatch({
+      campaignIds: ['camp_a', 'camp_b'],
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [{ campaignId: 'camp_a' }, { campaignId: 'camp_b' }],
+      },
+    });
+  });
+
+  it('batches campaign metrics overview', async () => {
+    const response = await soundlink.metrics.overviewBatch({
+      campaignIds: ['camp_a'],
+      startDate: '2026-08-01',
+      endDate: '2026-08-31',
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [{ campaignId: 'camp_a', listeners: 20, spend_total: 100 }],
+      },
+    });
+  });
+
+  it('fetches campaign retention-weekly', async () => {
+    const response = await soundlink.metrics.retentionWeekly('camp_abc123');
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        items: [{ soundlink_id: 'sl_from_campaign', cohort_week: '2026-08-03' }],
+      },
     });
   });
 });

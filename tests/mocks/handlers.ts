@@ -47,6 +47,34 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
+  http.get(`${BASE_URL}/v1/wallet/transactions`, () => {
+    return successEnvelope({
+      items: [
+        {
+          BillingAccountId: 'org_xyz',
+          BillingCurrency: 'USD',
+          ChargeCategory: 'Purchase',
+          ChargeClass: null,
+          ChargeDescription: 'Invoice top-up',
+          ChargePeriodStart: '2026-04-01T09:00:00.000Z',
+          ChargePeriodEnd: '2026-04-01T09:00:00.001Z',
+          BilledCost: 100,
+          EffectiveCost: 100,
+          ServiceProviderName: 'Soundlink',
+          ServiceName: 'Wallet',
+          ResourceId: null,
+          ResourceName: null,
+          x_TransactionType: 'topup',
+          x_Reason: 'invoice_topup',
+          x_WalletAmount: 100,
+          x_BalanceAfter: 500,
+          x_StripeInvoiceId: 'in_123',
+        },
+      ],
+      pagination: { page: 1, pageSize: 100, totalCount: 1, totalPages: 1 },
+    });
+  }),
+
   http.get(`${BASE_URL}/v1/strategies`, () => {
     return successEnvelope({
       strategies: [
@@ -874,6 +902,173 @@ export const handlers: HttpHandler[] = [
       returning_listener_streams: 31,
       streams: 89,
       spl: 1.48,
+    });
+
+    return new HttpResponse(`${row}\n`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        'X-Row-Count': '1',
+      },
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/campaigns/activity/batch`, async ({ request }) => {
+    const body = (await request.json()) as { campaignIds: string[] };
+    return successEnvelope({
+      items: body.campaignIds.map((campaignId) => ({
+        campaignId,
+        items: [
+          {
+            event_type: 'budget_increase',
+            timestamp: '2026-04-01T12:00:00.000Z',
+            summary: 'Budget increased',
+          },
+        ],
+        pagination: { page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
+      })),
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/campaigns/metrics/overview/batch`, async ({ request }) => {
+    const body = (await request.json()) as { campaignIds: string[] };
+    return successEnvelope({
+      items: body.campaignIds.map((campaignId) => ({
+        campaignId,
+        listeners: 20,
+        total_listeners: 25,
+        streams: 60,
+        followers: 5,
+        impressions: 1000,
+        ad_clicks: 50,
+        link_clicks: 40,
+        spend_media: 80,
+        spend_total: 100,
+        fees: 20,
+        currency: 'USD',
+        cpl: 5,
+        cpf: 20,
+        streams_per_listener: 2.4,
+      })),
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/retention-weekly`, () => {
+    return successEnvelope({
+      items: [
+        {
+          soundlink_id: 'sl_from_campaign',
+          cohort_week: '2026-08-03',
+          cohort_week_timezone: 'UTC',
+          country_code: null,
+          cohort_size: 40,
+          days: [{ day: 0, active_users: 40, pct: 1, streams: 40 }],
+          weeks: [{ week: 0, active_users: 40, pct: 1, streams: 80 }],
+        },
+      ],
+    });
+  }),
+
+  http.get(`${BASE_URL}/v1/soundlinks/:soundlinkId/metrics/retention-weekly`, () => {
+    return successEnvelope({
+      items: [
+        {
+          soundlink_id: 'sl_abc123',
+          cohort_week: '2026-08-03',
+          cohort_week_timezone: 'UTC',
+          country_code: null,
+          cohort_size: 40,
+          days: [{ day: 0, active_users: 40, pct: 1, streams: 40 }],
+          weeks: [{ week: 0, active_users: 40, pct: 1, streams: 80 }],
+        },
+      ],
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/soundlinks/:soundlinkId/test-events`, ({ params }) => {
+    return successEnvelope({
+      status: 'sent',
+      soundlinkId: String(params.soundlinkId),
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/soundlinks/metrics/breakdown/export/batch`, () => {
+    const row = JSON.stringify({
+      provider: 'soundlink',
+      account_id: 'org_xyz',
+      schema_version: '1.0',
+      report_date: '2026-08-01',
+      report_date_timezone: 'UTC',
+      exported_at: '2026-08-28T03:00:00.000Z',
+      soundlink_id: 'sl_abc123',
+      soundlink_name: 'Midnight Drive',
+      soundlink_target_type: 'track',
+      soundlink_target_isrc: null,
+      soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+      soundlink_target_playlist_id: null,
+      country_code: 'US',
+      views: 10,
+      link_clicks: 5,
+      spotify_link_clicks: 5,
+      apple_music_link_clicks: 0,
+      youtube_music_link_clicks: 0,
+      streams: 8,
+      listeners: 4,
+      new_listeners: 4,
+      returning_listeners: 0,
+      new_listener_streams: 8,
+      returning_listener_streams: 0,
+      followers: 1,
+      streams_per_listener: 2,
+      ctr_lp: 0.5,
+    });
+
+    return new HttpResponse(`${row}\n`, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        'X-Row-Count': '1',
+      },
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/soundlinks/metrics/retention/export/batch`, () => {
+    const row = JSON.stringify({
+      provider: 'soundlink',
+      account_id: 'org_xyz',
+      schema_version: '1.1',
+      cohort_date: '2026-08-01',
+      cohort_date_timezone: 'UTC',
+      exported_at: '2026-08-28T03:00:00.000Z',
+      soundlink_id: 'sl_abc123',
+      soundlink_name: 'Midnight Drive',
+      soundlink_target_type: 'track',
+      soundlink_target_isrc: null,
+      soundlink_target_spotify_track_id: '11dFghVXANMlKmJXsNCbNl',
+      soundlink_target_playlist_id: null,
+      country_code: 'us',
+      cohort_size: 16,
+      returned_on_day_1: null,
+      retention_by_day_1: null,
+      streams_on_day_1: null,
+      returned_on_day_2: null,
+      retention_by_day_2: null,
+      streams_on_day_2: null,
+      returned_on_day_3: null,
+      retention_by_day_3: null,
+      streams_on_day_3: null,
+      returned_on_day_4: null,
+      retention_by_day_4: null,
+      streams_on_day_4: null,
+      returned_on_day_5: null,
+      retention_by_day_5: null,
+      streams_on_day_5: null,
+      returned_on_day_6: null,
+      retention_by_day_6: null,
+      streams_on_day_6: null,
+      returned_on_day_7: null,
+      retention_by_day_7: null,
+      streams_on_day_7: null,
     });
 
     return new HttpResponse(`${row}\n`, {

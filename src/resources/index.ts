@@ -1,5 +1,8 @@
 import type { HttpClient } from '../client/http-client.js';
-import { LISTENING_INSIGHTS_TIMEOUT_MS } from '../constants/defaults.js';
+import {
+  BATCH_EXPORT_TIMEOUT_MS,
+  LISTENING_INSIGHTS_TIMEOUT_MS,
+} from '../constants/defaults.js';
 import type { JsonlStream } from '../types/api.js';
 import { collectNdjsonStream } from '../core/jsonl.js';
 import type {
@@ -8,6 +11,8 @@ import type {
   BreakdownListData,
   BreakdownListParams,
   BreakdownRow,
+  CampaignActivityBatch,
+  CampaignActivityBatchRequest,
   CampaignActivityData,
   CampaignActivityParams,
   CampaignAutoRenewData,
@@ -15,10 +20,14 @@ import type {
   CampaignDetail,
   CampaignListData,
   CampaignListParams,
+  CampaignMetricsOverviewBatch,
+  CampaignMetricsOverviewBatchRequest,
   CampaignStopData,
   CampaignTiersData,
+  CohortRetentionDailyRow,
   CohortRetentionListData,
   CohortRetentionParams,
+  CohortRetentionWeeklyData,
   CreateCampaignRequest,
   CreateSoundlinkRequest,
   CreativeDailyData,
@@ -50,12 +59,17 @@ import type {
   SoundlinkEngagementRow,
   SoundlinkListData,
   SoundlinkListParams,
+  SoundlinkMetricsBatchExportRequest,
   SoundlinkMetricsOverview,
+  SoundlinkMetricsRetentionBatchExportRequest,
+  SoundlinkTestEventData,
   StrategiesCatalogData,
   UpdateCampaignAutoRenewRequest,
   UpdateCampaignTiersRequest,
   UpdatePixelRequest,
   WalletData,
+  WalletTransactionsData,
+  WalletTransactionsParams,
 } from '../types/api.js';
 
 /**
@@ -123,6 +137,48 @@ function createExportResource<T, P extends DateRangeParams>(
   return exportFn;
 }
 
+/** POST JSONL batch export — stream rows or use `.collect`. */
+export interface BatchExportResource<T, B> {
+  (body: B): Promise<ApiResponse<JsonlStream<T>>>;
+  collect(body: B): Promise<ApiResponse<ExportCollection<T>>>;
+}
+
+function createBatchExportResource<T, B>(
+  http: HttpClient,
+  path: string,
+  timeoutMs: number = BATCH_EXPORT_TIMEOUT_MS,
+): BatchExportResource<T, B> {
+  const exportFn = ((body: B) => {
+    return http.postJsonl<T>({
+      path,
+      body,
+      timeout: timeoutMs,
+    });
+  }) as BatchExportResource<T, B>;
+
+  exportFn.collect = async (body: B) => {
+    const response = await exportFn(body);
+
+    if (response.error || !response.data) {
+      return {
+        data: null,
+        error: response.error,
+        meta: response.meta,
+      };
+    }
+
+    const collected = await collectNdjsonStream(response.data);
+
+    return {
+      data: collected,
+      error: null,
+      meta: response.meta,
+    };
+  };
+
+  return exportFn;
+}
+
 /** System endpoints (`GET /v1/ping`). */
 export class PingResource {
   constructor(private readonly http: HttpClient) {}
@@ -160,6 +216,26 @@ export class WalletResource {
    */
   get(): Promise<ApiResponse<WalletData>> {
     return this.http.get<WalletData>({ path: '/wallet' });
+  }
+
+  /**
+   * Wallet ledger rows (FOCUS column names), oldest first.
+   *
+   * Maps to `GET /v1/wallet/transactions`. Requires `wallet:read`.
+   * Max `pageSize` is **500** (default 100).
+   */
+  transactions(
+    params: WalletTransactionsParams = {},
+  ): Promise<ApiResponse<WalletTransactionsData>> {
+    return this.http.get<WalletTransactionsData>({
+      path: '/wallet/transactions',
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: params.page,
+        pageSize: params.pageSize,
+      },
+    });
   }
 }
 
@@ -363,6 +439,21 @@ export class CampaignsResource {
   }
 
   /**
+   * Activity pages for up to 50 campaigns.
+   *
+   * Maps to `POST /v1/campaigns/activity/batch`. Requires `campaigns:read`.
+   * Unauthorized or unknown IDs are omitted from `data.items`.
+   */
+  activityBatch(
+    body: CampaignActivityBatchRequest,
+  ): Promise<ApiResponse<CampaignActivityBatch>> {
+    return this.http.post<CampaignActivityBatch>({
+      path: '/campaigns/activity/batch',
+      body,
+    });
+  }
+
+  /**
    * What listeners who connected through this campaign went on to play.
    *
    * Maps to `GET /v1/campaigns/{campaignId}/listening-insights/{insight}`.
@@ -540,9 +631,25 @@ export class SoundlinksResource {
   /** Per-day track engagement and JSONL export. */
   readonly engagement: SoundlinkEngagementMetricsResource;
 
+  /**
+   * Cohort retention JSONL for up to 50 soundlinks.
+   *
+   * Maps to `POST /v1/soundlinks/metrics/retention/export/batch`.
+   * Requires `soundlinks:read` and a premium plan. Uses a 120s timeout.
+   * Unknown, draft, or archived IDs are omitted (no error).
+   */
+  readonly retentionExportBatch: BatchExportResource<
+    CohortRetentionDailyRow,
+    SoundlinkMetricsRetentionBatchExportRequest
+  >;
+
   constructor(private readonly http: HttpClient) {
     this.breakdown = new SoundlinkBreakdownMetricsResource(http);
     this.engagement = new SoundlinkEngagementMetricsResource(http);
+    this.retentionExportBatch = createBatchExportResource(
+      http,
+      '/soundlinks/metrics/retention/export/batch',
+    );
   }
 
   /**
@@ -650,7 +757,7 @@ export class SoundlinksResource {
    * Cohort retention for a soundlink (`soundlink_cohort_retention_daily` v1.1).
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/retention`.
-   * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
+   * Requires `soundlinks:read` and a premium plan (`403 premium_plan_required` otherwise).
    * `groupBy: 'country'` needs API schema 1.1+ (backend SOU-7646); older APIs ignore it.
    */
   retention(
@@ -668,10 +775,42 @@ export class SoundlinksResource {
   }
 
   /**
+   * Weekly cohort retention for a soundlink.
+   *
+   * Maps to `GET /v1/soundlinks/{soundlinkId}/metrics/retention-weekly`.
+   * Requires `soundlinks:read` and a premium plan.
+   */
+  retentionWeekly(
+    soundlinkId: string,
+    params: CohortRetentionParams = {},
+  ): Promise<ApiResponse<CohortRetentionWeeklyData>> {
+    return this.http.get<CohortRetentionWeeklyData>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/metrics/retention-weekly`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        groupBy: params.groupBy,
+      },
+    });
+  }
+
+  /**
+   * Send test conversion events for a soundlink (Meta / TikTok pixels on the link).
+   *
+   * Maps to `POST /v1/soundlinks/{soundlinkId}/test-events`. Requires `soundlinks:write`.
+   * No body and no `Idempotency-Key`.
+   */
+  sendTestEvent(soundlinkId: string): Promise<ApiResponse<SoundlinkTestEventData>> {
+    return this.http.post<SoundlinkTestEventData>({
+      path: `/soundlinks/${encodeURIComponent(soundlinkId)}/test-events`,
+    });
+  }
+
+  /**
    * What listeners who connected through this soundlink went on to play.
    *
    * Maps to `GET /v1/soundlinks/{soundlinkId}/listening-insights/{insight}`.
-   * Requires `metrics:read` and a premium plan (`403 premium_plan_required` otherwise).
+   * Requires `soundlinks:read` and a premium plan (`403 premium_plan_required` otherwise).
    * Date window comes from the listening graph — do not send `startDate`/`endDate`.
    * Uses a 120s timeout (insights often take 30–50s).
    */
@@ -699,6 +838,18 @@ export class SoundlinkBreakdownMetricsResource {
    */
   readonly export: ExportResource<SoundlinkBreakdownRow, BreakdownExportParams>;
 
+  /**
+   * Country breakdown JSONL for up to 50 soundlinks.
+   *
+   * Maps to `POST /v1/soundlinks/metrics/breakdown/export/batch`.
+   * Requires `soundlinks:read`. Uses a 120s timeout.
+   * Unknown, draft, or archived IDs are omitted (no error).
+   */
+  readonly exportBatch: BatchExportResource<
+    SoundlinkBreakdownRow,
+    SoundlinkMetricsBatchExportRequest
+  >;
+
   constructor(private readonly http: HttpClient) {
     this.export = createExportResource<SoundlinkBreakdownRow, BreakdownExportParams>(
       http,
@@ -708,6 +859,10 @@ export class SoundlinkBreakdownMetricsResource {
         startDate: params.startDate,
         endDate: params.endDate,
       }),
+    );
+    this.exportBatch = createBatchExportResource(
+      http,
+      '/soundlinks/metrics/breakdown/export/batch',
     );
   }
 
@@ -845,6 +1000,21 @@ export class MetricsResource {
   }
 
   /**
+   * Metrics overview for up to 50 campaigns.
+   *
+   * Maps to `POST /v1/campaigns/metrics/overview/batch`. Requires `metrics:read`.
+   * Unauthorized or unknown IDs are omitted from `data.items`.
+   */
+  overviewBatch(
+    body: CampaignMetricsOverviewBatchRequest,
+  ): Promise<ApiResponse<CampaignMetricsOverviewBatch>> {
+    return this.http.post<CampaignMetricsOverviewBatch>({
+      path: '/campaigns/metrics/overview/batch',
+      body,
+    });
+  }
+
+  /**
    * Lifetime creative performance, grouped by background video.
    *
    * Maps to `GET /v1/campaigns/{campaignId}/metrics/creatives`.
@@ -904,6 +1074,26 @@ export class MetricsResource {
   ): Promise<ApiResponse<CohortRetentionListData>> {
     return this.http.get<CohortRetentionListData>({
       path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/retention`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        groupBy: params.groupBy,
+      },
+    });
+  }
+
+  /**
+   * Weekly cohort retention for the campaign's linked soundlink.
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/metrics/retention-weekly`.
+   * Requires `metrics:read` and a premium plan.
+   */
+  retentionWeekly(
+    campaignId: string,
+    params: CohortRetentionParams = {},
+  ): Promise<ApiResponse<CohortRetentionWeeklyData>> {
+    return this.http.get<CohortRetentionWeeklyData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/retention-weekly`,
       query: {
         startDate: params.startDate,
         endDate: params.endDate,

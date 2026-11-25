@@ -1180,8 +1180,7 @@ paths:
 
         Shared `page`, `pageSize`, and `startDate` apply to every authorized
         campaign. Unauthorized or unknown IDs are omitted from `data.items`
-        (not errors). Requires org feature flag `public_api_campaign_batch`
-        (404 when off).
+        (not errors).
 
         Requires the `campaigns:read` scope. Accepts API key or OAuth Bearer.
       tags: [Campaigns]
@@ -1307,7 +1306,6 @@ paths:
         up to 50 campaign IDs in one request (counts as one rate-limit unit).
 
         Unauthorized or unknown IDs are omitted from `data.items` (not errors).
-        Requires org feature flag `public_api_campaign_batch` (404 when off).
 
         Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
       tags: [Metrics]
@@ -1405,7 +1403,7 @@ paths:
         campaign IDs in one request (counts as one rate-limit unit).
 
         Unauthorized or unknown IDs are omitted from `data.items` (not errors).
-        Requires org feature flag `public_api_campaign_batch` (404 when off).
+
         `startDate` and `endDate` are rejected on the body.
 
         Requires the `metrics:read` scope. Accepts API key or OAuth Bearer.
@@ -2286,6 +2284,148 @@ paths:
         '403': { $ref: '#/components/responses/CreateSoundlinkForbidden' }
         '409': { $ref: '#/components/responses/IdempotencyKeyConflict' }
         '422': { $ref: '#/components/responses/CreateSoundlinkUnprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/metrics/breakdown/export/batch:
+    post:
+      operationId: batchExportSoundlinkMetricsBreakdown
+      summary: Batch soundlink metrics breakdown export (JSONL)
+      description: |
+        Same country-level JSONL rows as
+        `GET /v1/soundlinks/{soundlinkId}/metrics/breakdown/export`, for up to
+        **50** soundlink IDs in one request (counts as one rate-limit unit).
+
+        Each line is a `soundlink_country_daily` v1.0 row and includes
+        `soundlink_id`. Self-serve **active** soundlinks only. Unauthorized,
+        unknown, draft, or archived IDs are omitted (no error) — same idea as
+        campaign metrics batch.
+
+        **Date range:** if you omit both dates, defaults to the last **90 days**
+        ending today. Responses are capped at **90 days**.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+        Use a client timeout of at least 120 seconds.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      x-recommended-timeout-seconds: 120
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoundlinkMetricsBatchExportRequest'
+            example:
+              soundlinkIds:
+                - V1StGXR8_Z5jdHi6B-myT
+                - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              startDate: '2026-08-01'
+              endDate: '2026-08-31'
+      responses:
+        '200':
+          description: |
+            JSONL stream. Each line is a `soundlink_country_daily` v1.0 row.
+            Suggested filename:
+            `breakdown_batch_{startDate}_{endDate}.jsonl`
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            X-Row-Count:
+              schema:
+                type: integer
+              description: Total lines in the response.
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/SoundlinkCountryDailyRow'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/soundlinks/metrics/retention/export/batch:
+    post:
+      operationId: batchExportSoundlinkCohortRetention
+      summary: Batch soundlink cohort retention export (JSONL)
+      description: |
+        Same cohort retention JSONL rows as
+        `GET /v1/soundlinks/{soundlinkId}/metrics/retention` items
+        (`soundlink_cohort_retention_daily` v1.1), for up to **50** soundlink
+        IDs in one request (counts as one rate-limit unit).
+
+        Optional body `groupBy: country`. Unauthorized, unknown, draft, or
+        archived IDs are omitted.
+
+        Unlike the per-soundlink JSON endpoint, this export does not clamp
+        cohorts to each soundlink's `createdAt`.
+
+        **Date range:** default last **90 days**; capped at **90 days**.
+
+        **Plan requirement:** Label, Enterprise, committed, and self-serve plans
+        (same as per-soundlink cohort retention). Organizations on a lower plan
+        receive `403 premium_plan_required`.
+
+        Requires the `soundlinks:read` scope. Accepts API key or OAuth Bearer.
+        Use a client timeout of at least 120 seconds.
+      tags: [Soundlinks]
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      x-required-scope: soundlinks:read
+      x-premium-plan-level-min: 3
+      x-recommended-timeout-seconds: 120
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/SoundlinkMetricsBatchExportRequest'
+                - type: object
+                  properties:
+                    groupBy:
+                      type: string
+                      enum: [country]
+                      description: |
+                        Omit for the global rollup per soundlink
+                        (`country_code` is null). Pass `country` for one row
+                        per cohort date and acquisition country.
+            example:
+              soundlinkIds:
+                - V1StGXR8_Z5jdHi6B-myT
+                - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              startDate: '2026-08-01'
+              endDate: '2026-08-31'
+              groupBy: country
+      responses:
+        '200':
+          description: |
+            JSONL stream. Each line is a `soundlink_cohort_retention_daily` v1.1 row.
+            Suggested filename:
+            `retention_batch_{startDate}_{endDate}.jsonl`
+            or `..._{endDate}_by_country.jsonl` when `groupBy=country`.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            X-Row-Count:
+              schema:
+                type: integer
+              description: Total lines in the response.
+          content:
+            application/x-ndjson:
+              schema:
+                $ref: '#/components/schemas/SoundlinkCohortRetentionDailyRow'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/PremiumAnalyticsForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/RateLimited' }
         '500': { $ref: '#/components/responses/InternalError' }
 
@@ -4573,6 +4713,29 @@ components:
           $ref: '#/components/schemas/MetricsOverview'
         meta:
           $ref: '#/components/schemas/Meta'
+
+    SoundlinkMetricsBatchExportRequest:
+      type: object
+      required: [soundlinkIds]
+      properties:
+        soundlinkIds:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+          description: |
+            Soundlink IDs to export. Duplicates ignored. Max 50.
+            Use `GET /v1/soundlinks` to page the catalog, then batch export.
+        startDate:
+          type: string
+          format: date
+          description: Inclusive start (YYYY-MM-DD). Optional.
+        endDate:
+          type: string
+          format: date
+          description: Inclusive end (YYYY-MM-DD). Optional.
 
     CampaignMetricsOverviewBatchRequest:
       type: object

@@ -36,6 +36,14 @@ export interface HttpJsonlOptions extends HttpGetOptions {
   accept?: string;
 }
 
+export interface HttpPostJsonlOptions {
+  path: string;
+  body: unknown;
+  accept?: string;
+  /** Override the client timeout for this request only (milliseconds). */
+  timeout?: number;
+}
+
 export interface HttpMutationOptions {
   path: string;
   body?: unknown;
@@ -184,15 +192,47 @@ export class HttpClient {
       `${API_VERSION_PREFIX}${path}${buildQueryString(query ?? {})}`,
     );
 
+    return this.requestJsonlStream<T>(url, {
+      method: 'GET',
+      headers: {
+        ...this.buildHeaders(),
+        Accept: accept,
+      },
+    });
+  }
+
+  async postJsonl<T>({
+    path,
+    body,
+    accept = 'application/x-ndjson',
+    timeout,
+  }: HttpPostJsonlOptions): Promise<ApiResponse<JsonlStream<T>>> {
+    const url = joinUrl(this.options.baseUrl, `${API_VERSION_PREFIX}${path}`);
+
+    return this.requestJsonlStream<T>(
+      url,
+      {
+        method: 'POST',
+        headers: {
+          ...this.buildHeaders({
+            'Content-Type': 'application/json',
+            Accept: accept,
+          }),
+        },
+        body: JSON.stringify(body),
+      },
+      timeout,
+    );
+  }
+
+  private async requestJsonlStream<T>(
+    url: string,
+    init: RequestInit,
+    timeoutMs?: number,
+  ): Promise<ApiResponse<JsonlStream<T>>> {
     let response: Response;
     try {
-      response = await this.fetchWithRetry(url, {
-        method: 'GET',
-        headers: {
-          ...this.buildHeaders(),
-          Accept: accept,
-        },
-      });
+      response = await this.fetchWithRetry(url, init, timeoutMs);
     } catch (error) {
       throw toTransportError(error);
     }
