@@ -45,7 +45,7 @@ info:
     | Soundlink reads (list, detail, metrics overview/breakdown/engagement, JSONL exports) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
     | Soundlink listening insights + soundlink cohort retention (**Label / Enterprise / committed / self-serve**) | `soundlinks:read` | API key (Bearer) or OAuth Bearer |
     | Soundlink writes (create, archive, test events) | `soundlinks:write` | API key (Bearer) or OAuth Bearer |
-    | Wallet read (`GET /v1/wallet`) | `wallet:read` | API key (Bearer) or OAuth Bearer |
+    | Wallet read (`GET /v1/wallet`, `GET /v1/wallet/transactions`) | `wallet:read` | API key (Bearer) or OAuth Bearer |
 
     Per-operation scope requirements are also marked with `x-required-scope`
     (except `GET /v1/ping`, which accepts any valid credential with at least
@@ -70,7 +70,7 @@ tags:
   - name: System
     description: Connectivity and auth verification
   - name: Wallet
-    description: Organization wallet balance
+    description: Organization wallet balance and transaction history
   - name: Pixels
     description: Organization ad pixels that receive a copy of Soundlink conversion events
   - name: Campaigns
@@ -157,6 +157,176 @@ paths:
                   updatedAt: '2026-04-01T10:00:00Z'
                 meta:
                   requestId: 550e8400-e29b-41d4-a716-446655440000
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/wallet/transactions:
+    get:
+      operationId: listWalletTransactions
+      summary: List organization wallet transactions
+      description: |
+        Returns every wallet transaction of the organization on the API key,
+        oldest first, paginated. Requires `wallet:read`.
+
+        Each row is one wallet ledger entry (top-up, campaign spend, refund,
+        credit grant, or manual adjustment). Column names follow the
+        [FOCUS](https://focus.finops.org/) specification so finance tooling can
+        ingest them. The endpoint is FOCUS-aligned, not a conformant FOCUS
+        dataset: billing-period and commitment columns are not returned.
+        Columns prefixed `x_` are Soundlink extensions.
+
+        `startDate` and `endDate` are optional UTC calendar days in
+        `YYYY-MM-DD` format and both are inclusive. Omit both to return the
+        full history. There is no date-range cap.
+
+        **Reconciliation.** `x_WalletAmount` is the signed wallet movement
+        (inflow positive, outflow negative) and `x_BalanceAfter` is the wallet
+        balance right after the row. Summing `x_WalletAmount` over all pages
+        equals the net wallet movement, and `x_BalanceAfter` of the last row
+        equals `balance` from `GET /v1/wallet`. Card-paid campaign renewal
+        audit entries (a net-zero top-up and deduct pair) are not returned so
+        that sums reconcile with the balance.
+
+        **Cost sign.** `BilledCost` and `EffectiveCost` are equal for every row.
+        `Purchase` and `Adjustment` rows use `x_WalletAmount`. `Usage` and
+        `Credit` rows use `-x_WalletAmount`, so spend is positive and refunds
+        and grants are negative.
+
+        **Charge category.**
+        - `Purchase`: wallet top-ups (`wallet_topup`, `invoice_topup`,
+          `auto_recharge`, `commitment_topup`).
+        - `Credit`: grants and redeemed coupons (`groover_signup_grant`,
+          `referral_referee_grant`, `referral_referrer_grant`,
+          `coupon_redeemed`).
+        - `Usage`: campaign spend and refunds back to the wallet
+          (`campaign_allocate`, `managed_create`, `managed_renew`,
+          `campaign_topup`, `agent_tool_charge`, `campaign_stop`,
+          `campaign_end`, `campaign_budget_decrease`,
+          `campaign_topup_reversed`) and coupon issue and expiry
+          (`coupon_issued`, `coupon_expired`).
+        - `Adjustment`: manual adjustments (`admin_adjustment`,
+          `admin_reversal`) and any other reason.
+
+        `ChargeClass` is always `null` because the wallet has no closed billing
+        periods. `ChargePeriodEnd` is `ChargePeriodStart` plus one millisecond
+        because a ledger entry is an instant and FOCUS requires an exclusive end.
+
+        An organization with no ledger rows returns `items: []` and
+        `totalCount: 0`.
+      tags: [Wallet]
+      x-required-scope: wallet:read
+      security:
+        - apiKeyBearerAuth: []
+        - oauthBearer: []
+      parameters:
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Inclusive start day in UTC (`YYYY-MM-DD`). Omit to start at the first transaction.
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Inclusive end day in UTC (`YYYY-MM-DD`). Omit to include every transaction through the latest.
+        - $ref: '#/components/parameters/page'
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          description: Rows per page (max 500). A larger value returns `400 page_size_exceeded`.
+      responses:
+        '200':
+          description: Wallet transactions, oldest first
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetWalletTransactionsResponse'
+              example:
+                data:
+                  items:
+                    - BillingAccountId: 8358b5cb-38ff-435b-b1b4-0030f952d66b
+                      BillingCurrency: USD
+                      ChargeCategory: Purchase
+                      ChargeClass: null
+                      ChargeDescription: Invoice top-up
+                      ChargePeriodStart: '2026-11-18T09:12:03.000Z'
+                      ChargePeriodEnd: '2026-11-18T09:12:03.001Z'
+                      BilledCost: 13000
+                      EffectiveCost: 13000
+                      ServiceProviderName: Soundlink
+                      ServiceName: Wallet
+                      ResourceId: null
+                      ResourceName: null
+                      x_TransactionType: topup
+                      x_Reason: invoice_topup
+                      x_WalletAmount: 13000
+                      x_BalanceAfter: 13250.5
+                      x_StripeInvoiceId: in_1Q0000000000000000000000
+                    - BillingAccountId: 8358b5cb-38ff-435b-b1b4-0030f952d66b
+                      BillingCurrency: USD
+                      ChargeCategory: Usage
+                      ChargeClass: null
+                      ChargeDescription: Campaign budget allocated
+                      ChargePeriodStart: '2026-11-18T09:20:41.000Z'
+                      ChargePeriodEnd: '2026-11-18T09:20:41.001Z'
+                      BilledCost: 700
+                      EffectiveCost: 700
+                      ServiceProviderName: Soundlink
+                      ServiceName: Wallet
+                      ResourceId: f1e28d31-c358-4284-9bef-00a2334625fd
+                      ResourceName: Sleep Playlist
+                      x_TransactionType: deduct
+                      x_Reason: campaign_allocate
+                      x_WalletAmount: -700
+                      x_BalanceAfter: 12550.5
+                      x_StripeInvoiceId: null
+                  pagination:
+                    page: 1
+                    pageSize: 100
+                    totalCount: 2
+                    totalPages: 1
+                meta:
+                  requestId: 550e8400-e29b-41d4-a716-446655440000
+        '400':
+          description: |
+            Invalid query parameter (`invalid_query_parameter`: `page` or
+            `pageSize` is not a positive integer, or a date cannot be parsed),
+            `pageSize` above 500 (`page_size_exceeded`), or `endDate` before
+            `startDate` (`invalid_date_range`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_query_parameter:
+                  value:
+                    error:
+                      code: invalid_query_parameter
+                      message: 'page must be a positive integer.'
+                    meta:
+                      requestId: 550e8400-e29b-41d4-a716-446655440000
+                page_size_exceeded:
+                  value:
+                    error:
+                      code: page_size_exceeded
+                      message: 'pageSize exceeds the maximum allowed for this endpoint.'
+                    meta:
+                      requestId: 550e8400-e29b-41d4-a716-446655440000
+                invalid_date_range:
+                  value:
+                    error:
+                      code: invalid_date_range
+                      message: 'endDate must not be before startDate.'
+                    meta:
+                      requestId: 550e8400-e29b-41d4-a716-446655440000
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/RateLimited' }
@@ -3128,6 +3298,118 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    WalletTransaction:
+      type: object
+      description: |
+        One wallet ledger entry with FOCUS column names. Columns prefixed `x_`
+        are Soundlink extensions.
+      required:
+        - BillingAccountId
+        - BillingCurrency
+        - ChargeCategory
+        - ChargeClass
+        - ChargeDescription
+        - ChargePeriodStart
+        - ChargePeriodEnd
+        - BilledCost
+        - EffectiveCost
+        - ServiceProviderName
+        - ServiceName
+        - ResourceId
+        - ResourceName
+        - x_TransactionType
+        - x_Reason
+        - x_WalletAmount
+        - x_BalanceAfter
+        - x_StripeInvoiceId
+      properties:
+        BillingAccountId:
+          type: string
+          description: Organization id.
+        BillingCurrency:
+          type: string
+          enum: [USD]
+        ChargeCategory:
+          type: string
+          enum: [Usage, Purchase, Credit, Adjustment]
+          description: FOCUS charge category. `Tax` is never returned.
+        ChargeClass:
+          type: string
+          nullable: true
+          description: Always `null`. The wallet has no closed billing periods.
+        ChargeDescription:
+          type: string
+          description: Human-readable reason, for example `Invoice top-up`.
+        ChargePeriodStart:
+          type: string
+          format: date-time
+          description: When the wallet entry was recorded (UTC).
+        ChargePeriodEnd:
+          type: string
+          format: date-time
+          description: Exclusive end, one millisecond after `ChargePeriodStart`.
+        BilledCost:
+          type: number
+          description: |
+            Cost in USD. Equals `x_WalletAmount` for `Purchase` and `Adjustment`,
+            and `-x_WalletAmount` for `Usage` and `Credit` (spend positive,
+            refunds and grants negative).
+        EffectiveCost:
+          type: number
+          description: Same value as `BilledCost`.
+        ServiceProviderName:
+          type: string
+          enum: [Soundlink]
+        ServiceName:
+          type: string
+          enum: [Wallet]
+        ResourceId:
+          type: string
+          nullable: true
+          description: Campaign id (same as `campaignId` in `/v1/campaigns/{campaignId}`). `null` for rows without a campaign.
+        ResourceName:
+          type: string
+          nullable: true
+          description: Campaign name. `null` for rows without a campaign.
+        x_TransactionType:
+          type: string
+          enum: [topup, deduct, refund, admin_adjustment]
+          description: Ledger event type.
+        x_Reason:
+          type: string
+          nullable: true
+          description: Machine-readable reason, for example `invoice_topup` or `campaign_allocate`. `null` when the entry has no reason.
+        x_WalletAmount:
+          type: number
+          description: Signed wallet movement in USD. Inflow is positive and outflow is negative.
+        x_BalanceAfter:
+          type: number
+          description: Wallet balance in USD right after this entry.
+        x_StripeInvoiceId:
+          type: string
+          nullable: true
+          description: Stripe invoice id for invoice top-ups. `null` otherwise.
+
+    WalletTransactions:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WalletTransaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    GetWalletTransactionsResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          $ref: '#/components/schemas/WalletTransactions'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     # --- Pixels ---
 
     PixelPlatform:
@@ -3455,6 +3737,7 @@ components:
           renew_awaiting_charge,
           renew_failed,
           stopped,
+          archived,
         ]
 
     CampaignSummary:
@@ -3850,6 +4133,18 @@ components:
           description: |
             ID of a video previously imported into your video library. Import
             videos via the video import endpoint before referencing them here.
+        useEmbeddedVideoAudio:
+          type: boolean
+          default: true
+          description: |
+            When true (default), the video plays its own audio. When false, the
+            Spotify preview of the campaign's track is mixed in as the audio.
+        caption:
+          type: string
+          maxLength: 2048
+          description: |
+            Caption shown on the creative. Leading and trailing whitespace is
+            removed. An empty value means no caption.
 
     CustomTier:
       type: object
