@@ -137,9 +137,7 @@ function createExportResource<T, P extends DateRangeParams>(
   return exportFn;
 }
 
-/**
- * POST JSONL batch export: stream with the function or load into memory via `.collect`.
- */
+/** POST JSONL batch export — stream rows or use `.collect`. */
 export interface BatchExportResource<T, B> {
   (body: B): Promise<ApiResponse<JsonlStream<T>>>;
   collect(body: B): Promise<ApiResponse<ExportCollection<T>>>;

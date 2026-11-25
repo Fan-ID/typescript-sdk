@@ -228,7 +228,7 @@ const { data: engagement } = await soundlink.soundlinks.engagement.list('sl_abc1
 
 // JSONL: soundlinks.breakdown.export / soundlinks.engagement.export (same pattern as Metrics below)
 
-// Batch JSONL (up to 50 IDs; 120s timeout) — Melotech-scale refresh without 1 call/link
+// Batch JSONL (up to 50 IDs; 120s timeout)
 const { data: batch } = await soundlink.soundlinks.breakdown.exportBatch({
   soundlinkIds: ['sl_a', 'sl_b'],
   startDate: '2026-08-01',
