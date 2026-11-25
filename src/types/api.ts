@@ -288,9 +288,19 @@ export interface DoItForMeCreativeDirection {
   type: 'do_it_for_me';
 }
 
+/** One video creative for `full_control` campaigns. */
+export interface SelectedCreative {
+  /** ID of a video in your library or the Soundlink library. */
+  videoId: string;
+  /** When true (default), the video plays its own audio. When false, the track's Spotify preview is the audio. */
+  useEmbeddedVideoAudio?: boolean;
+  /** Caption shown on the creative. Trimmed; empty means no caption. Max 2048 characters. */
+  caption?: string;
+}
+
 export interface FullControlCreativeDirection {
   type: 'full_control';
-  selectedCreatives: Array<{ videoId: string }>;
+  selectedCreatives: SelectedCreative[];
 }
 
 export type CreativeDirection =
