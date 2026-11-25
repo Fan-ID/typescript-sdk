@@ -5,6 +5,9 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
 /** Listening insights often take 30–50s; the Public API recommends ≥120s. */
 export const LISTENING_INSIGHTS_TIMEOUT_MS = 120_000;
 
+/** Soundlink metrics batch JSONL exports; the Public API recommends ≥120s. */
+export const BATCH_EXPORT_TIMEOUT_MS = 120_000;
+
 export const DEFAULT_MAX_RETRIES = 2;
 
 export const API_KEY_PREFIX = 'sk_';

@@ -363,6 +363,50 @@ export interface WalletData {
   updatedAt: string | null;
 }
 
+/** FOCUS charge category on {@link WalletTransaction}. */
+export type WalletChargeCategory = 'Usage' | 'Purchase' | 'Credit' | 'Adjustment';
+
+/** Ledger event type on {@link WalletTransaction}. */
+export type WalletTransactionType = 'topup' | 'deduct' | 'refund' | 'admin_adjustment';
+
+/** One wallet ledger row from `GET /v1/wallet/transactions` (FOCUS column names). */
+export interface WalletTransaction {
+  BillingAccountId: string;
+  BillingCurrency: 'USD';
+  ChargeCategory: WalletChargeCategory;
+  ChargeClass: null;
+  ChargeDescription: string;
+  ChargePeriodStart: string;
+  ChargePeriodEnd: string;
+  BilledCost: number;
+  EffectiveCost: number;
+  ServiceProviderName: 'Soundlink';
+  ServiceName: 'Wallet';
+  ResourceId: string | null;
+  ResourceName: string | null;
+  x_TransactionType: WalletTransactionType;
+  x_Reason: string | null;
+  x_WalletAmount: number;
+  x_BalanceAfter: number;
+  x_StripeInvoiceId: string | null;
+}
+
+/** Page from {@link WalletResource.transactions}. */
+export interface WalletTransactionsData {
+  items: WalletTransaction[];
+  pagination: Pagination;
+}
+
+/** Query for {@link WalletResource.transactions}. Max `pageSize` is **500**. */
+export interface WalletTransactionsParams {
+  /** Inclusive UTC day (`YYYY-MM-DD`). Omit to start at the first transaction. */
+  startDate?: string;
+  /** Inclusive UTC day (`YYYY-MM-DD`). Omit to include through the latest. */
+  endDate?: string;
+  page?: number;
+  pageSize?: number;
+}
+
 /** Ad platform for an organization pixel. Only `meta` is supported today. */
 export type PixelPlatform = 'meta';
 
@@ -399,6 +443,12 @@ export interface UpdatePixelRequest {
 export interface PixelTestEventData {
   status: 'sent';
   pixelId: string;
+}
+
+/** Payload from `POST /v1/soundlinks/{soundlinkId}/test-events`. */
+export interface SoundlinkTestEventData {
+  status: 'sent';
+  soundlinkId: string;
 }
 
 /** Partner-upload Meta rejection on a creative child (`GET .../metrics/creatives`). */
@@ -441,6 +491,48 @@ export interface CreativeMetricsBatchItem {
 
 export interface CreativeMetricsBatch {
   items: CreativeMetricsBatchItem[];
+}
+
+/** Body for `POST /v1/campaigns/metrics/overview/batch` (max 50 IDs). */
+export interface CampaignMetricsOverviewBatchRequest extends DateRangeParams {
+  campaignIds: string[];
+}
+
+export interface MetricsOverviewBatchItem extends MetricsOverview {
+  campaignId: string;
+}
+
+export interface CampaignMetricsOverviewBatch {
+  items: MetricsOverviewBatchItem[];
+}
+
+/** Body for `POST /v1/campaigns/activity/batch` (max 50 IDs). */
+export interface CampaignActivityBatchRequest {
+  campaignIds: string[];
+  /** `YYYY-MM-DD` (00:00:00Z) or ISO-8601 timestamp. Applied to every campaign. */
+  startDate?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface CampaignActivityBatchItem {
+  campaignId: string;
+  items: CampaignActivityItem[];
+  pagination: Pagination;
+}
+
+export interface CampaignActivityBatch {
+  items: CampaignActivityBatchItem[];
+}
+
+/** Body for soundlink metrics batch JSONL exports (max 50 IDs). */
+export interface SoundlinkMetricsBatchExportRequest extends DateRangeParams {
+  soundlinkIds: string[];
+}
+
+/** Body for `POST /v1/soundlinks/metrics/retention/export/batch`. */
+export interface SoundlinkMetricsRetentionBatchExportRequest extends SoundlinkMetricsBatchExportRequest {
+  groupBy?: 'country';
 }
 
 /** Background-video group from `GET .../metrics/creatives`. */
@@ -1035,6 +1127,39 @@ export interface CohortRetentionListData {
   /** Present on schema 1.1+: `null` when omitted; `"country"` when grouped. */
   groupBy?: 'country' | null;
   items: CohortRetentionDailyRow[];
+}
+
+/** One cell in {@link CohortRetentionWeeklyItem.days}. */
+export interface CohortRetentionWeeklyDayCell {
+  day: number;
+  active_users: number;
+  pct: number;
+  streams: number;
+}
+
+/** One cell in {@link CohortRetentionWeeklyItem.weeks}. */
+export interface CohortRetentionWeeklyWeekCell {
+  week: number;
+  active_users: number;
+  pct: number;
+  streams: number;
+}
+
+/** One weekly cohort from `metrics/retention-weekly`. */
+export interface CohortRetentionWeeklyItem {
+  soundlink_id: string;
+  /** UTC Monday date (`YYYY-MM-DD`). */
+  cohort_week: string;
+  cohort_week_timezone: 'UTC';
+  country_code: string | null;
+  cohort_size: number;
+  days: CohortRetentionWeeklyDayCell[];
+  weeks: CohortRetentionWeeklyWeekCell[];
+}
+
+/** Payload from campaign/soundlink `metrics/retention-weekly`. */
+export interface CohortRetentionWeeklyData {
+  items: CohortRetentionWeeklyItem[];
 }
 
 /** Path param for listening-insights endpoints. */

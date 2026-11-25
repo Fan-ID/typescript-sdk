@@ -147,6 +147,8 @@ await soundlink.campaigns.stop(created.campaignId, {
 });
 
 const { data: wallet } = await soundlink.wallet.get();
+const { data: tx } = await soundlink.wallet.transactions({ pageSize: 100 });
+
 // wallet.available is balance minus reserved
 ```
 
@@ -226,14 +228,29 @@ const { data: engagement } = await soundlink.soundlinks.engagement.list('sl_abc1
 
 // JSONL: soundlinks.breakdown.export / soundlinks.engagement.export (same pattern as Metrics below)
 
+// Batch JSONL (up to 50 IDs; 120s timeout) — Melotech-scale refresh without 1 call/link
+const { data: batch } = await soundlink.soundlinks.breakdown.exportBatch({
+  soundlinkIds: ['sl_a', 'sl_b'],
+  startDate: '2026-08-01',
+  endDate: '2026-08-31',
+});
+const { data: retentionBatch } =
+  await soundlink.soundlinks.retentionExportBatch.collect({
+    soundlinkIds: ['sl_a', 'sl_b'],
+    groupBy: 'country',
+  });
+
 // Premium: cohort retention + listening insights (same as Metrics section)
 const { data: retention } = await soundlink.soundlinks.retention('sl_abc123', {
   groupBy: 'country', // optional; omit for the global rollup (requires API schema 1.1+)
 });
+const { data: retentionWeekly } =
+  await soundlink.soundlinks.retentionWeekly('sl_abc123');
 const { data: insight } = await soundlink.soundlinks.listeningInsights(
   'sl_abc123',
   'stream-split',
 );
+await soundlink.soundlinks.sendTestEvent('sl_abc123');
 ```
 
 ## Metrics
@@ -242,6 +259,16 @@ const { data: insight } = await soundlink.soundlinks.listeningInsights(
 const { data: overview } = await soundlink.metrics.overview('camp_abc123', {
   startDate: '2026-01-01',
   endDate: '2026-03-31',
+});
+
+const { data: overviewBatch } = await soundlink.metrics.overviewBatch({
+  campaignIds: ['camp_a', 'camp_b'],
+  startDate: '2026-01-01',
+  endDate: '2026-03-31',
+});
+
+const { data: activityBatch } = await soundlink.campaigns.activityBatch({
+  campaignIds: ['camp_a', 'camp_b'],
 });
 
 const { data: creatives } = await soundlink.metrics.creatives('camp_abc123');
@@ -264,6 +291,8 @@ const { data: retention } = await soundlink.metrics.retention('camp_abc123', {
   endDate: '2026-08-31',
   groupBy: 'country', // optional; omit for the global rollup
 });
+const { data: retentionWeekly } =
+  await soundlink.metrics.retentionWeekly('camp_abc123');
 
 // Listening insights — premium; SDK uses a 120s timeout (API often takes 30–50s)
 const { data: insight } = await soundlink.campaigns.listeningInsights(
