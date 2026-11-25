@@ -196,6 +196,33 @@ const { data } = await soundlink.metrics.creatives(id);
 
 Omit the reason to get `delivery_reason: null` while `delivery_state` stays `disapproved`. A later `disapprove_creatives` call without a reason keeps the reason already set. A blank reason (empty or only spaces) is stored as `null`, and surrounding spaces are trimmed.
 
+**`full_control` creatives** (`creativeDirection`):
+
+```ts
+const { data: created } = await soundlink.campaigns.create(
+  {
+    spotifyUrl: 'https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh',
+    dailyBudget: 10,
+    durationDays: 7,
+    genre: 'Pop',
+    strategyType: 'maximum_growth',
+    creativeDirection: {
+      type: 'full_control',
+      selectedCreatives: [
+        { videoId, useEmbeddedVideoAudio: false, caption: 'Hear the preview' },
+      ],
+    },
+  },
+  { idempotencyKey: 'full-control-1' },
+);
+
+const { data } = await soundlink.metrics.creatives(created!.campaignId);
+// data.creatives[0].video_id === videoId
+// data.creatives[0].children[0].caption === 'Hear the preview'
+```
+
+The emulator stores each `selectedCreatives` entry and returns one creative per `videoId`, in order. `useEmbeddedVideoAudio` defaults to `true`. A caption is trimmed, and an empty one means no caption, which the emulator reports as `''`. Campaign totals are reported on the first creative, and the other creatives report zeros, so the sum across creatives matches the overview. Per-creative delivery is not simulated. Campaigns without `full_control` keep the placeholder creative.
+
 **Partial spend + fee**:
 
 ```ts
@@ -218,6 +245,7 @@ const emu = createApiEmulator({
 | `dailyBudget` below 10          | `422 invalid_daily_budget`     |
 | Bad `durationDays`              | `422 invalid_duration_days`    |
 | Wallet too low on create        | `402 insufficient_credit`      |
+| Bad `full_control` creative     | `400 invalid_request`          |
 | Bad / missing API key           | `401 invalid_api_key`          |
 
 Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` releases the key (same key works after `activate`).

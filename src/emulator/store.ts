@@ -54,6 +54,13 @@ export interface EmulatorPixelRecord {
   isDefault: boolean;
 }
 
+/** A `full_control` creative as stored: caption trimmed, empty means no caption. */
+export interface EmulatorSelectedCreative {
+  videoId: string;
+  useEmbeddedVideoAudio: boolean;
+  caption: string;
+}
+
 export interface EmulatorCampaignRecord {
   campaignId: string;
   status: CampaignStatus;
@@ -79,6 +86,8 @@ export interface EmulatorCampaignRecord {
   partnerUploadDisapproved: boolean;
   /** Meta policy name reported as `delivery_reason` while disapproved. */
   partnerUploadDisapprovalReason: string | null;
+  /** Creatives from a `full_control` create. Empty for every other campaign. */
+  selectedCreatives: EmulatorSelectedCreative[];
 }
 
 export interface IdempotencyRecord {
@@ -112,6 +121,7 @@ export interface EmulatorStore {
     spotifyUrl: string;
     genre: string;
     campaignName?: string;
+    selectedCreatives?: EmulatorSelectedCreative[];
   }): EmulatorCampaignRecord;
   updateCampaign(campaign: EmulatorCampaignRecord): void;
   creditWallet(amount: number): void;
@@ -129,6 +139,54 @@ export interface EmulatorStore {
   toCampaignDetail(campaign: EmulatorCampaignRecord): CampaignDetail;
   buildOverview(campaign: EmulatorCampaignRecord): MetricsOverview;
   buildCreatives(campaign: EmulatorCampaignRecord): CreativeMetrics;
+}
+
+interface CreativeGroupInput {
+  videoId: string;
+  caption: string;
+  campaign: EmulatorCampaignRecord;
+  totals: MetricsOverview | null;
+  deliveryState: CreativeDeliveryState | null;
+  deliveryReason: string | null;
+}
+
+function buildCreativeGroup(input: CreativeGroupInput) {
+  const listeners = input.totals?.listeners ?? 0;
+  const followers = input.totals?.followers ?? 0;
+  const linkClicks = input.totals?.link_clicks ?? 0;
+  const spendMedia = input.totals?.spend_media ?? 0;
+  const cpl = listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0;
+  const cpf = followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0;
+  const cpcLinkclick =
+    linkClicks > 0 ? Number((spendMedia / linkClicks).toFixed(4)) : 0;
+  const child = {
+    caption: input.caption,
+    language: 'en',
+    spotify_track_id: input.campaign.trackId ?? 'emulator_track',
+    timestamp_start_ms: null,
+    timestamp_end_ms: null,
+    listeners,
+    followers,
+    link_clicks: linkClicks,
+    cpl,
+    cpf,
+    cpc_linkclick: cpcLinkclick,
+    frequency: 1,
+    delivery_state: input.deliveryState,
+    delivery_reason: input.deliveryState ? input.deliveryReason : null,
+  };
+  return {
+    video_id: input.videoId,
+    caption: input.caption,
+    listeners,
+    followers,
+    link_clicks: linkClicks,
+    cpl,
+    cpf,
+    cpc_linkclick: cpcLinkclick,
+    frequency: 1,
+    children: [child],
+  };
 }
 
 function nowIso(): string {
@@ -285,6 +343,7 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
         overview: null,
         partnerUploadDisapproved: false,
         partnerUploadDisapprovalReason: null,
+        selectedCreatives: input.selectedCreatives ?? [],
       };
       campaigns.set(campaignId, record);
       return record;
@@ -424,47 +483,40 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
 
     buildCreatives(campaign) {
       const overview = store.buildOverview(campaign);
-      const listeners = overview.listeners;
-      const followers = overview.followers;
-      const linkClicks = overview.link_clicks ?? 0;
-      const spendMedia = overview.spend_media;
-      const cpl = listeners > 0 ? Number((spendMedia / listeners).toFixed(4)) : 0;
-      const cpf = followers > 0 ? Number((spendMedia / followers).toFixed(4)) : 0;
-      const cpcLinkclick =
-        linkClicks > 0 ? Number((spendMedia / linkClicks).toFixed(4)) : 0;
       const deliveryState: CreativeDeliveryState | null =
         campaign.partnerUploadDisapproved ? 'disapproved' : null;
-      const child = {
-        caption: 'Emulator partner upload',
-        language: 'en',
-        spotify_track_id: campaign.trackId ?? 'emulator_track',
-        timestamp_start_ms: null,
-        timestamp_end_ms: null,
-        listeners,
-        followers,
-        link_clicks: linkClicks,
-        cpl,
-        cpf,
-        cpc_linkclick: cpcLinkclick,
-        frequency: 1,
-        delivery_state: deliveryState,
-        delivery_reason: deliveryState ? campaign.partnerUploadDisapprovalReason : null,
-      };
+      const deliveryReason = deliveryState
+        ? campaign.partnerUploadDisapprovalReason
+        : null;
+
+      if (campaign.selectedCreatives.length === 0) {
+        return {
+          creatives: [
+            buildCreativeGroup({
+              videoId: 'emu_partner_upload_video',
+              caption: 'Emulator partner upload',
+              campaign,
+              totals: overview,
+              deliveryState,
+              deliveryReason,
+            }),
+          ],
+        };
+      }
+
+      // Per-creative delivery is not simulated. The campaign totals are reported
+      // on the first creative so the sum across creatives matches the overview.
       return {
-        creatives: [
-          {
-            video_id: 'emu_partner_upload_video',
-            caption: child.caption,
-            listeners,
-            followers,
-            link_clicks: linkClicks,
-            cpl,
-            cpf,
-            cpc_linkclick: cpcLinkclick,
-            frequency: 1,
-            children: [child],
-          },
-        ],
+        creatives: campaign.selectedCreatives.map((creative, index) =>
+          buildCreativeGroup({
+            videoId: creative.videoId,
+            caption: creative.caption,
+            campaign,
+            totals: index === 0 ? overview : null,
+            deliveryState,
+            deliveryReason,
+          }),
+        ),
       };
     },
   };

@@ -10,6 +10,7 @@ import {
   hashPayload,
   resolveFaultResponses,
   type EmulatorFault,
+  type EmulatorSelectedCreative,
   type EmulatorStore,
   type EmulatorTransitionAction,
 } from './store.js';
@@ -170,6 +171,67 @@ type ParseCreateFailure = {
   code: string;
   message: string;
 };
+
+const SELECTED_CREATIVES_MIN = 1;
+const SELECTED_CREATIVES_MAX = 50;
+const CAPTION_MAX_LENGTH = 2048;
+
+function invalidRequest(message: string): ParseCreateFailure {
+  return { ok: false, status: 400, code: 'invalid_request', message };
+}
+
+/** Same rules and messages as the backend's `full_control` creative validation. */
+function parseSelectedCreatives(
+  creativeDirection: CreateCampaignRequest['creativeDirection'],
+): { ok: true; value: EmulatorSelectedCreative[] } | ParseCreateFailure {
+  if (creativeDirection?.type !== 'full_control') {
+    return { ok: true, value: [] };
+  }
+  const list: unknown = creativeDirection.selectedCreatives;
+  if (!Array.isArray(list) || list.length < SELECTED_CREATIVES_MIN) {
+    return invalidRequest(
+      'creativeDirection.selectedCreatives is required and must have at least one entry when creativeDirection.type is full_control.',
+    );
+  }
+  if (list.length > SELECTED_CREATIVES_MAX) {
+    return invalidRequest(
+      `creativeDirection.selectedCreatives must have at most ${String(SELECTED_CREATIVES_MAX)} entries when creativeDirection.type is full_control.`,
+    );
+  }
+
+  const value: EmulatorSelectedCreative[] = [];
+  for (const [index, item] of list.entries()) {
+    const creative = (item ?? {}) as Record<string, unknown>;
+    if (typeof creative.videoId !== 'string') {
+      return invalidRequest('videoId must be a string.');
+    }
+    if (
+      creative.useEmbeddedVideoAudio !== undefined &&
+      typeof creative.useEmbeddedVideoAudio !== 'boolean'
+    ) {
+      return invalidRequest(
+        `selectedCreatives[${String(index)}].useEmbeddedVideoAudio must be a boolean.`,
+      );
+    }
+    if (creative.caption !== undefined && typeof creative.caption !== 'string') {
+      return invalidRequest(
+        `selectedCreatives[${String(index)}].caption must be a string.`,
+      );
+    }
+    const caption = creative.caption?.trim() ?? '';
+    if (caption.length > CAPTION_MAX_LENGTH) {
+      return invalidRequest(
+        `selectedCreatives[${String(index)}].caption must be at most ${String(CAPTION_MAX_LENGTH)} characters.`,
+      );
+    }
+    value.push({
+      videoId: creative.videoId,
+      useEmbeddedVideoAudio: creative.useEmbeddedVideoAudio ?? true,
+      caption,
+    });
+  }
+  return { ok: true, value };
+}
 
 function parseCreateBody(
   body: unknown,
@@ -447,6 +509,14 @@ function handleCreateCampaign(
   if (!parsed.ok) {
     return failure(parsed.status, parsed.code, parsed.message);
   }
+  const selectedCreatives = parseSelectedCreatives(parsed.value.creativeDirection);
+  if (!selectedCreatives.ok) {
+    return failure(
+      selectedCreatives.status,
+      selectedCreatives.code,
+      selectedCreatives.message,
+    );
+  }
 
   const requestHash = hashPayload(parsed.value);
   const existing = store.getIdempotency(idem.key);
@@ -487,6 +557,7 @@ function handleCreateCampaign(
     spotifyUrl,
     genre,
     campaignName: parsed.value.campaignName,
+    selectedCreatives: selectedCreatives.value,
   });
 
   const responseBody = {
