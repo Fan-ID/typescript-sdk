@@ -1,5 +1,10 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { createApiEmulator, type ApiEmulator } from '../../src/emulator/index.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { Soundlink } from '../../src/index.js';
+import {
+  createApiEmulator,
+  type ApiEmulator,
+  type EmulatorServer,
+} from '../../src/emulator/index.js';
 import type { CreativeMetrics } from '../../src/types/api.js';
 import {
   asCampaignCreate,
@@ -181,5 +186,88 @@ describe('emulator full_control creatives', () => {
 
     expect(data.creatives).toHaveLength(1);
     expect(data.creatives[0]?.video_id).toBe('emu_partner_upload_video');
+  });
+});
+
+describe('emulator full_control creatives over HTTP', () => {
+  let httpServer: EmulatorServer | undefined;
+
+  afterEach(async () => {
+    if (httpServer) {
+      await httpServer.close();
+      httpServer = undefined;
+    }
+  });
+
+  it('stores creatives sent through the SDK client', async () => {
+    const emu = createApiEmulator({
+      apiKey: EMULATOR_API_KEY,
+      initialWalletBalance: 500,
+    });
+    httpServer = await emu.listen({ port: 0 });
+    const soundlink = new Soundlink({
+      apiKey: EMULATOR_API_KEY,
+      baseUrl: httpServer.baseUrl,
+    });
+
+    const created = await soundlink.campaigns.create(
+      {
+        ...DEFAULT_CREATE_BODY,
+        creativeDirection: {
+          type: 'full_control',
+          selectedCreatives: [
+            {
+              videoId: VIDEO_A,
+              useEmbeddedVideoAudio: false,
+              caption: '  Hear the preview  ',
+            },
+            { videoId: VIDEO_B },
+          ],
+        },
+      },
+      { idempotencyKey: 'fc-http-create' },
+    );
+    expect(created.error).toBeNull();
+    const campaignId = created.data?.campaignId;
+    if (!campaignId) {
+      throw new Error('expected campaignId');
+    }
+
+    const metrics = await soundlink.metrics.creatives(campaignId);
+
+    expect(metrics.error).toBeNull();
+    expect(metrics.data?.creatives.map((c) => c.video_id)).toEqual([VIDEO_A, VIDEO_B]);
+    expect(metrics.data?.creatives[0]?.children[0]?.caption).toBe('Hear the preview');
+    expect(metrics.data?.creatives[1]?.children[0]?.caption).toBe('');
+  });
+
+  it('returns invalid_request for a bad creative through the SDK client', async () => {
+    const emu = createApiEmulator({
+      apiKey: EMULATOR_API_KEY,
+      initialWalletBalance: 500,
+    });
+    httpServer = await emu.listen({ port: 0 });
+    const soundlink = new Soundlink({
+      apiKey: EMULATOR_API_KEY,
+      baseUrl: httpServer.baseUrl,
+    });
+
+    const rejected = await soundlink.campaigns.create(
+      {
+        ...DEFAULT_CREATE_BODY,
+        creativeDirection: {
+          type: 'full_control',
+          // @ts-expect-error the emulator must reject a non-boolean at runtime
+          selectedCreatives: [{ videoId: VIDEO_A, useEmbeddedVideoAudio: 'no' }],
+        },
+      },
+      { idempotencyKey: 'fc-http-bad' },
+    );
+
+    expect(rejected.data).toBeNull();
+    expect(rejected.error).toMatchObject({
+      code: 'invalid_request',
+      message: 'selectedCreatives[0].useEmbeddedVideoAudio must be a boolean.',
+    });
   });
 });
