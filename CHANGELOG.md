@@ -1,5 +1,13 @@
 # soundlink
 
+## 2.17.0
+
+### Minor Changes
+
+- [#59](https://github.com/Fan-ID/typescript-sdk/pull/59) [`d0bfbb7`](https://github.com/Fan-ID/typescript-sdk/commit/d0bfbb795558ac9d651de61339d49409efb6b52f) Thanks [@yijencheng](https://github.com/yijencheng)! - Add `useEmbeddedVideoAudio` and `caption` to `full_control` creatives, and make the API emulator store, validate, and report them. ([#59](https://github.com/Fan-ID/typescript-sdk/pull/59))
+
+- [#60](https://github.com/Fan-ID/typescript-sdk/pull/60) [`7b912c0`](https://github.com/Fan-ID/typescript-sdk/commit/7b912c0cb4f054b6c4a038f499ac803272f59422) Thanks [@jotanarciso](https://github.com/jotanarciso)! - Add Public API catch-up: `soundlinks.breakdown.exportBatch`, `soundlinks.retentionExportBatch`, `retentionWeekly` (campaign + soundlink), `campaigns.activityBatch`, `metrics.overviewBatch`, `wallet.transactions`, and `soundlinks.sendTestEvent`. Sync OpenAPI with backend (batch export paths). Introduce `HttpClient.postJsonl` with a 120s default for batch exports.
+
 ## 2.16.0
 
 ### Minor Changes
