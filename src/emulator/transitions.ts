@@ -1,6 +1,6 @@
 import { computeRefundGrossFromRawSpend } from './money.js';
 import {
-  emptyOverview,
+  defaultActivatedOverview,
   seedOverview,
   type EmulatorCampaignRecord,
   type EmulatorStore,
@@ -72,7 +72,10 @@ export function applyTransition(
         );
       }
       campaign.status = 'active';
-      seedOverview(campaign);
+      // Keep metrics already set with set_metrics while the campaign was creating.
+      if (!campaign.overview) {
+        seedOverview(campaign);
+      }
       store.updateCampaign(campaign);
       break;
     }
@@ -201,7 +204,7 @@ export function applyTransition(
         campaign.cycleDay = cycleDay;
       }
       if (listeners !== undefined || streams !== undefined) {
-        const overview = campaign.overview ?? emptyOverview();
+        const overview = campaign.overview ?? defaultActivatedOverview();
         if (listeners !== undefined) {
           overview.listeners = listeners;
           overview.total_listeners = Math.max(overview.total_listeners, listeners);

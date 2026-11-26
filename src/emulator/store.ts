@@ -534,8 +534,13 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   return store;
 }
 
+/** Overview a campaign starts with once it is activated. */
+export function defaultActivatedOverview(): MetricsOverview {
+  return seedOverviewAfterActivate(DEFAULT_ACTIVATE_LISTENERS);
+}
+
 export function seedOverview(campaign: EmulatorCampaignRecord): void {
-  campaign.overview = seedOverviewAfterActivate(DEFAULT_ACTIVATE_LISTENERS);
+  campaign.overview = defaultActivatedOverview();
 }
 
 export function hashPayload(value: unknown): string {

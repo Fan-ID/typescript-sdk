@@ -155,6 +155,27 @@ describe('emulator set_metrics and budget increase', () => {
       expect(overview.spend_media).toBe(40);
     });
 
+    it('keeps metrics set before activation', () => {
+      const created = emu.dispatch({
+        method: 'POST',
+        path: '/v1/campaigns',
+        headers: authHeaders('sm-preactivate'),
+        body: DEFAULT_CREATE_BODY,
+      });
+      const campaignId = asCampaignCreate(envelopeData(created.json)).campaignId;
+      harness(campaignId, { action: 'set_metrics', listeners: 300, streams: 900 });
+
+      emu.transition(campaignId, 'activate');
+
+      const overview = overviewOf(campaignId);
+      expect(overview.listeners).toBe(300);
+      expect(overview.streams).toBe(900);
+      expect(overview.total_listeners).toBeGreaterThanOrEqual(300);
+      // Fields that were not set keep the activation defaults.
+      expect(overview.followers).toBe(18);
+      expect(overview.impressions).toBe(8000);
+    });
+
     it('works through the typed emulator helper', () => {
       const campaignId = createActive('sm-helper');
 
