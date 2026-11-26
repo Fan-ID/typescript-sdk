@@ -191,7 +191,7 @@ export class PingResource {
   /**
    * Verify connectivity and API key authentication.
    *
-   * Accepts any valid v1 key scope. Does not require `campaigns:read` or `metrics:read`.
+   * Maps to `GET /v1/ping`. Accepts any valid v1 key scope. Does not require `campaigns:read` or `metrics:read`.
    *
    * @returns `{ data: { status: 'ok' }, error: null }` on success.
    *
