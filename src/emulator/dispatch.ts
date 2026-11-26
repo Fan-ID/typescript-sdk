@@ -1329,9 +1329,12 @@ function handleDecreaseBudget(
 
 const VIDEO_IMPORT_BATCH_MAX = 5;
 
+const UNSUPPORTED_VIDEO_TYPE_MESSAGE =
+  'Unsupported video content type. Use MP4 or QuickTime (.mov).';
+
 const VIDEO_ERROR_MESSAGES: Record<string, string> = {
   video_too_large: 'Video exceeds the 50 MB limit.',
-  invalid_video_content_type: 'Unsupported video content type.',
+  invalid_video_content_type: UNSUPPORTED_VIDEO_TYPE_MESSAGE,
   storage_limit_exceeded: 'Video storage limit exceeded.',
   no_videos_imported: 'No videos were imported.',
   duplicate_videos: 'All videos are already in the library.',
@@ -1367,7 +1370,7 @@ function checkVideoUrl(value: unknown): { ok: true; url: string } | VideoRejecte
       response: failure(
         400,
         'invalid_video_content_type',
-        'Unsupported video content type. Use MP4 or QuickTime (.mov).',
+        UNSUPPORTED_VIDEO_TYPE_MESSAGE,
       ),
     };
   }
