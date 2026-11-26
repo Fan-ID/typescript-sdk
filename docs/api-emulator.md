@@ -125,6 +125,7 @@ No auth. Prefer `emu.transition` / `emu.setWallet` / `emu.reset` / `emu.failNext
 | `activate`                | `creating` → `active`; seeds overview listeners         |
 | `reject_meta`             | → `inactive` **without** refund                         |
 | `set_spend`               | sets media spend (before refund)                        |
+| `set_metrics`             | sets spend, listeners, streams or cycleDay              |
 | `end`                     | → `ended` + refund                                      |
 | `disapprove_creatives`    | creatives children report `delivery_state: disapproved` |
 | `POST /__emulator/wallet` | `{ balance }` — top-up without clearing campaigns       |
@@ -137,6 +138,8 @@ Content-Type: application/json
 
 { "action": "set_spend", "mediaSpendUsd": 40 }
 ```
+
+`set_metrics` takes any of `mediaSpendUsd`, `listeners`, `streams` and `cycleDay`, and changes only the ones you send. CPL, fees and `spend_total` are recomputed from the spend and the fee rate, the same as after `set_spend`. `listeners` and `streams` are non-negative integers. `cycleDay` is an integer from `1` to `durationDays`, and a new campaign starts on day `1`. With the typed helper, pass the spend as the third argument and the rest as the fifth: `emu.transition(id, 'set_metrics', 40, undefined, { listeners: 100, streams: 250, cycleDay: 3 })`.
 
 `failNext` (or `POST /__emulator/fault` with `{ "fault" }`) accepts `timeout`, `conflict`, or `server_error`. `conflict` is one `409 idempotency_key_conflict`. `server_error` is `500 internal_error` for the call plus `maxRetries` (omit it to use the SDK default), then the next call succeeds. Pass the same `maxRetries` the client uses. `timeout` writes nothing on `listen`; in-process `dispatch` returns `hang: true` and status `408`, which is not sent on the socket. A second arm while one is pending is rejected (`failNext` throws; the HTTP route returns `400`). The fault does not change the wallet, and `reset` clears it. A missing API key is still `401` and leaves the fault armed.
 
@@ -237,6 +240,28 @@ const { data } = await soundlink.metrics.overviewBatch({ campaignIds: [id] });
 ```
 
 `PUT /v1/campaigns/:id/auto-renew` is accepted only while the campaign is `active` or `renew_failed`. Setting the stored value again is a no-op success. `POST /v1/campaigns/metrics/overview/batch` returns one overview per ID, in request order. Duplicate IDs are ignored, unknown IDs are omitted, and the request is rejected above 50 IDs. `startDate` and `endDate` are validated as `YYYY-MM-DD`, but the emulator returns lifetime totals either way, the same as the single-campaign overview.
+
+### Budget increase
+
+`POST /v1/campaigns/:id/budget/increase` follows the Public API modes and rejections, with a simplified model of the amounts:
+
+- **Days remaining** are `durationDays - cycleDay`. Set `cycleDay` with `set_metrics`.
+- **`current_cycle` and `current_and_renewals`** are rejected with `400 invalid_request` when 2 days or fewer remain, as the backend does. Otherwise they debit the wallet by `amount`, add `amount` to the committed budget, and raise `dailyBudget` by `amount / remainingDays`. A wallet that cannot cover `amount` returns `402 insufficient_credit` and stores no key.
+- **`next_renewal`** is not affected by the days-remaining rule and never debits the wallet. `amount: 0` needs `targetDailyBudget`. Without a target, the next-cycle daily budget grows by `amount / durationDays`.
+- `current_and_renewals` also sets the next-cycle daily budget to the new `dailyBudget`, or to `targetDailyBudget` when you send one. `walletNextCycleDailyBudget` in the response reports it, and is `null` for `current_cycle`.
+- Only `active` campaigns can be topped up.
+
+```ts
+await emu.transition(id, 'set_metrics', undefined, undefined, { cycleDay: 4 });
+const { data } = await soundlink.campaigns.increaseBudget(
+  id,
+  { amount: 30, mode: 'current_cycle' },
+  { idempotencyKey: 'top-up-1' },
+);
+// data.walletBalance is the wallet balance after the debit
+```
+
+Because the committed budget grows with the top-up, stopping the campaign refunds the unspent part of it.
 
 **Partial spend + fee**:
 

@@ -16,3 +16,8 @@ export function computeRefundGrossFromRawSpend(
   const grossEquivSpend = rate > 0 ? mediaSpendUsd / (1 - rate) : mediaSpendUsd;
   return Math.max(0, Number((committedUsd - grossEquivSpend).toFixed(2)));
 }
+
+/** Rounds a USD amount to cents. */
+export function roundUsd(value: number): number {
+  return Math.round(value * 100) / 100;
+}

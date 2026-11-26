@@ -17,7 +17,11 @@ import {
   type EmulatorStore,
   type EmulatorTransitionAction,
 } from './store.js';
-import { applyTransition, type TransitionResult } from './transitions.js';
+import {
+  applyTransition,
+  type SetMetricsInput,
+  type TransitionResult,
+} from './transitions.js';
 
 export type { EmulatorRequest, EmulatorResponse } from './dispatch.js';
 export type { EmulatorPlan, ResolvedEmulatorPlan } from './plans.js';
@@ -25,6 +29,7 @@ export { EMULATOR_PLAN_PRESETS } from './plans.js';
 export type { EmulatorServer, ListenOptions } from './server.js';
 export { LOOPBACK_HOST } from './server.js';
 export type { EmulatorFault, EmulatorTransitionAction } from './store.js';
+export type { SetMetricsInput } from './transitions.js';
 
 export interface CreateApiEmulatorOptions {
   /** Bearer token accepted by `/v1` (must start with `sk_`). Default: `sk_emulator_test`. */
@@ -66,6 +71,7 @@ export interface ApiEmulator {
     action: EmulatorTransitionAction,
     mediaSpendUsd?: number,
     reason?: string,
+    metrics?: SetMetricsInput,
   ): TransitionResult;
   /** Wallet snapshot (`reserved` is always `0` after settle). */
   getWallet(): WalletData;
@@ -116,8 +122,8 @@ export function createApiEmulator(options: CreateApiEmulatorOptions = {}): ApiEm
         throw new Error('A fault is already armed.');
       }
     },
-    transition(campaignId, action, mediaSpendUsd, reason) {
-      return applyTransition(store, campaignId, action, mediaSpendUsd, reason);
+    transition(campaignId, action, mediaSpendUsd, reason, metrics) {
+      return applyTransition(store, campaignId, action, mediaSpendUsd, reason, metrics);
     },
     getWallet() {
       return store.getWallet();

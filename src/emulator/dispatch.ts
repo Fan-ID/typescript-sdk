@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  BudgetIncreaseMode,
   BuiltInStrategyType,
   CreateCampaignRequest,
   Pixel,
   StrategyType,
 } from '../types/api.js';
-import { computeCommittedUsd } from './money.js';
+import { computeCommittedUsd, roundUsd } from './money.js';
 import {
   hashPayload,
   resolveFaultResponses,
@@ -14,7 +15,12 @@ import {
   type EmulatorStore,
   type EmulatorTransitionAction,
 } from './store.js';
-import { applyPublicStop, applyTransition, TransitionError } from './transitions.js';
+import {
+  applyPublicStop,
+  applyTransition,
+  TransitionError,
+  type SetMetricsInput,
+} from './transitions.js';
 
 export interface EmulatorRequest {
   method: string;
@@ -137,6 +143,7 @@ function isTransitionAction(value: unknown): value is EmulatorTransitionAction {
     value === 'activate' ||
     value === 'reject_meta' ||
     value === 'set_spend' ||
+    value === 'set_metrics' ||
     value === 'end' ||
     value === 'disapprove_creatives'
   );
@@ -497,6 +504,18 @@ export function dispatch(
   const stopCampaignId = matchPathGroup(pathname, /^\/v1\/campaigns\/([^/]+)\/stop$/);
   if (method === 'POST' && stopCampaignId) {
     return handleStopCampaign(store, decodeURIComponent(stopCampaignId), request);
+  }
+
+  const increaseBudgetCampaignId = matchPathGroup(
+    pathname,
+    /^\/v1\/campaigns\/([^/]+)\/budget\/increase$/,
+  );
+  if (method === 'POST' && increaseBudgetCampaignId) {
+    return handleIncreaseBudget(
+      store,
+      decodeURIComponent(increaseBudgetCampaignId),
+      request,
+    );
   }
 
   const autoRenewCampaignId = matchPathGroup(
@@ -927,6 +946,206 @@ function dispatchPixel(
   return failure(404, 'not_found', 'Not found.');
 }
 
+const SET_METRICS_FIELDS = [
+  'mediaSpendUsd',
+  'listeners',
+  'streams',
+  'cycleDay',
+] as const;
+
+/** Rejects fields of the wrong type so they are not silently ignored. Ranges are checked per campaign. */
+function parseSetMetricsBody(
+  body: unknown,
+): { ok: true; value: SetMetricsInput } | { ok: false; message: string } {
+  const record = (body ?? {}) as Record<string, unknown>;
+  for (const field of SET_METRICS_FIELDS) {
+    const value = record[field];
+    if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) {
+      return { ok: false, message: `${field} must be a finite number.` };
+    }
+  }
+  const value: SetMetricsInput = {};
+  if (typeof record.listeners === 'number') value.listeners = record.listeners;
+  if (typeof record.streams === 'number') value.streams = record.streams;
+  if (typeof record.cycleDay === 'number') value.cycleDay = record.cycleDay;
+  return { ok: true, value };
+}
+
+const INCREASE_MODES: readonly BudgetIncreaseMode[] = [
+  'current_cycle',
+  'next_renewal',
+  'current_and_renewals',
+];
+
+/** The backend rejects a current-cycle top-up with this many days left, or fewer. */
+const TOP_UP_MIN_BLOCKED_REMAINING_DAYS = 2;
+
+/** Days left in the current cycle, from the `cycleDay` the harness sets. */
+function remainingCycleDays(campaign: {
+  durationDays: number;
+  cycleDay: number;
+}): number {
+  return Math.max(campaign.durationDays - campaign.cycleDay, 0);
+}
+
+type ParsedIncrease =
+  | {
+      ok: true;
+      value: {
+        amount: number;
+        mode: BudgetIncreaseMode;
+        targetDailyBudget: number | undefined;
+      };
+    }
+  | { ok: false; message: string };
+
+function parseIncreaseBody(body: unknown): ParsedIncrease {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, message: 'Request body must be a JSON object.' };
+  }
+  const raw = body as Record<string, unknown>;
+
+  const mode = raw.mode ?? 'current_and_renewals';
+  if (
+    typeof mode !== 'string' ||
+    !INCREASE_MODES.includes(mode as BudgetIncreaseMode)
+  ) {
+    return {
+      ok: false,
+      message: 'mode must be current_cycle | next_renewal | current_and_renewals.',
+    };
+  }
+
+  const target = raw.targetDailyBudget;
+  if (
+    target !== undefined &&
+    (typeof target !== 'number' || !Number.isFinite(target) || target <= 0)
+  ) {
+    return { ok: false, message: 'targetDailyBudget must be a positive number.' };
+  }
+
+  const amount = raw.amount;
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount < 0) {
+    return { ok: false, message: 'amount must be a non-negative number.' };
+  }
+  const zeroAllowed = mode === 'next_renewal' && target !== undefined;
+  if (amount === 0 && !zeroAllowed) {
+    return {
+      ok: false,
+      message:
+        'amount must be positive, except mode next_renewal with targetDailyBudget.',
+    };
+  }
+
+  return {
+    ok: true,
+    value: { amount, mode: mode as BudgetIncreaseMode, targetDailyBudget: target },
+  };
+}
+
+/**
+ * `POST /v1/campaigns/:id/budget/increase`.
+ *
+ * Simplified model of the backend top-up: a current-cycle increase debits the
+ * wallet by `amount`, grows the committed budget by the same amount, and raises
+ * `dailyBudget` by `amount / remainingDays`. `next_renewal` never debits the
+ * wallet and never hits the days-remaining rule.
+ */
+function handleIncreaseBudget(
+  store: EmulatorStore,
+  campaignId: string,
+  request: EmulatorRequest,
+): EmulatorResponse {
+  const idem = readIdempotencyKey(request.headers);
+  if ('status' in idem) {
+    return idem;
+  }
+
+  const parsed = parseIncreaseBody(request.body);
+  if (!parsed.ok) {
+    return failure(400, 'invalid_request', parsed.message);
+  }
+  const { amount, mode, targetDailyBudget } = parsed.value;
+
+  const campaign = store.getCampaign(campaignId);
+  if (!campaign) {
+    return failure(404, 'campaign_not_found', 'Campaign not found.');
+  }
+
+  const requestHash = hashPayload({ campaignId, amount, mode, targetDailyBudget });
+  const existing = store.getIdempotency(idem.key);
+  if (existing) {
+    if (existing.requestHash !== requestHash) {
+      return failure(
+        409,
+        'idempotency_key_conflict',
+        'This Idempotency-Key was already used with a different request body.',
+      );
+    }
+    return success(existing.status, existing.body);
+  }
+
+  if (campaign.status !== 'active') {
+    return failure(
+      400,
+      'invalid_request',
+      `Cannot increase budget for campaign in status "${campaign.status}".`,
+    );
+  }
+
+  const appliesToCurrentCycle = mode !== 'next_renewal';
+  const remainingDays = remainingCycleDays(campaign);
+  if (appliesToCurrentCycle && remainingDays <= TOP_UP_MIN_BLOCKED_REMAINING_DAYS) {
+    return failure(
+      400,
+      'invalid_request',
+      `Campaign ${campaignId} has too few days remaining for a top-up`,
+    );
+  }
+
+  if (appliesToCurrentCycle) {
+    const wallet = store.getWallet();
+    if (wallet.available < amount) {
+      // Like create, a 402 does not store the key.
+      return failure(
+        402,
+        'insufficient_credit',
+        'Insufficient wallet balance for this campaign.',
+        { available: wallet.available, required: amount },
+      );
+    }
+    store.debitWallet(amount);
+    campaign.committedUsd = roundUsd(campaign.committedUsd + amount);
+    campaign.dailyBudget = roundUsd(campaign.dailyBudget + amount / remainingDays);
+  }
+
+  let walletNextCycleDailyBudget: number | null = null;
+  if (mode === 'next_renewal' || mode === 'current_and_renewals') {
+    if (targetDailyBudget !== undefined) {
+      walletNextCycleDailyBudget = targetDailyBudget;
+    } else if (mode === 'current_and_renewals') {
+      walletNextCycleDailyBudget = campaign.dailyBudget;
+    } else {
+      walletNextCycleDailyBudget = roundUsd(
+        (campaign.nextCycleDailyBudget ?? campaign.dailyBudget) +
+          amount / campaign.durationDays,
+      );
+    }
+    campaign.nextCycleDailyBudget = walletNextCycleDailyBudget;
+  }
+  store.updateCampaign(campaign);
+
+  const responseBody = {
+    campaignId: campaign.campaignId,
+    mode,
+    amount,
+    walletBalance: store.getWallet().balance,
+    walletNextCycleDailyBudget,
+  };
+  store.setIdempotency(idem.key, { requestHash, status: 200, body: responseBody });
+  return success(200, responseBody);
+}
+
 function isFault(value: unknown): value is EmulatorFault {
   return value === 'timeout' || value === 'conflict' || value === 'server_error';
 }
@@ -1000,8 +1219,17 @@ function dispatchHarness(
       return failure(
         400,
         'invalid_request',
-        'action must be activate | reject_meta | set_spend | end | disapprove_creatives.',
+        'action must be activate | reject_meta | set_spend | set_metrics | end | disapprove_creatives.',
       );
+    }
+
+    let metrics: SetMetricsInput | undefined;
+    if (action === 'set_metrics') {
+      const parsed = parseSetMetricsBody(body);
+      if (!parsed.ok) {
+        return failure(400, 'invalid_request', parsed.message);
+      }
+      metrics = parsed.value;
     }
 
     try {
@@ -1011,6 +1239,7 @@ function dispatchHarness(
         action,
         typeof mediaSpendUsd === 'number' ? mediaSpendUsd : undefined,
         typeof reason === 'string' ? reason : undefined,
+        metrics,
       );
       return success(200, result);
     } catch (error) {
