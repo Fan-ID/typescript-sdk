@@ -263,6 +263,16 @@ const { data } = await soundlink.campaigns.increaseBudget(
 
 Because the committed budget grows with the top-up, stopping the campaign refunds the unspent part of it.
 
+### Budget decrease
+
+`POST /v1/campaigns/:id/budget/decrease` lowers `dailyBudget` to `targetDailyBudget`. It supports `current_cycle` and `current_and_renewals` (the default); `next_renewal` is rejected, as in the Public API.
+
+- More than 3 days must remain (`durationDays - cycleDay`), or the call returns `400 invalid_request`.
+- `targetDailyBudget` must be lower than the current `dailyBudget` and at least `10`, the same minimum as create. The backend uses the enabled-ad-set minimum instead.
+- The unused part of the current cycle, `(dailyBudget - target) * remainingDays`, comes off the committed budget and is credited to the wallet. The backend applies that refund asynchronously, but the emulator applies it before it responds.
+- `current_and_renewals` also sets the next-cycle daily budget and returns it as `walletNextCycleDailyBudget`. `current_cycle` omits that field.
+- Only `active` campaigns can be lowered.
+
 **Partial spend + fee**:
 
 ```ts

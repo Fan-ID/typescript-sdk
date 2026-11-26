@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  BudgetDecreaseMode,
   BudgetIncreaseMode,
   BuiltInStrategyType,
   CreateCampaignRequest,
@@ -518,6 +519,18 @@ export function dispatch(
     );
   }
 
+  const decreaseBudgetCampaignId = matchPathGroup(
+    pathname,
+    /^\/v1\/campaigns\/([^/]+)\/budget\/decrease$/,
+  );
+  if (method === 'POST' && decreaseBudgetCampaignId) {
+    return handleDecreaseBudget(
+      store,
+      decodeURIComponent(decreaseBudgetCampaignId),
+      request,
+    );
+  }
+
   const autoRenewCampaignId = matchPathGroup(
     pathname,
     /^\/v1\/campaigns\/([^/]+)\/auto-renew$/,
@@ -977,6 +990,17 @@ const INCREASE_MODES: readonly BudgetIncreaseMode[] = [
   'current_and_renewals',
 ];
 
+const DECREASE_MODES: readonly BudgetDecreaseMode[] = [
+  'current_cycle',
+  'current_and_renewals',
+];
+
+/** A decrease needs more than this many days left in the cycle. */
+const DECREASE_MAX_BLOCKED_REMAINING_DAYS = 3;
+
+/** The emulator's create minimum stands in for the enabled-ad-set minimum gross. */
+const MIN_LOWER_DAILY_BUDGET_USD = 10;
+
 /** The backend rejects a current-cycle top-up with this many days left, or fewer. */
 const TOP_UP_MIN_BLOCKED_REMAINING_DAYS = 2;
 
@@ -1141,6 +1165,137 @@ function handleIncreaseBudget(
     amount,
     walletBalance: store.getWallet().balance,
     walletNextCycleDailyBudget,
+  };
+  store.setIdempotency(idem.key, { requestHash, status: 200, body: responseBody });
+  return success(200, responseBody);
+}
+
+type ParsedDecrease =
+  | {
+      ok: true;
+      value: { targetDailyBudget: number; mode: BudgetDecreaseMode };
+    }
+  | { ok: false; message: string };
+
+function parseDecreaseBody(body: unknown): ParsedDecrease {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return { ok: false, message: 'Request body must be a JSON object.' };
+  }
+  const raw = body as Record<string, unknown>;
+
+  const mode = raw.mode ?? 'current_and_renewals';
+  if (
+    typeof mode !== 'string' ||
+    !DECREASE_MODES.includes(mode as BudgetDecreaseMode)
+  ) {
+    return {
+      ok: false,
+      message: 'mode must be current_cycle | current_and_renewals.',
+    };
+  }
+
+  const target = raw.targetDailyBudget;
+  if (typeof target !== 'number' || !Number.isFinite(target) || target <= 0) {
+    return { ok: false, message: 'targetDailyBudget must be a positive number.' };
+  }
+
+  return {
+    ok: true,
+    value: { targetDailyBudget: target, mode: mode as BudgetDecreaseMode },
+  };
+}
+
+/**
+ * `POST /v1/campaigns/:id/budget/decrease`.
+ *
+ * Needs more than 3 days left, a target below the current daily budget and at
+ * least the minimum daily budget. The unused part of the current cycle,
+ * `(dailyBudget - target) * remainingDays`, comes off the committed budget and
+ * is credited to the wallet. The backend applies that refund asynchronously;
+ * the emulator applies it before it responds.
+ */
+function handleDecreaseBudget(
+  store: EmulatorStore,
+  campaignId: string,
+  request: EmulatorRequest,
+): EmulatorResponse {
+  const idem = readIdempotencyKey(request.headers);
+  if ('status' in idem) {
+    return idem;
+  }
+
+  const parsed = parseDecreaseBody(request.body);
+  if (!parsed.ok) {
+    return failure(400, 'invalid_request', parsed.message);
+  }
+  const { targetDailyBudget, mode } = parsed.value;
+
+  const campaign = store.getCampaign(campaignId);
+  if (!campaign) {
+    return failure(404, 'campaign_not_found', 'Campaign not found.');
+  }
+
+  const requestHash = hashPayload({ campaignId, targetDailyBudget, mode });
+  const existing = store.getIdempotency(idem.key);
+  if (existing) {
+    if (existing.requestHash !== requestHash) {
+      return failure(
+        409,
+        'idempotency_key_conflict',
+        'This Idempotency-Key was already used with a different request body.',
+      );
+    }
+    return success(existing.status, existing.body);
+  }
+
+  if (campaign.status !== 'active') {
+    return failure(
+      400,
+      'invalid_request',
+      `Cannot decrease budget for campaign in status "${campaign.status}".`,
+    );
+  }
+
+  const remainingDays = remainingCycleDays(campaign);
+  if (remainingDays <= DECREASE_MAX_BLOCKED_REMAINING_DAYS) {
+    return failure(
+      400,
+      'invalid_request',
+      `More than ${String(DECREASE_MAX_BLOCKED_REMAINING_DAYS)} days must remain in the current cycle to lower the daily budget.`,
+    );
+  }
+  if (targetDailyBudget >= campaign.dailyBudget) {
+    return failure(
+      400,
+      'invalid_request',
+      `targetDailyBudget must be lower than the current daily budget (${String(campaign.dailyBudget)}).`,
+    );
+  }
+  if (targetDailyBudget < MIN_LOWER_DAILY_BUDGET_USD) {
+    return failure(
+      400,
+      'invalid_request',
+      `targetDailyBudget must be at least ${String(MIN_LOWER_DAILY_BUDGET_USD)}.`,
+    );
+  }
+
+  const refund = roundUsd((campaign.dailyBudget - targetDailyBudget) * remainingDays);
+  store.creditWallet(refund);
+  campaign.committedUsd = roundUsd(campaign.committedUsd - refund);
+  campaign.dailyBudget = targetDailyBudget;
+  if (mode === 'current_and_renewals') {
+    campaign.nextCycleDailyBudget = targetDailyBudget;
+  }
+  store.updateCampaign(campaign);
+
+  const responseBody = {
+    campaignId: campaign.campaignId,
+    mode,
+    targetDailyBudget,
+    accepted: true,
+    ...(mode === 'current_and_renewals'
+      ? { walletNextCycleDailyBudget: targetDailyBudget }
+      : {}),
   };
   store.setIdempotency(idem.key, { requestHash, status: 200, body: responseBody });
   return success(200, responseBody);
