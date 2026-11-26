@@ -1,5 +1,13 @@
 # soundlink
 
+## 2.18.0
+
+### Minor Changes
+
+- [#63](https://github.com/Fan-ID/typescript-sdk/pull/63) [`4661c50`](https://github.com/Fan-ID/typescript-sdk/commit/4661c50ad3bb462630248894412e3a3ec3e93197) Thanks [@yijencheng](https://github.com/yijencheng)! - Add `PUT /v1/campaigns/:id/auto-renew` and `POST /v1/campaigns/metrics/overview/batch` to the API emulator.
+
+- [#65](https://github.com/Fan-ID/typescript-sdk/pull/65) [`ff1ee49`](https://github.com/Fan-ID/typescript-sdk/commit/ff1ee49b093a115a69b335f13060ec0f8d1942ff) Thanks [@yijencheng](https://github.com/yijencheng)! - Add `POST /v1/campaigns/:id/budget/increase` and a `set_metrics` harness action (`mediaSpendUsd`, `listeners`, `streams`, `cycleDay`) to the API emulator.
+
 ## 2.17.0
 
 ### Minor Changes
