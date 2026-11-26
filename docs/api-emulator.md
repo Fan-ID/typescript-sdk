@@ -318,5 +318,5 @@ Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` rel
 - `reject_meta` does not refund; public `stop` / harness `end` do.
 - Create `402` releases the key (unlike some budget-increase replay paths). Retry with a new key anyway.
 - Genre, Spotify URL shape, and `strategyType` are not validated, so a value production would reject with `422` can return `201` here.
-- Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview/creatives/creatives batch, pixels list/save/delete/test-events).
+- Only a subset of `/v1` is implemented. The operations in the Public API spec that are not emulated yet are listed in `tests/emulator/spec-coverage.test.ts`, which fails when a spec operation is neither emulated nor on that list. Any other route returns `404 not_found`.
 - Pixel test-events do not call Meta. A saved pixel returns `200` with `status: "sent"`. Send health stays `ok`. `meta_pixel_conflict` and `pixel_in_use` are not returned: one organization, and soundlinks are not stored. Custom pixels are enabled.
