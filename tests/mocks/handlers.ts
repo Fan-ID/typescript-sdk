@@ -535,6 +535,48 @@ export const handlers: HttpHandler[] = [
     });
   }),
 
+  http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/engagement`, () => {
+    return successEnvelope({
+      schemaVersion: '1.0',
+      items: [
+        {
+          provider: 'soundlink',
+          account_id: 'org_xyz',
+          schema_version: '1.0',
+          report_date: '2026-04-08',
+          report_date_timezone: 'UTC',
+          exported_at: '2026-05-22T10:12:11Z',
+          campaign_id: 'camp_abc123',
+          campaign_name: '9 To 5',
+          campaign_target_type: 'track',
+          campaign_target_isrc: 'DEXW62500272',
+          campaign_target_spotify_track_id: '2RkZ5WPkKyBf0u8vN3dNgb',
+          campaign_target_playlist_id: null,
+          status: 'ended',
+          engagement_context: 'catalog',
+          country_code: 'US',
+          engaged_track_isrc: 'DEXW62500001',
+          engaged_spotify_track_id: '4cOdK2wGLETKBW3PvgPWqT',
+          engaged_track_name: 'Till The Sunrise',
+          playlist_position: null,
+          new_listeners: 42,
+          returning_listeners: 18,
+          listeners: 60,
+          new_listener_streams: 58,
+          returning_listener_streams: 31,
+          streams: 89,
+          spl: 1.48,
+        },
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 50,
+        totalCount: 1,
+        totalPages: 1,
+      },
+    });
+  }),
+
   http.get(`${BASE_URL}/v1/campaigns/:campaignId/metrics/engagement/export`, () => {
     const body = '{"provider":"soundlink","streams":89}\n';
 
@@ -1077,6 +1119,30 @@ export const handlers: HttpHandler[] = [
         'Content-Type': 'application/x-ndjson',
         'X-Row-Count': '1',
       },
+    });
+  }),
+
+  http.post(`${BASE_URL}/v1/videos/import`, () => {
+    return HttpResponse.json(
+      {
+        data: {
+          sessionId: '3f2b8c1e-4a5d-4e6f-8a7b-9c0d1e2f3a4b',
+          status: 'processing',
+          count: 1,
+        },
+        meta: { requestId: REQUEST_ID },
+      },
+      { status: 202 },
+    );
+  }),
+
+  http.get(`${BASE_URL}/v1/videos/import/:sessionId`, ({ params }) => {
+    return successEnvelope({
+      sessionId: String(params.sessionId),
+      status: 'ready',
+      videoId: '7d6c5b4a-3210-4fed-9cba-0987654321ab',
+      counts: { total: 1, ready: 1, failed: 0 },
+      error: null,
     });
   }),
 ];

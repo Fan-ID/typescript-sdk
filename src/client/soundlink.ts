@@ -6,6 +6,7 @@ import {
   PixelsResource,
   SoundlinksResource,
   StrategiesResource,
+  VideosResource,
   WalletResource,
 } from '../resources/index.js';
 import type { SoundlinkOptions } from '../types/api.js';
@@ -54,6 +55,9 @@ export class Soundlink {
   /** Campaign metrics, breakdowns, and JSONL exports. Requires `metrics:read` scope. */
   readonly metrics: MetricsResource;
 
+  /** Video import from public MP4 or QuickTime URLs. Requires `videos:write` scope. */
+  readonly videos: VideosResource;
+
   /**
    * Create a Soundlink client.
    *
@@ -70,6 +74,7 @@ export class Soundlink {
     this.campaigns = new CampaignsResource(http);
     this.soundlinks = new SoundlinksResource(http);
     this.metrics = new MetricsResource(http);
+    this.videos = new VideosResource(http);
   }
 }
 

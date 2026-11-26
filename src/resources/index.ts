@@ -38,6 +38,8 @@ import type {
   DecreaseCampaignBudgetData,
   DecreaseCampaignBudgetRequest,
   EngagementExportParams,
+  EngagementListData,
+  EngagementListParams,
   EngagementRow,
   ExportCollection,
   IdempotencyOptions,
@@ -70,6 +72,9 @@ import type {
   WalletData,
   WalletTransactionsData,
   WalletTransactionsParams,
+  VideoImportRequest,
+  VideoImportStartData,
+  VideoImportStatusData,
 } from '../types/api.js';
 
 /**
@@ -1158,7 +1163,7 @@ export class BreakdownMetricsResource {
 /**
  * Per-track engagement metrics (`campaign_engagement_daily` schema).
  *
- * Access via `soundlink.metrics.engagement`. Only JSONL export is shipped.
+ * Access via `soundlink.metrics.engagement`.
  */
 export class EngagementMetricsResource {
   /**
@@ -1179,5 +1184,75 @@ export class EngagementMetricsResource {
         engagementContext: params.engagementContext,
       }),
     );
+  }
+
+  /**
+   * Paginated per-day, per-track engagement rows.
+   *
+   * Maps to `GET /v1/campaigns/{campaignId}/metrics/engagement`.
+   * Max `pageSize` is **500** (default 50).
+   *
+   * @param campaignId - Campaign identifier.
+   * @param params - Date range, engagement context filter, pagination, and sort.
+   */
+  list(
+    campaignId: string,
+    params: EngagementListParams = {},
+  ): Promise<ApiResponse<EngagementListData>> {
+    return this.http.get<EngagementListData>({
+      path: `/campaigns/${encodeURIComponent(campaignId)}/metrics/engagement`,
+      query: {
+        startDate: params.startDate,
+        endDate: params.endDate,
+        engagementContext: params.engagementContext,
+        page: params.page,
+        pageSize: params.pageSize,
+        sortBy: params.sortBy,
+        sortOrder: params.sortOrder,
+      },
+    });
+  }
+}
+
+/**
+ * Video import (`/v1/videos/import`). Requires `videos:write`.
+ *
+ * Access via `soundlink.videos`.
+ */
+export class VideosResource {
+  constructor(private readonly http: HttpClient) {}
+
+  /**
+   * Import one video, or a batch of up to 5, from public HTTPS MP4 or QuickTime URLs.
+   *
+   * Maps to `POST /v1/videos/import`. Returns `202` with a `sessionId` while the
+   * download is staged. Poll {@link VideosResource.importStatus} until `status`
+   * is `ready`, `partial`, or `failed`. Subject to a stricter per-credential rate
+   * limit than other routes.
+   *
+   * @example
+   * ```ts
+   * const { data } = await soundlink.videos.import({ url: 'https://cdn.example.com/promo.mp4' });
+   * ```
+   */
+  import(body: VideoImportRequest): Promise<ApiResponse<VideoImportStartData>> {
+    return this.http.post<VideoImportStartData>({
+      path: '/videos/import',
+      body,
+    });
+  }
+
+  /**
+   * Status of a video import session.
+   *
+   * Maps to `GET /v1/videos/import/{sessionId}`. Single-URL sessions include
+   * `videoId` when ready; batches (`count > 1`) include `videoIds` and `counts`.
+   *
+   * @param sessionId - Session ID returned by {@link VideosResource.import}.
+   */
+  importStatus(sessionId: string): Promise<ApiResponse<VideoImportStatusData>> {
+    return this.http.get<VideoImportStatusData>({
+      path: `/videos/import/${encodeURIComponent(sessionId)}`,
+    });
   }
 }

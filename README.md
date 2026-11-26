@@ -284,6 +284,11 @@ const { data: breakdown } = await soundlink.metrics.breakdown.list('camp_abc123'
   pageSize: 50,
 });
 
+// Per-day, per-track engagement (defaults to the last 90 days, max 90 days per request)
+const { data: engagement } = await soundlink.metrics.engagement.list('camp_abc123', {
+  engagementContext: 'catalog',
+});
+
 // Cohort retention — premium plan (`403 premium_plan_required` otherwise)
 // Requires Public API daily retention schema 1.1+ (backend SOU-7646).
 const { data: retention } = await soundlink.metrics.retention('camp_abc123', {
@@ -334,6 +339,20 @@ Engagement exports work the same way:
 const { data: stream } = await soundlink.metrics.engagement.export('camp_abc123', {
   engagementContext: 'catalog',
 });
+```
+
+## Videos (`videos:write`)
+
+Import videos from public HTTPS MP4 or QuickTime URLs, then poll the session until it settles. Send either `url` or `videos` (1 to 5), not both. Imports have a stricter per-credential rate limit than other routes.
+
+```typescript
+const { data: started } = await soundlink.videos.import({
+  url: 'https://cdn.example.com/promo.mp4',
+});
+
+const { data: session } = await soundlink.videos.importStatus(started!.sessionId);
+// status: 'processing' | 'ready' | 'partial' | 'failed'
+// single URL: session.videoId when ready. Batch: session.videoIds and session.counts.
 ```
 
 ## Configuration
@@ -445,7 +464,6 @@ await server.close();
 
 ## Roadmap
 
-- Video import helpers (`videos:write`) — when prioritized
 - Webhook helpers — when Public API webhooks ship
 
 ## Releases

@@ -83,6 +83,9 @@ export type BreakdownSortBy = 'report_date' | 'spend_total';
 /** Allowed `sortBy` values for soundlink breakdown list requests. */
 export type SoundlinkBreakdownSortBy = 'report_date' | 'country_code';
 
+/** Allowed `sortBy` values for campaign engagement list requests. */
+export type EngagementSortBy = 'report_date';
+
 /** Allowed `sortBy` values for soundlink engagement list requests. */
 export type SoundlinkEngagementSortBy = 'report_date';
 
@@ -775,6 +778,13 @@ export interface EngagementRow {
   spl: number;
 }
 
+/** Paginated campaign engagement list payload. */
+export interface EngagementListData {
+  schemaVersion: string;
+  items: EngagementRow[];
+  pagination: Pagination;
+}
+
 /** Paginated breakdown list payload. */
 export interface BreakdownListData {
   schemaVersion: string;
@@ -1047,6 +1057,23 @@ export interface SoundlinkEngagementListParams extends DateRangeParams {
   sortOrder?: SortOrder;
 }
 
+/**
+ * Query params for {@link EngagementMetricsResource.list}.
+ *
+ * Defaults to the last 90 days ending today; max **90 days** per request.
+ */
+export interface EngagementListParams extends DateRangeParams {
+  page?: number;
+  /** Default: `50`. Max: **500**. */
+  pageSize?: number;
+  /** Filter to a single engagement context. Omit to return both. */
+  engagementContext?: EngagementContext;
+  /** Default: `report_date`. */
+  sortBy?: EngagementSortBy;
+  /** Default: `asc`. */
+  sortOrder?: SortOrder;
+}
+
 /** Query params for {@link BreakdownMetricsResource.list}. */
 export interface BreakdownListParams extends DateRangeParams {
   page?: number;
@@ -1242,4 +1269,70 @@ export interface ApiEnvelopeError {
     details?: Record<string, unknown> | null;
   };
   meta: ApiMeta;
+}
+
+/** Processing state of a video import session. */
+export type VideoImportStatus = 'processing' | 'ready' | 'failed' | 'partial';
+
+/** Machine-readable reason a video import session failed. */
+export type VideoImportErrorCode =
+  | 'video_too_large'
+  | 'invalid_video_content_type'
+  | 'storage_limit_exceeded'
+  | 'no_videos_imported'
+  | 'duplicate_videos'
+  | 'import_failed';
+
+/** One video in a batch import. */
+export interface VideoImportItem {
+  /** Public HTTPS URL to an MP4 or QuickTime (`.mov`) file, max 50 MB. */
+  url: string;
+}
+
+/**
+ * Body for `POST /v1/videos/import`. Send either `url` (single) or `videos`
+ * (batch of 1 to 5), not both.
+ */
+export type VideoImportRequest =
+  | { url: string; videos?: never }
+  | { videos: VideoImportItem[]; url?: never };
+
+/** `data` of `POST /v1/videos/import`. */
+export interface VideoImportStartData {
+  /** Upload session ID. Poll it with {@link VideosResource.importStatus}. */
+  sessionId: string;
+  status: VideoImportStatus;
+  /** Number of videos accepted for import. */
+  count?: number;
+  /** Present when `status` is `ready` (new or duplicate video). */
+  videoId?: string | null;
+}
+
+/** Per-session counts for batch imports. */
+export interface VideoImportCounts {
+  /** Videos admitted in the session. */
+  total: number;
+  /** Ingested successfully. */
+  ready: number;
+  /** Ingestion failures. */
+  failed: number;
+}
+
+/** Failure detail on a `failed` video import session. */
+export interface VideoImportStatusError {
+  code: VideoImportErrorCode;
+  message: string;
+}
+
+/** `data` of `GET /v1/videos/import/{sessionId}`. */
+export interface VideoImportStatusData {
+  sessionId: string;
+  status: VideoImportStatus;
+  /** Present for single-URL sessions when ready, or failed after ingest. */
+  videoId?: string | null;
+  /** Ready video IDs for batch sessions (`count > 1`). */
+  videoIds?: string[];
+  counts?: VideoImportCounts;
+  /** Present when `status` is `failed`. */
+  error?: VideoImportStatusError | null;
 }

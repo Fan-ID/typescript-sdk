@@ -1392,3 +1392,216 @@ describe('Campaign batch and retention-weekly', () => {
     });
   });
 });
+
+describe('Campaign engagement list', () => {
+  let soundlink: Soundlink;
+
+  beforeEach(() => {
+    soundlink = new Soundlink({ apiKey: TEST_API_KEY, baseUrl: BASE_URL });
+  });
+
+  it('lists campaign engagement rows', async () => {
+    const response = await soundlink.metrics.engagement.list('camp_abc123', {
+      engagementContext: 'catalog',
+    });
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        schemaVersion: '1.0',
+        items: [
+          {
+            campaign_id: 'camp_abc123',
+            engagement_context: 'catalog',
+            engaged_spotify_track_id: '4cOdK2wGLETKBW3PvgPWqT',
+          },
+        ],
+        pagination: { totalCount: 1 },
+      },
+    });
+  });
+
+  it('sends the date range, context, paging and sort as query params', async () => {
+    let search: URLSearchParams | undefined;
+    server.use(
+      http.get(
+        `${BASE_URL}/v1/campaigns/:campaignId/metrics/engagement`,
+        ({ request }) => {
+          search = new URL(request.url).searchParams;
+          return HttpResponse.json({
+            data: {
+              schemaVersion: '1.0',
+              items: [],
+              pagination: { page: 2, pageSize: 100, totalCount: 0, totalPages: 0 },
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          });
+        },
+      ),
+    );
+
+    await soundlink.metrics.engagement.list('camp_abc123', {
+      startDate: '2026-04-01',
+      endDate: '2026-04-08',
+      engagementContext: 'playlist',
+      page: 2,
+      pageSize: 100,
+      sortBy: 'report_date',
+      sortOrder: 'desc',
+    });
+
+    expect(Object.fromEntries(search ?? [])).toEqual({
+      startDate: '2026-04-01',
+      endDate: '2026-04-08',
+      engagementContext: 'playlist',
+      page: '2',
+      pageSize: '100',
+      sortBy: 'report_date',
+      sortOrder: 'desc',
+    });
+  });
+});
+
+describe('Videos resource', () => {
+  let soundlink: Soundlink;
+
+  beforeEach(() => {
+    soundlink = new Soundlink({ apiKey: TEST_API_KEY, baseUrl: BASE_URL });
+  });
+
+  it('starts a single-URL import and returns the session', async () => {
+    let body: unknown;
+    server.use(
+      http.post(`${BASE_URL}/v1/videos/import`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(
+          {
+            data: { sessionId: 'session-1', status: 'processing', count: 1 },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 202 },
+        );
+      }),
+    );
+
+    const response = await soundlink.videos.import({
+      url: 'https://cdn.example.com/promo.mp4',
+    });
+
+    expect(body).toEqual({ url: 'https://cdn.example.com/promo.mp4' });
+    expect(response).toMatchObject({
+      error: null,
+      data: { sessionId: 'session-1', status: 'processing', count: 1 },
+    });
+  });
+
+  it('sends a batch of URLs', async () => {
+    let body: unknown;
+    server.use(
+      http.post(`${BASE_URL}/v1/videos/import`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json(
+          {
+            data: { sessionId: 'session-2', status: 'processing', count: 2 },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 202 },
+        );
+      }),
+    );
+
+    const response = await soundlink.videos.import({
+      videos: [
+        { url: 'https://cdn.example.com/a.mp4' },
+        { url: 'https://cdn.example.com/b.mov' },
+      ],
+    });
+
+    expect(body).toEqual({
+      videos: [
+        { url: 'https://cdn.example.com/a.mp4' },
+        { url: 'https://cdn.example.com/b.mov' },
+      ],
+    });
+    expect(response.data?.count).toBe(2);
+  });
+
+  it('accepts the 200 response for a video already in the library', async () => {
+    server.use(
+      http.post(`${BASE_URL}/v1/videos/import`, () =>
+        HttpResponse.json({
+          data: {
+            sessionId: 'session-3',
+            status: 'ready',
+            count: 1,
+            videoId: 'video-1',
+          },
+          meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+        }),
+      ),
+    );
+
+    const response = await soundlink.videos.import({
+      url: 'https://cdn.example.com/promo.mp4',
+    });
+
+    expect(response.data).toMatchObject({ status: 'ready', videoId: 'video-1' });
+  });
+
+  it('surfaces invalid_video_content_type', async () => {
+    server.use(
+      http.post(`${BASE_URL}/v1/videos/import`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'invalid_video_content_type',
+              message: 'Unsupported video content type.',
+            },
+            meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+
+    const response = await soundlink.videos.import({
+      url: 'https://cdn.example.com/promo.gif',
+    });
+
+    expect(response).toMatchObject({
+      data: null,
+      error: { code: 'invalid_video_content_type' },
+    });
+  });
+
+  it('reads the status of an import session', async () => {
+    const response = await soundlink.videos.importStatus('session-1');
+
+    expect(response).toMatchObject({
+      error: null,
+      data: {
+        sessionId: 'session-1',
+        status: 'ready',
+        videoId: '7d6c5b4a-3210-4fed-9cba-0987654321ab',
+        counts: { total: 1, ready: 1, failed: 0 },
+      },
+    });
+  });
+
+  it('url-encodes the session ID', async () => {
+    let path = '';
+    server.use(
+      http.get(`${BASE_URL}/v1/videos/import/:sessionId`, ({ request }) => {
+        path = new URL(request.url).pathname;
+        return HttpResponse.json({
+          data: { sessionId: 'a/b', status: 'processing' },
+          meta: { requestId: '550e8400-e29b-41d4-a716-446655440000' },
+        });
+      }),
+    );
+
+    await soundlink.videos.importStatus('a/b');
+
+    expect(path).toBe('/v1/videos/import/a%2Fb');
+  });
+});
