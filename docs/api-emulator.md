@@ -223,6 +223,21 @@ const { data } = await soundlink.metrics.creatives(created!.campaignId);
 
 The emulator stores each `selectedCreatives` entry and returns one creative per `videoId`, in order. `useEmbeddedVideoAudio` defaults to `true`. A caption is trimmed, and an empty one means no caption, which the emulator reports as `''`. Campaign totals are reported on the first creative, and the other creatives report zeros, so the sum across creatives matches the overview. Per-creative delivery is not simulated. Campaigns without `full_control` keep the placeholder creative.
 
+**Auto-renew and batch overview**:
+
+```ts
+await emu.transition(id, 'activate'); // harness, or use an existing helper
+await soundlink.campaigns.updateAutoRenew(
+  id,
+  { autoRenew: true },
+  { idempotencyKey: 'auto-renew-1' },
+);
+const { data } = await soundlink.metrics.overviewBatch({ campaignIds: [id] });
+// data.items[0].campaignId === id
+```
+
+`PUT /v1/campaigns/:id/auto-renew` is accepted only while the campaign is `active` or `renew_failed`. Setting the stored value again is a no-op success. `POST /v1/campaigns/metrics/overview/batch` returns one overview per ID, in request order. Duplicate IDs are ignored, unknown IDs are omitted, and the request is rejected above 50 IDs. `startDate` and `endDate` are validated as `YYYY-MM-DD`, but the emulator returns lifetime totals either way, the same as the single-campaign overview.
+
 **Partial spend + fee**:
 
 ```ts
@@ -237,16 +252,18 @@ const emu = createApiEmulator({
 
 ## Errors (match Public API)
 
-| Case                            | Status / code                  |
-| ------------------------------- | ------------------------------ |
-| Missing / empty Idempotency-Key | `400 invalid_request`          |
-| Idempotency-Key > 255 chars     | `400 invalid_request`          |
-| Same key, different body        | `409 idempotency_key_conflict` |
-| `dailyBudget` below 10          | `422 invalid_daily_budget`     |
-| Bad `durationDays`              | `422 invalid_duration_days`    |
-| Wallet too low on create        | `402 insufficient_credit`      |
-| Bad `full_control` creative     | `400 invalid_request`          |
-| Bad / missing API key           | `401 invalid_api_key`          |
+| Case                                | Status / code                  |
+| ----------------------------------- | ------------------------------ |
+| Missing / empty Idempotency-Key     | `400 invalid_request`          |
+| Idempotency-Key > 255 chars         | `400 invalid_request`          |
+| Same key, different body            | `409 idempotency_key_conflict` |
+| `dailyBudget` below 10              | `422 invalid_daily_budget`     |
+| Bad `durationDays`                  | `422 invalid_duration_days`    |
+| Wallet too low on create            | `402 insufficient_credit`      |
+| Bad `full_control` creative         | `400 invalid_request`          |
+| Auto-renew on a non-active campaign | `400 invalid_request`          |
+| Batch overview over 50 IDs          | `400 invalid_request`          |
+| Bad / missing API key               | `401 invalid_api_key`          |
 
 Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` releases the key (same key works after `activate`).
 

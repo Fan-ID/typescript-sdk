@@ -143,6 +143,8 @@ function isTransitionAction(value: unknown): value is EmulatorTransitionAction {
 }
 
 const CREATIVES_BATCH_MAX_IDS = 50;
+const OVERVIEW_BATCH_MAX_IDS = 50;
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const BUILT_IN_STRATEGIES: BuiltInStrategyType[] = [
   'maximum_growth',
@@ -484,6 +486,10 @@ export function dispatch(
     return success(200, { items });
   }
 
+  if (method === 'POST' && pathname === '/v1/campaigns/metrics/overview/batch') {
+    return handleOverviewBatch(store, request);
+  }
+
   if (method === 'POST' && pathname === '/v1/campaigns') {
     return handleCreateCampaign(store, request);
   }
@@ -491,6 +497,18 @@ export function dispatch(
   const stopCampaignId = matchPathGroup(pathname, /^\/v1\/campaigns\/([^/]+)\/stop$/);
   if (method === 'POST' && stopCampaignId) {
     return handleStopCampaign(store, decodeURIComponent(stopCampaignId), request);
+  }
+
+  const autoRenewCampaignId = matchPathGroup(
+    pathname,
+    /^\/v1\/campaigns\/([^/]+)\/auto-renew$/,
+  );
+  if (method === 'PUT' && autoRenewCampaignId) {
+    return handleUpdateAutoRenew(
+      store,
+      decodeURIComponent(autoRenewCampaignId),
+      request,
+    );
   }
 
   return failure(404, 'not_found', 'Not found.');
@@ -571,6 +589,134 @@ function handleCreateCampaign(
     body: responseBody,
   });
   return success(201, responseBody);
+}
+
+function isIsoDate(value: string): boolean {
+  if (!ISO_DATE_PATTERN.test(value)) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
+}
+
+/**
+ * Lifetime totals per campaign, same as `GET /metrics/overview`. The emulator
+ * does not model date windows, so `startDate` / `endDate` are validated but
+ * do not change the totals.
+ */
+function handleOverviewBatch(
+  store: EmulatorStore,
+  request: EmulatorRequest,
+): EmulatorResponse {
+  if (
+    request.body === null ||
+    typeof request.body !== 'object' ||
+    Array.isArray(request.body)
+  ) {
+    return failure(400, 'invalid_request', 'Request body must be a JSON object.');
+  }
+  const body = request.body as Record<string, unknown>;
+  const campaignIds = body.campaignIds;
+  if (!Array.isArray(campaignIds) || campaignIds.length === 0) {
+    return failure(400, 'invalid_request', 'campaignIds must be a non-empty array.');
+  }
+  if (campaignIds.length > OVERVIEW_BATCH_MAX_IDS) {
+    return failure(
+      400,
+      'invalid_request',
+      `campaignIds must contain at most ${String(OVERVIEW_BATCH_MAX_IDS)} ids.`,
+    );
+  }
+  if (
+    !campaignIds.every(
+      (id): id is string => typeof id === 'string' && id.trim().length > 0,
+    )
+  ) {
+    return failure(
+      400,
+      'invalid_request',
+      'campaignIds must contain non-empty strings.',
+    );
+  }
+  for (const field of ['startDate', 'endDate'] as const) {
+    const value = body[field];
+    if (value !== undefined && (typeof value !== 'string' || !isIsoDate(value))) {
+      return failure(400, 'invalid_request', `${field} must be a YYYY-MM-DD date.`);
+    }
+  }
+
+  const uniqueIds = [...new Set(campaignIds)];
+  const items = uniqueIds.flatMap((campaignId) => {
+    const campaign = store.getCampaign(campaignId);
+    if (!campaign) {
+      return [];
+    }
+    return [{ campaignId, ...store.buildOverview(campaign) }];
+  });
+  return success(200, { items });
+}
+
+function handleUpdateAutoRenew(
+  store: EmulatorStore,
+  campaignId: string,
+  request: EmulatorRequest,
+): EmulatorResponse {
+  const idem = readIdempotencyKey(request.headers);
+  if ('status' in idem) {
+    return idem;
+  }
+
+  const rawBody = request.body;
+  const autoRenew =
+    rawBody !== null && typeof rawBody === 'object' && !Array.isArray(rawBody)
+      ? (rawBody as Record<string, unknown>).autoRenew
+      : undefined;
+  if (typeof autoRenew !== 'boolean') {
+    return failure(400, 'invalid_request', 'autoRenew must be a boolean.');
+  }
+
+  const campaign = store.getCampaign(campaignId);
+  if (!campaign) {
+    return failure(404, 'campaign_not_found', 'Campaign not found.');
+  }
+
+  const requestHash = hashPayload({ campaignId, autoRenew });
+  const existing = store.getIdempotency(idem.key);
+  if (existing) {
+    if (existing.requestHash !== requestHash) {
+      return failure(
+        409,
+        'idempotency_key_conflict',
+        'This Idempotency-Key was already used with a different request body.',
+      );
+    }
+    return success(existing.status, existing.body);
+  }
+
+  // Wallet campaigns only (`generation: 3`). Every emulator campaign is a wallet campaign.
+  if (campaign.status !== 'active' && campaign.status !== 'renew_failed') {
+    return failure(
+      400,
+      'invalid_request',
+      `Cannot set auto-renew for campaign in status "${campaign.status}".`,
+    );
+  }
+
+  if (campaign.autoRenew !== autoRenew) {
+    campaign.autoRenew = autoRenew;
+    store.updateCampaign(campaign);
+  }
+
+  const responseBody = {
+    campaignId: campaign.campaignId,
+    autoRenew: campaign.autoRenew,
+  };
+  store.setIdempotency(idem.key, {
+    requestHash,
+    status: 200,
+    body: responseBody,
+  });
+  return success(200, responseBody);
 }
 
 function handleStopCampaign(
