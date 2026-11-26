@@ -17,6 +17,7 @@ export type EmulatorTransitionAction =
   | 'activate'
   | 'reject_meta'
   | 'set_spend'
+  | 'set_metrics'
   | 'end'
   | 'disapprove_creatives';
 
@@ -68,6 +69,13 @@ export interface EmulatorCampaignRecord {
   durationDays: number;
   committedUsd: number;
   mediaSpendUsd: number;
+  /**
+   * Day of the current cycle, 1-based. Days remaining are `durationDays - cycleDay`.
+   * Set it with the `set_metrics` harness action.
+   */
+  cycleDay: number;
+  /** Next-cycle daily budget once a budget change has set one, otherwise `null`. */
+  nextCycleDailyBudget: number | null;
   refundedAt: string | null;
   autoRenew: boolean;
   strategyType: StrategyType;
@@ -327,6 +335,8 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
         durationDays: input.durationDays,
         committedUsd,
         mediaSpendUsd: 0,
+        cycleDay: 1,
+        nextCycleDailyBudget: null,
         refundedAt: null,
         autoRenew: input.autoRenew,
         strategyType: input.strategyType,
@@ -524,8 +534,13 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   return store;
 }
 
+/** Overview a campaign starts with once it is activated. */
+export function defaultActivatedOverview(): MetricsOverview {
+  return seedOverviewAfterActivate(DEFAULT_ACTIVATE_LISTENERS);
+}
+
 export function seedOverview(campaign: EmulatorCampaignRecord): void {
-  campaign.overview = seedOverviewAfterActivate(DEFAULT_ACTIVATE_LISTENERS);
+  campaign.overview = defaultActivatedOverview();
 }
 
 export function hashPayload(value: unknown): string {
