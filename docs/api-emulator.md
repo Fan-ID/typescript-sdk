@@ -274,6 +274,14 @@ Because the committed budget grows with the top-up, stopping the campaign refund
 - The committed budget after the refund must still cover the media spend already recorded (`set_metrics` or `set_spend`), or the call returns `400 invalid_request`.
 - Only `active` campaigns can be lowered.
 
+### Video import
+
+`POST /v1/videos/import` takes either `url` or `videos` (1 to 5 items), not both. Each URL must be HTTPS and end in `.mp4` or `.mov`. A different file type returns `400 invalid_video_content_type`. A valid request returns `202` with a `sessionId` and `status: processing`.
+
+The session settles on its **first** `GET /v1/videos/import/:sessionId`, so a polling loop sees `processing` once at most before `ready`. A single URL gets `videoId`. A batch gets `videoIds` and `counts`. Importing a single URL that already imported returns `200` with `status: ready` and the same `videoId`. The emulator does not simulate the per-credential import rate limit, download size, or transcoding.
+
+To test a failure, call `POST /__emulator/videos/:sessionId/fail` before the first poll, with an optional `{ "code": "video_too_large" }`. The code defaults to `import_failed`. The next poll returns `status: failed` and an `error`.
+
 **Partial spend + fee**:
 
 ```ts

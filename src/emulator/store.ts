@@ -98,6 +98,17 @@ export interface EmulatorCampaignRecord {
   selectedCreatives: EmulatorSelectedCreative[];
 }
 
+/** A video import session. It settles on the first status poll unless the harness fails it. */
+export interface EmulatorVideoImportRecord {
+  sessionId: string;
+  status: 'processing' | 'ready' | 'failed';
+  urls: string[];
+  /** One ID per URL once the session is `ready`, empty before that. */
+  videoIds: string[];
+  /** Set by the harness when the session is failed. */
+  errorCode: string | null;
+}
+
 export interface IdempotencyRecord {
   requestHash: string;
   status: number;
@@ -137,6 +148,11 @@ export interface EmulatorStore {
   getIdempotency(key: string): IdempotencyRecord | undefined;
   setIdempotency(key: string, record: IdempotencyRecord): void;
   deleteIdempotency(key: string): void;
+  createVideoImport(urls: string[], videoIds?: string[]): EmulatorVideoImportRecord;
+  getVideoImport(sessionId: string): EmulatorVideoImportRecord | undefined;
+  /** Video ID of a URL that already imported, so a repeat import is a duplicate. */
+  findImportedVideo(url: string): string | undefined;
+  rememberImportedVideo(url: string, videoId: string): void;
   armFault(fault: EmulatorFault, responses?: number): boolean;
   takeFault(): EmulatorFault | null;
   listPixels(): EmulatorPixelRecord[];
@@ -277,6 +293,8 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
   let updatedAt: string | null = nowIso();
   const campaigns = new Map<string, EmulatorCampaignRecord>();
   const idempotency = new Map<string, IdempotencyRecord>();
+  const videoImports = new Map<string, EmulatorVideoImportRecord>();
+  const importedVideos = new Map<string, string>();
   const pixels = new Map<string, EmulatorPixelRecord>();
   let pendingFault: EmulatorFault | null = null;
   let faultRemaining = 0;
@@ -293,6 +311,8 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
       campaigns.clear();
       idempotency.clear();
       pixels.clear();
+      videoImports.clear();
+      importedVideos.clear();
       pendingFault = null;
       faultRemaining = 0;
     },
@@ -391,6 +411,30 @@ export function createEmulatorStore(options: EmulatorStoreOptions): EmulatorStor
 
     deleteIdempotency(key: string) {
       idempotency.delete(key);
+    },
+
+    createVideoImport(urls, videoIds = []) {
+      const record: EmulatorVideoImportRecord = {
+        sessionId: randomUUID(),
+        status: videoIds.length > 0 ? 'ready' : 'processing',
+        urls,
+        videoIds,
+        errorCode: null,
+      };
+      videoImports.set(record.sessionId, record);
+      return record;
+    },
+
+    getVideoImport(sessionId) {
+      return videoImports.get(sessionId);
+    },
+
+    findImportedVideo(url) {
+      return importedVideos.get(url);
+    },
+
+    rememberImportedVideo(url, videoId) {
+      importedVideos.set(url, videoId);
     },
 
     armFault(fault, responses) {

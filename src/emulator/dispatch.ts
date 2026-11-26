@@ -15,6 +15,7 @@ import {
   type EmulatorSelectedCreative,
   type EmulatorStore,
   type EmulatorTransitionAction,
+  type EmulatorVideoImportRecord,
 } from './store.js';
 import {
   applyPublicStop,
@@ -492,6 +493,18 @@ export function dispatch(
       ];
     });
     return success(200, { items });
+  }
+
+  if (method === 'POST' && pathname === '/v1/videos/import') {
+    return handleVideoImport(store, request.body);
+  }
+
+  const videoImportSessionId = matchPathGroup(
+    pathname,
+    /^\/v1\/videos\/import\/([^/]+)$/,
+  );
+  if (method === 'GET' && videoImportSessionId) {
+    return handleVideoImportStatus(store, decodeURIComponent(videoImportSessionId));
   }
 
   if (method === 'POST' && pathname === '/v1/campaigns/metrics/overview/batch') {
@@ -1314,6 +1327,218 @@ function handleDecreaseBudget(
   return success(200, responseBody);
 }
 
+const VIDEO_IMPORT_BATCH_MAX = 5;
+
+const VIDEO_ERROR_MESSAGES: Record<string, string> = {
+  video_too_large: 'Video exceeds the 50 MB limit.',
+  invalid_video_content_type: 'Unsupported video content type.',
+  storage_limit_exceeded: 'Video storage limit exceeded.',
+  no_videos_imported: 'No videos were imported.',
+  duplicate_videos: 'All videos are already in the library.',
+  import_failed: 'Video import failed.',
+};
+
+const VIDEO_IMPORT_ERROR_CODES = Object.keys(VIDEO_ERROR_MESSAGES);
+
+type VideoRejected = { ok: false; response: EmulatorResponse };
+type ParsedVideoImport = { ok: true; urls: string[] } | VideoRejected;
+
+function invalidVideoInput(message: string): VideoRejected {
+  return { ok: false, response: failure(400, 'invalid_request', message) };
+}
+
+function checkVideoUrl(value: unknown): { ok: true; url: string } | VideoRejected {
+  if (typeof value !== 'string' || value.length === 0) {
+    return invalidVideoInput('url must be a non-empty string.');
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return invalidVideoInput('url must be a valid public HTTPS URL.');
+  }
+  if (parsed.protocol !== 'https:') {
+    return invalidVideoInput('url must be a public HTTPS URL.');
+  }
+  const path = parsed.pathname.toLowerCase();
+  if (!path.endsWith('.mp4') && !path.endsWith('.mov')) {
+    return {
+      ok: false,
+      response: failure(
+        400,
+        'invalid_video_content_type',
+        'Unsupported video content type. Use MP4 or QuickTime (.mov).',
+      ),
+    };
+  }
+  return { ok: true, url: value };
+}
+
+function parseVideoImportBody(body: unknown): ParsedVideoImport {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    return invalidVideoInput('Request body must be a JSON object.');
+  }
+  const raw = body as Record<string, unknown>;
+  if (raw.url !== undefined && raw.videos !== undefined) {
+    return invalidVideoInput('Provide either url or videos, not both.');
+  }
+  if (raw.url === undefined && raw.videos === undefined) {
+    return invalidVideoInput('Provide either url or videos.');
+  }
+
+  const candidates: unknown[] = [];
+  if (raw.url !== undefined) {
+    candidates.push(raw.url);
+  } else {
+    const videos = raw.videos;
+    if (
+      !Array.isArray(videos) ||
+      videos.length < 1 ||
+      videos.length > VIDEO_IMPORT_BATCH_MAX
+    ) {
+      return invalidVideoInput(
+        `videos must have between 1 and ${String(VIDEO_IMPORT_BATCH_MAX)} items.`,
+      );
+    }
+    for (const item of videos) {
+      if (item === null || typeof item !== 'object') {
+        return invalidVideoInput('Each videos item must be an object with a url.');
+      }
+      candidates.push((item as Record<string, unknown>).url);
+    }
+  }
+
+  const urls: string[] = [];
+  for (const candidate of candidates) {
+    const checked = checkVideoUrl(candidate);
+    if (!checked.ok) {
+      return checked;
+    }
+    urls.push(checked.url);
+  }
+  return { ok: true, urls };
+}
+
+/**
+ * `POST /v1/videos/import`. The session settles on its first status poll.
+ * A single URL that already imported returns `200` with the existing video.
+ */
+function handleVideoImport(store: EmulatorStore, body: unknown): EmulatorResponse {
+  const parsed = parseVideoImportBody(body);
+  if (!parsed.ok) {
+    return parsed.response;
+  }
+  const { urls } = parsed;
+
+  const [onlyUrl] = urls;
+  const existingVideoId =
+    urls.length === 1 && onlyUrl ? store.findImportedVideo(onlyUrl) : undefined;
+  if (existingVideoId) {
+    const session = store.createVideoImport(urls, [existingVideoId]);
+    return success(200, {
+      sessionId: session.sessionId,
+      status: 'ready',
+      count: 1,
+      videoId: existingVideoId,
+    });
+  }
+
+  const session = store.createVideoImport(urls);
+  return success(202, {
+    sessionId: session.sessionId,
+    status: 'processing',
+    count: urls.length,
+  });
+}
+
+function settleVideoImport(
+  store: EmulatorStore,
+  session: EmulatorVideoImportRecord,
+): void {
+  if (session.status !== 'processing') {
+    return;
+  }
+  session.status = 'ready';
+  session.videoIds = session.urls.map((url) => {
+    const videoId = randomUUID();
+    store.rememberImportedVideo(url, videoId);
+    return videoId;
+  });
+}
+
+/** `GET /v1/videos/import/:sessionId`. */
+function handleVideoImportStatus(
+  store: EmulatorStore,
+  sessionId: string,
+): EmulatorResponse {
+  const session = store.getVideoImport(sessionId);
+  if (!session) {
+    return failure(404, 'not_found', 'Video import session not found.');
+  }
+  settleVideoImport(store, session);
+
+  const total = session.urls.length;
+  const isBatch = total > 1;
+  if (session.status === 'failed') {
+    const code = session.errorCode ?? 'import_failed';
+    return success(200, {
+      sessionId,
+      status: 'failed',
+      ...(isBatch ? { counts: { total, ready: 0, failed: total } } : {}),
+      error: {
+        code,
+        message: VIDEO_ERROR_MESSAGES[code] ?? VIDEO_ERROR_MESSAGES.import_failed,
+      },
+    });
+  }
+  return success(200, {
+    sessionId,
+    status: session.status,
+    ...(isBatch
+      ? {
+          videoIds: session.videoIds,
+          counts: { total, ready: total, failed: 0 },
+        }
+      : { videoId: session.videoIds[0] }),
+  });
+}
+
+/** Harness: fail a session that has not settled yet. */
+function handleFailVideoImport(
+  store: EmulatorStore,
+  sessionId: string,
+  body: unknown,
+): EmulatorResponse {
+  const session = store.getVideoImport(sessionId);
+  if (!session) {
+    return failure(404, 'not_found', 'Video import session not found.');
+  }
+  const code =
+    body !== null && typeof body === 'object'
+      ? (body as { code?: unknown }).code
+      : undefined;
+  if (
+    code !== undefined &&
+    (typeof code !== 'string' || !VIDEO_IMPORT_ERROR_CODES.includes(code))
+  ) {
+    return failure(
+      400,
+      'invalid_request',
+      `code must be one of ${VIDEO_IMPORT_ERROR_CODES.join(' | ')}.`,
+    );
+  }
+  if (session.status !== 'processing') {
+    return failure(
+      400,
+      'invalid_request',
+      `Cannot fail a video import in status "${session.status}".`,
+    );
+  }
+  session.status = 'failed';
+  session.errorCode = code ?? 'import_failed';
+  return success(200, { sessionId, status: 'failed', code: session.errorCode });
+}
+
 function isFault(value: unknown): value is EmulatorFault {
   return value === 'timeout' || value === 'conflict' || value === 'server_error';
 }
@@ -1362,6 +1587,14 @@ function dispatchHarness(
       return failure(400, 'invalid_request', 'balance must be a non-negative number.');
     }
     return success(200, store.setWalletBalance(balance));
+  }
+
+  const failVideoSessionId = matchPathGroup(
+    pathname,
+    /^\/__emulator\/videos\/([^/]+)\/fail$/,
+  );
+  if (method === 'POST' && failVideoSessionId) {
+    return handleFailVideoImport(store, decodeURIComponent(failVideoSessionId), body);
   }
 
   const harnessCampaignId = matchPathGroup(
