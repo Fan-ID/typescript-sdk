@@ -91,6 +91,38 @@ describe('emulator budget decrease', () => {
     expect(detail.totalBudget).toBe(COMMITTED_USD - 48);
   });
 
+  it('rejects a decrease that would drop the committed budget below recorded spend', () => {
+    const campaignId = createCampaign('bd-spend-over');
+    emu.transition(campaignId, 'set_metrics', 130);
+    const before = emu.getWallet().balance;
+
+    const response = decrease(
+      campaignId,
+      { targetDailyBudget: 12 },
+      'bd-spend-over-key',
+    );
+
+    // Refund would be (20 - 12) * 6 = 48, leaving 92 committed, below the 130 spent.
+    expect(response.status).toBe(400);
+    expect(envelopeError(response.json).code).toBe('invalid_request');
+    expect(emu.getWallet().balance).toBe(before);
+    expect(detailOf(campaignId).dailyBudget).toBe(20);
+  });
+
+  it('allows a decrease when the reduced commitment still covers recorded spend', () => {
+    const campaignId = createCampaign('bd-spend-exact');
+    emu.transition(campaignId, 'set_metrics', 92);
+
+    const response = decrease(
+      campaignId,
+      { targetDailyBudget: 12 },
+      'bd-spend-exact-key',
+    );
+
+    expect(response.status).toBe(200);
+    expect(detailOf(campaignId).dailyBudget).toBe(12);
+  });
+
   it('omits walletNextCycleDailyBudget for current_cycle', () => {
     const campaignId = createCampaign('bd-current');
 

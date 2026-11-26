@@ -271,6 +271,7 @@ Because the committed budget grows with the top-up, stopping the campaign refund
 - `targetDailyBudget` must be lower than the current `dailyBudget` and at least `10`, the same minimum as create. The backend uses the enabled-ad-set minimum instead.
 - The unused part of the current cycle, `(dailyBudget - target) * remainingDays`, comes off the committed budget and is credited to the wallet. The backend applies that refund asynchronously, but the emulator applies it before it responds.
 - `current_and_renewals` also sets the next-cycle daily budget and returns it as `walletNextCycleDailyBudget`. `current_cycle` omits that field.
+- The committed budget after the refund must still cover the media spend already recorded (`set_metrics` or `set_spend`), or the call returns `400 invalid_request`.
 - Only `active` campaigns can be lowered.
 
 **Partial spend + fee**:

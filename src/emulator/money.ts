@@ -12,9 +12,14 @@ export function computeRefundGrossFromRawSpend(
   committedUsd: number,
   feeRate: number,
 ): number {
-  const rate = Math.max(0, Math.min(feeRate, 0.9999));
-  const grossEquivSpend = rate > 0 ? mediaSpendUsd / (1 - rate) : mediaSpendUsd;
+  const grossEquivSpend = computeGrossEquivSpend(mediaSpendUsd, feeRate);
   return Math.max(0, Number((committedUsd - grossEquivSpend).toFixed(2)));
+}
+
+/** Gross budget that media spend uses up, including the fee. */
+export function computeGrossEquivSpend(mediaSpendUsd: number, feeRate: number): number {
+  const rate = Math.max(0, Math.min(feeRate, 0.9999));
+  return rate > 0 ? mediaSpendUsd / (1 - rate) : mediaSpendUsd;
 }
 
 /** Rounds a USD amount to cents. */

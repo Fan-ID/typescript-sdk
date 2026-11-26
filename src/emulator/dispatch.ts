@@ -7,7 +7,7 @@ import type {
   Pixel,
   StrategyType,
 } from '../types/api.js';
-import { computeCommittedUsd, roundUsd } from './money.js';
+import { computeCommittedUsd, computeGrossEquivSpend, roundUsd } from './money.js';
 import {
   hashPayload,
   resolveFaultResponses,
@@ -1212,7 +1212,8 @@ function parseDecreaseBody(body: unknown): ParsedDecrease {
  * least the minimum daily budget. The unused part of the current cycle,
  * `(dailyBudget - target) * remainingDays`, comes off the committed budget and
  * is credited to the wallet. The backend applies that refund asynchronously;
- * the emulator applies it before it responds.
+ * the emulator applies it before it responds. The decrease is rejected when the
+ * committed budget would fall below the media spend already recorded.
  */
 function handleDecreaseBudget(
   store: EmulatorStore,
@@ -1280,8 +1281,20 @@ function handleDecreaseBudget(
   }
 
   const refund = roundUsd((campaign.dailyBudget - targetDailyBudget) * remainingDays);
+  const committedAfter = roundUsd(campaign.committedUsd - refund);
+  const spentGross = roundUsd(
+    computeGrossEquivSpend(campaign.mediaSpendUsd, store.feeRate),
+  );
+  if (committedAfter < spentGross) {
+    return failure(
+      400,
+      'invalid_request',
+      `targetDailyBudget is too low: the committed budget would fall below the ${String(spentGross)} of media spend already recorded.`,
+    );
+  }
+
   store.creditWallet(refund);
-  campaign.committedUsd = roundUsd(campaign.committedUsd - refund);
+  campaign.committedUsd = committedAfter;
   campaign.dailyBudget = targetDailyBudget;
   if (mode === 'current_and_renewals') {
     campaign.nextCycleDailyBudget = targetDailyBudget;
