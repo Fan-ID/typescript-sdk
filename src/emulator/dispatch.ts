@@ -1099,7 +1099,7 @@ function handleIncreaseBudget(
     return failure(
       400,
       'invalid_request',
-      `Campaign ${campaignId} has too few days remaining for a top-up`,
+      `Campaign ${campaignId} has too few days remaining for a top-up.`,
     );
   }
 

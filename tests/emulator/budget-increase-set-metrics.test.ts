@@ -278,7 +278,7 @@ describe('emulator set_metrics and budget increase', () => {
         const error = envelopeError(response.json);
         expect(error.code).toBe('invalid_request');
         expect(error.message).toBe(
-          `Campaign ${campaignId} has too few days remaining for a top-up`,
+          `Campaign ${campaignId} has too few days remaining for a top-up.`,
         );
         expect(emu.getWallet().balance).toBe(before);
         expect(detailOf(campaignId).dailyBudget).toBe(10);
