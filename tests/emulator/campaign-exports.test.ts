@@ -10,6 +10,7 @@ import { parseNdjsonText } from '../../src/core/jsonl.js';
 import type {
   BreakdownRow,
   CreateCampaignRequest,
+  EngagementRow,
   MetricsOverview,
 } from '../../src/types/api.js';
 import {
@@ -82,6 +83,12 @@ describe('emulator campaign exports', () => {
     const response = get(`/v1/campaigns/${id}/metrics/breakdown/export${query}`);
     expect(response.status).toBe(200);
     return parseNdjsonText<BreakdownRow>(response.text ?? '');
+  }
+
+  function engagement(id: string, query = ''): EngagementRow[] {
+    const response = get(`/v1/campaigns/${id}/metrics/engagement/export${query}`);
+    expect(response.status).toBe(200);
+    return parseNdjsonText<EngagementRow>(response.text ?? '');
   }
 
   describe('breakdown', () => {
@@ -263,6 +270,189 @@ describe('emulator campaign exports', () => {
         endDate: isoDay(),
       });
       expect(today.data?.rowCount).toBe(3);
+    });
+  });
+
+  describe('engagement', () => {
+    const PLAYLIST_BODY: CreateCampaignRequest = {
+      ...DEFAULT_CREATE_BODY,
+      spotifyUrl: 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M',
+    };
+
+    it('returns JSONL with the engagement schema', () => {
+      const id = createActive();
+      const response = get(`/v1/campaigns/${id}/metrics/engagement/export`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers?.['Content-Type']).toBe('application/x-ndjson');
+      expect(response.headers?.['X-Row-Count']).toBe('3');
+      const rows = parseNdjsonText<EngagementRow>(response.text ?? '');
+      expect(rows.map((row) => row.country_code)).toEqual(['DE', 'GB', 'US']);
+      for (const row of rows) {
+        expect(row.schema_version).toBe('1.0');
+        expect(row.report_date).toBe(isoDay());
+        expect(row.status).toBe('active');
+        expect(row.engagement_context).toBe('catalog');
+        expect(row.playlist_position).toBeNull();
+        expect(row.engaged_spotify_track_id).toBe('4iV5W9uYEdYUVa79Axb7Rh');
+      }
+    });
+
+    it('follows the row schema totals', () => {
+      const id = createActive();
+      emu.transition(id, 'set_metrics', undefined, undefined, {
+        listeners: 101,
+        streams: 250,
+        cycleDay: 4,
+      });
+
+      const rows = engagement(id);
+      const totals = overview(id);
+
+      expect(rows).toHaveLength(12);
+      expect(sum(rows, (row) => row.streams)).toBe(totals.streams);
+      expect(sum(rows, (row) => row.new_listeners)).toBe(totals.listeners);
+      expect(sum(rows, (row) => row.listeners)).toBe(totals.total_listeners);
+      for (const row of rows) {
+        expect(row.listeners).toBe(row.new_listeners + row.returning_listeners);
+        expect(row.streams).toBe(
+          row.new_listener_streams + row.returning_listener_streams,
+        );
+      }
+    });
+
+    it('filters rows by date window', () => {
+      const id = createActive();
+      emu.transition(id, 'set_metrics', undefined, undefined, { cycleDay: 4 });
+
+      expect(engagement(id, `?startDate=${isoDay()}&endDate=${isoDay()}`)).toHaveLength(
+        3,
+      );
+      expect(engagement(id, `?startDate=${isoDay(-1)}`)).toHaveLength(6);
+    });
+
+    it('filters by engagementContext', () => {
+      const id = createActive();
+      emu.transition(id, 'set_metrics', undefined, undefined, { cycleDay: 4 });
+
+      const catalog = engagement(id, '?engagementContext=catalog');
+      expect(catalog).toHaveLength(12);
+      expect(catalog.every((row) => row.engagement_context === 'catalog')).toBe(true);
+
+      const response = get(
+        `/v1/campaigns/${id}/metrics/engagement/export?engagementContext=playlist`,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers?.['X-Row-Count']).toBe('0');
+      expect(response.text).toBe('');
+    });
+
+    it('uses the playlist context for a playlist campaign', () => {
+      const id = createActive(PLAYLIST_BODY);
+
+      const rows = engagement(id);
+      expect(rows).toHaveLength(3);
+      for (const row of rows) {
+        expect(row.engagement_context).toBe('playlist');
+        expect(row.playlist_position).toBe(1);
+        expect(row.engaged_spotify_track_id).toBe('emulator_track');
+        expect(row.engaged_track_name).toBe('Emulator Track');
+        expect(row.campaign_target_type).toBe('playlist');
+      }
+      expect(engagement(id, '?engagementContext=playlist')).toHaveLength(3);
+      const none = get(
+        `/v1/campaigns/${id}/metrics/engagement/export?engagementContext=catalog`,
+      );
+      expect(none.headers?.['X-Row-Count']).toBe('0');
+    });
+
+    it('is empty while the campaign is creating', () => {
+      const id = create();
+      const response = get(`/v1/campaigns/${id}/metrics/engagement/export`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers?.['X-Row-Count']).toBe('0');
+      expect(response.text).toBe('');
+    });
+
+    it('rejects bad input and unknown campaigns', () => {
+      const id = createActive();
+      const path = `/v1/campaigns/${id}/metrics/engagement/export`;
+
+      const context = get(`${path}?engagementContext=other`);
+      expect(context.status).toBe(400);
+      expect(envelopeError(context.json).code).toBe('invalid_query_parameter');
+
+      const reversed = get(`${path}?startDate=${isoDay()}&endDate=${isoDay(-3)}`);
+      expect(reversed.status).toBe(400);
+      expect(envelopeError(reversed.json).code).toBe('invalid_date_range');
+
+      const missing = get('/v1/campaigns/cmp_missing/metrics/engagement/export');
+      expect(missing.status).toBe(404);
+      expect(envelopeError(missing.json).code).toBe('campaign_not_found');
+    });
+
+    it('keeps every numeric field finite when the metrics are zero', () => {
+      const id = createActive();
+      emu.transition(id, 'set_metrics', 0, undefined, {
+        listeners: 0,
+        streams: 0,
+        cycleDay: 4,
+      });
+
+      for (const row of engagement(id)) {
+        for (const value of [
+          row.new_listeners,
+          row.returning_listeners,
+          row.listeners,
+          row.new_listener_streams,
+          row.returning_listener_streams,
+          row.streams,
+          row.spl,
+        ]) {
+          expect(Number.isFinite(value)).toBe(true);
+        }
+        expect(row.streams).toBe(0);
+      }
+    });
+
+    it('keeps sums exact when totals are smaller than the cell count', () => {
+      const id = createActive();
+      emu.transition(id, 'set_metrics', undefined, undefined, {
+        streams: 5,
+        cycleDay: 4,
+      });
+
+      const rows = engagement(id);
+      expect(sum(rows, (row) => row.streams)).toBe(5);
+      for (const row of rows) {
+        expect(row.new_listener_streams).toBeGreaterThanOrEqual(0);
+        expect(row.returning_listener_streams).toBeGreaterThanOrEqual(0);
+      }
+    });
+
+    it('is parsed by the SDK over listen', async () => {
+      const id = createActive();
+      httpServer = await emu.listen();
+      const soundlink = new Soundlink({
+        apiKey: EMULATOR_API_KEY,
+        baseUrl: httpServer.baseUrl,
+      });
+
+      const all = await soundlink.metrics.engagement.export.collect(id);
+      expect(all.error).toBeNull();
+      expect(all.data?.rowCount).toBe(3);
+
+      const catalog = await soundlink.metrics.engagement.export.collect(id, {
+        engagementContext: 'catalog',
+      });
+      expect(catalog.data?.rowCount).toBe(3);
+
+      const playlist = await soundlink.metrics.engagement.export.collect(id, {
+        engagementContext: 'playlist',
+      });
+      expect(playlist.error).toBeNull();
+      expect(playlist.data?.rowCount).toBe(0);
     });
   });
 });

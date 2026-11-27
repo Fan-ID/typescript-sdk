@@ -1,4 +1,9 @@
-import type { BreakdownRow, CampaignStatus } from '../types/api.js';
+import type {
+  BreakdownRow,
+  CampaignStatus,
+  EngagementContext,
+  EngagementRow,
+} from '../types/api.js';
 import type { EmulatorCampaignRecord, EmulatorStore } from './store.js';
 
 /** Sorted, because the exports sort rows by `country_code`. */
@@ -254,6 +259,76 @@ export function buildBreakdownRows(
       ctr_adclick: nullableRatio(rowAdClicks, rowImpressions),
       cost_per_result: cpf,
       result_type: 'follow',
+    };
+    return [row];
+  });
+}
+
+/**
+ * Engagement rows for the campaign, split the same way as the breakdown rows.
+ * `listeners` is new plus returning, as in the row schema, so over all active
+ * days it sums to the overview's `total_listeners`. A campaign has one
+ * engagement context, so a different `context` filter returns no rows.
+ */
+export function buildEngagementRows(
+  store: EmulatorStore,
+  campaign: EmulatorCampaignRecord,
+  window: ExportWindow,
+  context: EngagementContext | undefined,
+  now: Date,
+): EngagementRow[] {
+  const engagementContext: EngagementContext = campaign.playlistId
+    ? 'playlist'
+    : 'catalog';
+  const cells = buildActiveCells(campaign, now);
+  if (cells.length === 0 || (context !== undefined && context !== engagementContext)) {
+    return [];
+  }
+  const totals = store.buildOverview(campaign);
+  const count = cells.length;
+  const newListeners = splitInt(totals.listeners, count);
+  const returningListeners = splitInt(
+    Math.max(0, totals.total_listeners - totals.listeners),
+    count,
+  );
+  const streams = splitInt(totals.streams, count);
+  const exportedAt = now.toISOString();
+
+  return cells.flatMap((cell, index) => {
+    if (!inWindow(cell.reportDate, window)) {
+      return [];
+    }
+    const newCount = newListeners[index] ?? 0;
+    const returningCount = returningListeners[index] ?? 0;
+    const listeners = newCount + returningCount;
+    const rowStreams = streams[index] ?? 0;
+    const newStreams =
+      listeners > 0 ? Math.round((rowStreams * newCount) / listeners) : rowStreams;
+
+    const row: EngagementRow = {
+      provider: 'soundlink',
+      account_id: store.organizationId,
+      schema_version: '1.0',
+      report_date: cell.reportDate,
+      report_date_timezone: 'UTC',
+      exported_at: exportedAt,
+      campaign_id: campaign.campaignId,
+      campaign_name: campaign.campaignName,
+      ...campaignTarget(campaign),
+      status: campaign.status,
+      engagement_context: engagementContext,
+      country_code: cell.countryCode,
+      engaged_track_isrc: null,
+      engaged_spotify_track_id: campaign.trackId ?? 'emulator_track',
+      engaged_track_name: campaign.trackName ?? 'Emulator Track',
+      playlist_position: engagementContext === 'playlist' ? 1 : null,
+      new_listeners: newCount,
+      returning_listeners: returningCount,
+      listeners,
+      new_listener_streams: newStreams,
+      returning_listener_streams: rowStreams - newStreams,
+      streams: rowStreams,
+      spl: ratio(rowStreams, listeners),
     };
     return [row];
   });

@@ -6,7 +6,11 @@ import type {
   Pixel,
   StrategyType,
 } from '../types/api.js';
-import { buildBreakdownRows, parseExportWindow } from './exports.js';
+import {
+  buildBreakdownRows,
+  buildEngagementRows,
+  parseExportWindow,
+} from './exports.js';
 import { computeCommittedUsd, roundUsd } from './money.js';
 import {
   hashPayload,
@@ -468,6 +472,18 @@ export function dispatch(
     );
   }
 
+  const engagementExportCampaignId = matchPathGroup(
+    pathname,
+    /^\/v1\/campaigns\/([^/]+)\/metrics\/engagement\/export$/,
+  );
+  if (method === 'GET' && engagementExportCampaignId) {
+    return handleEngagementExport(
+      store,
+      decodeURIComponent(engagementExportCampaignId),
+      request,
+    );
+  }
+
   if (method === 'POST' && pathname === '/v1/campaigns/metrics/creatives/batch') {
     if (
       request.body === null ||
@@ -724,6 +740,38 @@ function handleBreakdownExport(
     return failure(400, window.code, window.message);
   }
   return jsonlResponse(buildBreakdownRows(store, campaign, window.value, now));
+}
+
+/**
+ * `GET /v1/campaigns/:id/metrics/engagement/export`: JSONL rows split like the
+ * breakdown export, with an optional `engagementContext` filter.
+ */
+function handleEngagementExport(
+  store: EmulatorStore,
+  campaignId: string,
+  request: EmulatorRequest,
+): EmulatorResponse {
+  const campaign = store.getCampaign(campaignId);
+  if (!campaign) {
+    return failure(404, 'campaign_not_found', 'Campaign not found.');
+  }
+  const query = new URL(request.path, 'http://emulator.local').searchParams;
+  const now = new Date();
+  const window = parseExportWindow(query.get('startDate'), query.get('endDate'), now);
+  if (!window.ok) {
+    return failure(400, window.code, window.message);
+  }
+  const context = query.get('engagementContext');
+  if (context !== null && context !== 'catalog' && context !== 'playlist') {
+    return failure(
+      400,
+      'invalid_query_parameter',
+      'engagementContext must be catalog or playlist.',
+    );
+  }
+  return jsonlResponse(
+    buildEngagementRows(store, campaign, window.value, context ?? undefined, now),
+  );
 }
 
 function handleUpdateAutoRenew(
