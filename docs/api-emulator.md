@@ -263,6 +263,28 @@ const { data } = await soundlink.campaigns.increaseBudget(
 
 Because the committed budget grows with the top-up, stopping the campaign refunds the unspent part of it.
 
+### Breakdown and engagement exports
+
+`GET /v1/campaigns/:id/metrics/breakdown/export` and `GET /v1/campaigns/:id/metrics/engagement/export` return JSONL (`application/x-ndjson`, with an `X-Row-Count` header). The rows come from the metrics you set with `set_metrics`, so the totals match the overview.
+
+```ts
+await emu.transition(id, 'set_metrics', 40, undefined, {
+  listeners: 100,
+  streams: 250,
+  cycleDay: 4,
+});
+const { data } = await soundlink.metrics.breakdown.export.collect(id);
+// data.rows has 12 rows: 4 days × 3 countries
+```
+
+- **Days:** the last `cycleDay` days, ending today (UTC). A new campaign has 1 day. A campaign that is still `creating` has not delivered, so it returns an empty `200` with `X-Row-Count: 0`.
+- **Countries:** a fixed list, `DE`, `GB` and `US`, for every campaign. `tierTargeting` is not stored.
+- **Splitting:** each total is split evenly across the days and countries. The remainder goes to the earliest rows, so the sums are exact. Over all active days, breakdown `spend_media`, `streams` and `listeners` equal the overview. A narrower window returns a subset of those rows, so its sums are smaller.
+- **Engagement totals:** engagement `listeners` is new plus returning, as in the row schema, so it sums to the overview's `total_listeners`. `new_listeners` sums to the overview's `listeners`, and `streams` to its `streams`.
+- **`engagementContext`:** `playlist` for a playlist campaign, otherwise `catalog`. Filtering for the other context returns an empty `200`. The engaged track is the promoted track, or the placeholder `emulator_track` for a playlist campaign.
+- **Dates:** `endDate` defaults to today and `startDate` to 89 days before `endDate`. A range wider than 90 days returns `400 invalid_query_parameter`, and `endDate` before `startDate` returns `400 invalid_date_range`. A future `endDate` is allowed.
+- **Fees:** each row's `fees` use the same rate as the overview and are rounded per row, so across rows they can differ from the overview by a cent or two.
+
 **Partial spend + fee**:
 
 ```ts
@@ -288,6 +310,8 @@ const emu = createApiEmulator({
 | Bad `full_control` creative         | `400 invalid_request`          |
 | Auto-renew on a non-active campaign | `400 invalid_request`          |
 | Batch overview over 50 IDs          | `400 invalid_request`          |
+| Export date range over 90 days      | `400 invalid_query_parameter`  |
+| Export `endDate` before `startDate` | `400 invalid_date_range`       |
 | Bad / missing API key               | `401 invalid_api_key`          |
 
 Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` releases the key (same key works after `activate`).
@@ -299,5 +323,5 @@ Stop Idempotency-Key hashes `{ campaignId }` only. Stopping while `creating` rel
 - `reject_meta` does not refund; public `stop` / harness `end` do.
 - Create `402` releases the key (unlike some budget-increase replay paths). Retry with a new key anyway.
 - Genre, Spotify URL shape, and `strategyType` are not validated, so a value production would reject with `422` can return `201` here.
-- Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview/creatives/creatives batch, pixels list/save/delete/test-events).
+- Only a subset of `/v1` is implemented (ping, wallet, strategies, campaigns create/get/list/stop, metrics overview/creatives/creatives batch/breakdown export/engagement export, pixels list/save/delete/test-events).
 - Pixel test-events do not call Meta. A saved pixel returns `200` with `status: "sent"`. Send health stays `ok`. `meta_pixel_conflict` and `pixel_in_use` are not returned: one organization, and soundlinks are not stored. Custom pixels are enabled.

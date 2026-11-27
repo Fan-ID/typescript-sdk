@@ -111,6 +111,11 @@ export function listen(
           });
           return;
         }
+        if (response.text !== undefined) {
+          res.writeHead(response.status, response.headers);
+          res.end(response.text);
+          return;
+        }
         res.writeHead(response.status, {
           'Content-Type': 'application/json',
         });
