@@ -6,6 +6,7 @@ import type {
   Pixel,
   StrategyType,
 } from '../types/api.js';
+import { buildBreakdownRows, parseExportWindow } from './exports.js';
 import { computeCommittedUsd, roundUsd } from './money.js';
 import {
   hashPayload,
@@ -32,6 +33,10 @@ export interface EmulatorRequest {
 export interface EmulatorResponse {
   status: number;
   json: unknown;
+  /** Raw body for non-JSON responses such as JSONL exports. `json` is `null` when set. */
+  text?: string;
+  /** Response headers for `text`. `listen` sends them as they are. */
+  headers?: Record<string, string>;
   /** HTTP listen leaves the socket open until the client aborts. */
   hang?: boolean;
 }
@@ -89,6 +94,18 @@ function failure(
         ...(details !== undefined ? { details } : {}),
       },
       meta: { requestId: randomUUID() },
+    },
+  };
+}
+
+function jsonlResponse(rows: unknown[]): EmulatorResponse {
+  return {
+    status: 200,
+    json: null,
+    text: rows.map((row) => `${JSON.stringify(row)}\n`).join(''),
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      'X-Row-Count': String(rows.length),
     },
   };
 }
@@ -439,6 +456,18 @@ export function dispatch(
     return success(200, store.buildCreatives(campaign));
   }
 
+  const breakdownExportCampaignId = matchPathGroup(
+    pathname,
+    /^\/v1\/campaigns\/([^/]+)\/metrics\/breakdown\/export$/,
+  );
+  if (method === 'GET' && breakdownExportCampaignId) {
+    return handleBreakdownExport(
+      store,
+      decodeURIComponent(breakdownExportCampaignId),
+      request,
+    );
+  }
+
   if (method === 'POST' && pathname === '/v1/campaigns/metrics/creatives/batch') {
     if (
       request.body === null ||
@@ -673,6 +702,28 @@ function handleOverviewBatch(
     return [{ campaignId, ...store.buildOverview(campaign) }];
   });
   return success(200, { items });
+}
+
+/**
+ * `GET /v1/campaigns/:id/metrics/breakdown/export`: JSONL rows derived from the
+ * campaign's overview, split across its active days and countries.
+ */
+function handleBreakdownExport(
+  store: EmulatorStore,
+  campaignId: string,
+  request: EmulatorRequest,
+): EmulatorResponse {
+  const campaign = store.getCampaign(campaignId);
+  if (!campaign) {
+    return failure(404, 'campaign_not_found', 'Campaign not found.');
+  }
+  const query = new URL(request.path, 'http://emulator.local').searchParams;
+  const now = new Date();
+  const window = parseExportWindow(query.get('startDate'), query.get('endDate'), now);
+  if (!window.ok) {
+    return failure(400, window.code, window.message);
+  }
+  return jsonlResponse(buildBreakdownRows(store, campaign, window.value, now));
 }
 
 function handleUpdateAutoRenew(
